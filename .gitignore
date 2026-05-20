@@ -1,0 +1,6 @@
+.env
+Telegram Bot API key.txt
+seen_properties.db
+__pycache__/
+*.pyc
+.venv/

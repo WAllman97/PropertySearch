@@ -1,0 +1,27 @@
+searches:
+  - name: "Herne Hill or Battersea Garden Under 800k"
+    source: "rightmove"
+    url: "https://www.rightmove.co.uk/property-for-sale/find.html?propertyTypes=detached%2Csemi-detached%2Cterraced&sortType=2&areaSizeUnit=sqft&channel=BUY&index=0&maxPrice=800000&locationIdentifier=USERDEFINEDAREA%5E%7B%22polylines%22%3A%22iifyH%60g%5CvYr%7DBtWtWv_%40%60%40ba%40%7DLb%7D%40oc%40nh%40mb%40jN%7BuAjJgdDcg%40ihCuIqs%40k%40_k%40uKkSkJmEuKfBaKvJuG%7Ci%40vQtmCkBjp%40kPzi%40o%7E%40l%7DAuSlTm%60%40dPuOdPuAdB%22%7D&transactionType=BUY&displayLocationIdentifier=undefined&minPrice=450000&mustHave=garden"
+    max_price: 800000
+
+  - name: "Zoopla South London 2 Bed Garden Under 550k"
+    source: "zoopla"
+    url: "https://www.zoopla.co.uk/for-sale/houses/london/south-west/?beds_min=2&feature=has_garden&is_retirement_home=false&is_shared_ownership=false&new_homes=exclude&polyenc=yffyHzf%255Cl%255E%257CsB%2560k%2540f%2560%2540rbBsGdw%2540od%2540%2560WkcEce%2540epEys%2540wIwYvXesAjrEys%2540tcA&price_max=800000&property_sub_type=semi_detached&property_sub_type=detached&property_sub_type=terraced&q=South%20West%20London&radius=0&search_source=for-sale"
+    max_price: 800000
+
+  - name: "OnTheMarket South London 2 Bed Garden Under 800k"
+    source: "onthemarket"
+    url: "https://www.onthemarket.com/for-sale/property/lambeth-south-west-london/?keywords=outside+space&max-price=800000&min-bedrooms=2&min-price=450000&polygons0=_jfyH%7Ef%5C%60Apf%40dFpk%40hKfh%40pSh%5EfHfGv%60AhBjq%40%7BMt%7D%40%7D_%40bf%40_e%40fIwR%60AeQ_%40u%7D%40gGeh%40aA_%60%40eEa%5BmPwuBoPenAkL%7DHuW%3FoQ%7ECoRphBgHt%5Cio%40zjAw%60ArbAwYfh%40&recently-added=7-days&sort-field=keywords"
+    max_price: 800000
+
+keywords:
+  - garden
+  - private garden
+  - patio
+  - terrace
+  - courtyard
+  - balcony
+
+negative_keywords:
+  - retirement
+  - shared ownership

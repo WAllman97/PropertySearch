@@ -1,0 +1,17 @@
+searches:
+  - name: "Herne Hill or Battersea Garden Under 800k"
+    source: "rightmove"
+    url: "https://www.rightmove.co.uk/property-for-sale/find.html?sortType=6&areaSizeUnit=sqft&channel=BUY&locationIdentifier=USERDEFINEDAREA%5E%7B%22polylines%22%3A%22ewwjI%5E%60b%40cHqAmCwzArq%40tEpGjDnGlCzHrQzVxCpG%22%7D&transactionType=BUY&displayLocationIdentifier=undefined&maxPrice=800000&mustHave=garden&index=0"
+    max_price: 800000
+
+keywords:
+  - garden
+  - private garden
+  - patio
+  - terrace
+  - courtyard
+  - balcony
+
+negative_keywords:
+  - retirement
+  - shared ownership
