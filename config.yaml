@@ -1,7 +1,7 @@
 searches:
   - name: "Herne Hill or Battersea Garden Under 800k"
     source: "rightmove"
-    url: "https://www.rightmove.co.uk/property-for-sale/find.html?propertyTypes=detached%2Csemi-detached%2Cterraced&sortType=2&areaSizeUnit=sqft&channel=BUY&index=0&maxPrice=800000&locationIdentifier=USERDEFINEDAREA%5E%7B%22polylines%22%3A%22iifyH%60g%5CvYr%7DBtWtWv_%40%60%40ba%40%7DLb%7D%40oc%40nh%40mb%40jN%7BuAjJgdDcg%40ihCuIqs%40k%40_k%40uKkSkJmEuKfBaKvJuG%7Ci%40vQtmCkBjp%40kPzi%40o%7E%40l%7DAuSlTm%60%40dPuOdPuAdB%22%7D&transactionType=BUY&displayLocationIdentifier=undefined&minPrice=450000&mustHave=garden"
+    url: "https://www.rightmove.co.uk/property-for-sale/find.html?propertyTypes=detached%2Csemi-detached%2Cterraced&sortType=2&minPrice=450000&areaSizeUnit=sqft&channel=BUY&index=0&mustHave=garden&maxPrice=800000&propFeature=Garden&locationIdentifier=USERDEFINEDAREA%5E%7B%22polylines%22%3A%22%7BpeyH%60__%40Inc%40%7ECvQjSbWbn%40%60VhJtWtEjZjD%7Cb%40%3FpbAuG%7Cx%40uE%60VuJxQkDs%40iDtHjIxRvd%40yC%7EtBNvd%40cPxi%40%7Bh%40jHyY%7ECqs%40i%40kpCuKasCgaAwlAuEeWjLo%7EDJyh%40kHgQmRmLk%5CsHwON_NlEaUd_%40aXrqAmPtWkc%40bWkQp%5DwXfdAkGlc%40iBzyB%5EuA%22%7D&transactionType=BUY&displayLocationIdentifier=undefined"
     max_price: 800000
 
   - name: "Zoopla South London 2 Bed Garden Under 550k"
@@ -11,7 +11,7 @@ searches:
 
   - name: "OnTheMarket South London 2 Bed Garden Under 800k"
     source: "onthemarket"
-    url: "https://www.onthemarket.com/for-sale/property/lambeth-south-west-london/?keywords=outside+space&max-price=800000&min-bedrooms=2&min-price=450000&polygons0=_jfyH%7Ef%5C%60Apf%40dFpk%40hKfh%40pSh%5EfHfGv%60AhBjq%40%7BMt%7D%40%7D_%40bf%40_e%40fIwR%60AeQ_%40u%7D%40gGeh%40aA_%60%40eEa%5BmPwuBoPenAkL%7DHuW%3FoQ%7ECoRphBgHt%5Cio%40zjAw%60ArbAwYfh%40&recently-added=7-days&sort-field=keywords"
+    url: "https://www.onthemarket.com/for-sale/property/wandsworth-south-west-london/?keywords=outside+space&max-price=800000&min-bedrooms=2&min-price=450000&polygons0=a%7BeyHh%7B%5DpLfrApLzPdZzPfj%40rf%40rGzLdExTtBth%40%3Frf%40cEv%5E%7DHv%5EoQrf%40qLxTg%40%7CF%3FxVxMtb%40rGzJzb%40zNdo%40%7EBfP%7CDxvAzJpf%40%7CJj%60%40%7C%40zqAyPdt%40yVhPyT%7CXqv%40%7ECu%60%40%3Fsh%40mF%7BPkKyRiP%7BPg%40%7DDe_%40%7BNi_A%7BLgj%40wZqf%40mdAiPox%40uGsj%40kF%7BN%3F_tBpLqn%40tBalBe%40w%5CmFyRyM%7DL_Y%7D%40iPt%60%40wR%7CHaO%3F%7ES%7BNvRyVmAyPsG%7DHu%5Cqr%40qf%40%3FiPzL%7DCxXmAnt%40kKxX_i%40twCqLtd%40_TxTqQ%3FkF%7DDsL%3FkFzJg%40xT&prop-types=detached&prop-types=semi-detached&prop-types=terraced&recently-added=7-days&sort-field=keywords"
     max_price: 800000
 
 keywords:

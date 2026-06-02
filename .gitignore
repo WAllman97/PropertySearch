@@ -4,3 +4,7 @@ seen_properties.db
 __pycache__/
 *.pyc
 .venv/
+*.db
+node_modules/
+dist/
+
