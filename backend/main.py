@@ -1,6 +1,8 @@
 import os
 import yaml
 
+from core.property_repository import save_property_to_supabase
+
 from core.database import (
     init_db,
     property_seen,
@@ -101,6 +103,12 @@ for search in config["searches"]:
         )
 
         record["source"] = source
+
+        try:
+            save_property_to_supabase(record)
+            print(f"Saved to Supabase: {record.get('address')}")
+        except Exception as e:
+            print(f"Failed to save to Supabase: {e}")
 
         #print(record)
 
