@@ -1,29 +1,77 @@
-function HomeView({ recordsCount, onAddRecord }) {
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+
+function HomeView() {
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadProperties();
+  }, []);
+
+  async function loadProperties() {
+    const { data, error } = await supabase
+      .from("properties")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+    } else {
+      setProperties(data || []);
+    }
+
+    setLoading(false);
+  }
+
+  if (loading) {
+    return (
+      <section className="card">
+        <h2>Loading properties...</h2>
+      </section>
+    );
+  }
+
   return (
     <section className="card">
       <div className="section-header">
-        <h2>Welcome to the Web App Template</h2>
-        <p>This starter provides a lightweight app structure that is easy to customize.</p>
+        <h2>Latest Property Matches</h2>
+        <p>{properties.length} properties found</p>
       </div>
 
-      <div className="home-grid">
-        <div className="home-card">
-          <h3>What this template includes</h3>
-          <ul>
-            <li>Navigation layout with dashboard, history, and settings.</li>
-            <li>Reusable data service and hook layer.</li>
-            <li>Placeholder views and theme-ready CSS.</li>
-          </ul>
-        </div>
+      <div className="property-grid">
+        {properties.map((property) => (
+          <div className="property-card" key={property.id}>
+            {property.image_url && (
+              <img
+                src={property.image_url}
+                alt={property.address}
+                className="property-image"
+              />
+            )}
 
-        <div className="home-card">
-          <h3>Quick start</h3>
-          <p>{recordsCount} records are currently available in the demo store.</p>
-          <button onClick={onAddRecord}>Add sample record</button>
-        </div>
+            <div className="property-content">
+              <h3>{property.price ? `£${property.price.toLocaleString()}` : "Price unavailable"}</h3>
+
+              <p>{property.address}</p>
+
+              <div className="property-meta">
+                <span>{property.source}</span>
+              </div>
+
+              <a
+                href={property.listing_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View Listing
+              </a>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
-  )
+  );
 }
 
-export default HomeView
+export default HomeView;
