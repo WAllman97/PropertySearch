@@ -116,6 +116,9 @@ for search in config["searches"]:
 
         #print(f"Added to email list. Total now: {len(new_properties)}")
 
+        
+        save_property_result(conn, record)
+
         save_property(
             conn=conn,
             property_id=unique_id,
@@ -123,7 +126,6 @@ for search in config["searches"]:
             url=property_url
         )
 
-save_property_result(conn, record)
 print(f"\nFinal email list count: {len(new_properties)}")
 
 send_daily_email(new_properties)

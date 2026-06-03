@@ -10,18 +10,36 @@ function HomeView() {
   }, []);
 
   async function loadProperties() {
+    setLoading(true);
+
     const { data, error } = await supabase
       .from("properties")
       .select("*")
+      .not("status", "in", '("ignored","archived","favourite")')
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error(error);
+      console.error("Error loading properties:", error);
     } else {
       setProperties(data || []);
     }
 
     setLoading(false);
+  }
+
+  async function updateStatus(propertyId, status) {
+    const { error } = await supabase
+      .from("properties")
+      .update({ status })
+      .eq("id", propertyId);
+
+    if (error) {
+      console.error("Error updating property:", error);
+      alert(error.message);
+      return;
+    }
+
+    await loadProperties();
   }
 
   if (loading) {
@@ -36,7 +54,7 @@ function HomeView() {
     <section className="card">
       <div className="section-header">
         <h2>Latest Property Matches</h2>
-        <p>{properties.length} properties found</p>
+        <p>{properties.length} active properties found</p>
       </div>
 
       <div className="property-grid">
@@ -51,21 +69,35 @@ function HomeView() {
             )}
 
             <div className="property-content">
-              <h3>{property.price ? `£${property.price.toLocaleString()}` : "Price unavailable"}</h3>
+              <h3>
+                {property.price
+                  ? `£${property.price.toLocaleString()}`
+                  : "Price unavailable"}
+              </h3>
 
               <p>{property.address}</p>
 
               <div className="property-meta">
                 <span>{property.source}</span>
+                {property.bedrooms && <span>{property.bedrooms} beds</span>}
+                {property.status && <span>{property.status}</span>}
               </div>
 
-              <a
-                href={property.listing_url}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a href={property.listing_url} target="_blank" rel="noreferrer">
                 View Listing
               </a>
+
+              <div className="property-actions">
+                <button onClick={() => updateStatus(property.id, "favourite")}>
+                  Favourite
+                </button>
+                <button onClick={() => updateStatus(property.id, "ignored")}>
+                  Ignore
+                </button>
+                <button onClick={() => updateStatus(property.id, "archived")}>
+                  Archive
+                </button>
+              </div>
             </div>
           </div>
         ))}
