@@ -12,7 +12,7 @@ from core.database import (
 )
 
 from core.filters import passes_filters
-from core.emailer import send_daily_email
+#from core.emailer import send_daily_email
 
 from scrapers import rightmove
 from scrapers import zoopla
@@ -126,6 +126,6 @@ for search in config["searches"]:
 
 print(f"\nFinal email list count: {len(new_properties)}")
 
-send_daily_email(new_properties)
+#send_daily_email(new_properties)
 
 print("\nFinished.")
