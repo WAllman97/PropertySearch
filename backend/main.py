@@ -75,9 +75,10 @@ for search in config["searches"]:
 
         unique_id = f"{source}_{property_id}"
 
-        if property_seen(conn, unique_id):
-            print(f"Already seen: {unique_id}")
-            continue
+# Cloud mode: let Supabase handle duplicates
+        #if property_seen(conn, unique_id):
+         #   print(f"Already seen: {unique_id}")
+          #  continue
 
         #print(f"Unseen candidate: {unique_id} | {property_url}")
 
@@ -115,9 +116,6 @@ for search in config["searches"]:
         new_properties.append(record)
 
         #print(f"Added to email list. Total now: {len(new_properties)}")
-
-        
-        save_property_result(conn, record)
 
         save_property(
             conn=conn,
