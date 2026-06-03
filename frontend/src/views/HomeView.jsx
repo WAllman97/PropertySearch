@@ -27,28 +27,30 @@ function HomeView() {
     setLoading(false);
   }
 
-  async function updateStatus(propertyId, status) {
-    const { error } = await supabase
-      .from("properties")
-      .update({ status })
-      .eq("id", propertyId);
+    async function updateStatus(listingId, status) {
+      console.log("Updating listing:", listingId, status);
 
-    if (error) {
-      console.error("Error updating property:", error);
-      alert(error.message);
-      return;
+      const { data, error } = await supabase
+        .from("properties")
+        .update({ status })
+        .eq("listing_id", listingId)
+        .select();
+
+      if (error) {
+        console.error("Error updating property:", error);
+        alert(error.message);
+        return;
+      }
+
+      console.log("Updated rows:", data);
+
+      if (!data || data.length === 0) {
+        alert("No rows updated. Check listing_id.");
+        return;
+      }
+
+      await loadProperties();
     }
-
-    await loadProperties();
-  }
-
-  if (loading) {
-    return (
-      <section className="card">
-        <h2>Loading properties...</h2>
-      </section>
-    );
-  }
 
   return (
     <section className="card">
@@ -88,13 +90,13 @@ function HomeView() {
               </a>
 
               <div className="property-actions">
-                <button onClick={() => updateStatus(property.id, "favourite")}>
+                <button onClick={() => updateStatus(property.listing_id, "favourite")}>
                   Favourite
                 </button>
-                <button onClick={() => updateStatus(property.id, "ignored")}>
+                <button onClick={() => updateStatus(property.listing_id, "ignored")}>
                   Ignore
                 </button>
-                <button onClick={() => updateStatus(property.id, "archived")}>
+                <button onClick={() => updateStatus(property.listing_id, "archived")}>
                   Archive
                 </button>
               </div>
