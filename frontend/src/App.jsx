@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "./lib/supabaseClient";
+import AuthForm from "./components/AuthForm";
+
 import HomeView from "./views/HomeView";
 import DashboardView from "./views/DashboardView";
 import HistoryView from "./views/HistoryView";
@@ -8,6 +11,27 @@ import "./App.css";
 
 function App() {
   const [activeView, setActiveView] = useState("home");
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    async function getSession() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      setUser(session?.user ?? null);
+    }
+
+    getSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   return (
     <div className="app-shell">
@@ -16,15 +40,36 @@ function App() {
           <p className="eyebrow">PropertySearch</p>
           <h1>Home-buying command centre</h1>
         </div>
+
+        {user && (
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => supabase.auth.signOut()}
+          >
+            Log Out
+          </button>
+        )}
       </header>
 
-      <NavigationTabs activeView={activeView} setActiveView={setActiveView} />
+      {user && (
+        <NavigationTabs
+          activeView={activeView}
+          setActiveView={setActiveView}
+        />
+      )}
 
       <main className="app-main">
-        {activeView === "home" && <HomeView />}
-        {activeView === "dashboard" && <DashboardView />}
-        {activeView === "history" && <HistoryView />}
-        {activeView === "settings" && <SettingsView />}
+        {!user ? (
+          <AuthForm />
+        ) : (
+          <>
+            {activeView === "home" && <HomeView />}
+            {activeView === "dashboard" && <DashboardView />}
+            {activeView === "history" && <HistoryView />}
+            {activeView === "settings" && <SettingsView user={user} />}
+          </>
+        )}
       </main>
     </div>
   );

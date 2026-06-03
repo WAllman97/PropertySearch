@@ -1,14 +1,25 @@
-function SettingsView() {
+import SearchCriteriaManager from "../components/SearchCriteriaManager";
+
+function SettingsView({ user }) {
+  if (!user) {
+    return (
+      <section className="card">
+        <div className="section-header">
+          <h2>Settings</h2>
+          <p>Please log in to manage your saved searches.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="card">
       <div className="section-header">
         <h2>Settings</h2>
-        <p>Search preferences and account settings will live here.</p>
+        <p>Manage your saved property searches.</p>
       </div>
 
-      <p>
-        Coming next: budget, locations, bedrooms, ignored keywords and email alert settings.
-      </p>
+      <SearchCriteriaManager user={user} />
     </section>
   );
 }
