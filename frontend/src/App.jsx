@@ -2,15 +2,16 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
 import AuthForm from "./components/AuthForm";
 
-import HomeView from "./views/HomeView";
 import DashboardView from "./views/DashboardView";
 import HistoryView from "./views/HistoryView";
 import SettingsView from "./views/SettingsView";
+import PropertiesView from "./views/PropertiesView";
 import NavigationTabs from "./components/NavigationTabs";
+import CalendarView from "./views/CalendarView";
 import "./App.css";
 
 function App() {
-  const [activeView, setActiveView] = useState("home");
+  const [activeView, setActiveView] = useState("properties");
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -64,8 +65,9 @@ function App() {
           <AuthForm />
         ) : (
           <>
-            {activeView === "home" && <HomeView />}
+            {activeView === "properties" && <PropertiesView />}
             {activeView === "dashboard" && <DashboardView />}
+            {activeView === "calendar" && <CalendarView />}
             {activeView === "history" && <HistoryView />}
             {activeView === "settings" && <SettingsView user={user} />}
           </>

@@ -43,8 +43,17 @@ function SearchCriteriaForm({ onSubmit, initialValues, onCancel }) {
   async function handleSubmit(event) {
     event.preventDefault();
 
+    let cleanedUrl = formData.search_url.trim();
+
+    cleanedUrl = cleanedUrl
+      .replace(/^url:\s*"/, "")
+      .replace(/^url:\s*'/, "")
+      .replace(/"$/, "")
+      .replace(/'$/, "");
+
     await onSubmit({
       ...formData,
+      search_url: cleanedUrl,
       max_price: formData.max_price ? Number(formData.max_price) : null,
       min_bedrooms: formData.min_bedrooms
         ? Number(formData.min_bedrooms)

@@ -145,13 +145,22 @@ function SearchCriteriaManager({ user }) {
                   {item.exclude_flats ? "Flats excluded" : "Flats included"}
                 </p>
 
-                <a
-                  href={item.search_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open search
-                </a>
+                {item.search_url ? (
+                  <a
+                    href={
+                      item.search_url.startsWith("http://") ||
+                      item.search_url.startsWith("https://")
+                        ? item.search_url
+                        : `https://${item.search_url}`
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open search
+                  </a>
+                ) : (
+                  <span className="muted">No search URL saved</span>
+                )}
               </div>
 
               <div className="search-card-actions">
@@ -164,13 +173,16 @@ function SearchCriteriaManager({ user }) {
                   Active
                 </label>
 
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setEditingCriteria(item)}
-                >
-                  Edit
-                </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  console.log("Editing:", item);
+                  setEditingCriteria(item);
+                }}
+              >
+                Edit
+              </button>
 
                 <button
                   type="button"

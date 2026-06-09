@@ -1,0 +1,244 @@
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+
+function PropertiesView() {
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  useEffect(() => {
+    loadProperties();
+  }, []);
+
+  async function loadProperties() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("properties")
+      .select("*")
+      .not("status", "in", '("ignored","archived","favourite")')
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading properties:", error);
+    } else {
+      setProperties(data || []);
+    }
+
+    setLoading(false);
+  }
+
+  async function updateStatus(listingId, status) {
+    const { data, error } = await supabase
+      .from("properties")
+      .update({ status })
+      .eq("listing_id", listingId)
+      .select();
+
+    if (error) {
+      console.error("Error updating property:", error);
+      alert(error.message);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      alert("No rows updated. Check listing_id.");
+      return;
+    }
+
+    await loadProperties();
+  }
+
+  function detectSource(url) {
+    if (url.includes("rightmove.co.uk")) return "rightmove";
+    if (url.includes("zoopla.co.uk")) return "zoopla";
+    if (url.includes("onthemarket.com")) return "onthemarket";
+    return "manual";
+  }
+
+  async function addManualProperty(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const listingUrl = form.listing_url.value.trim();
+    const source = detectSource(listingUrl);
+
+    const { error } = await supabase.from("properties").insert({
+      source,
+      listing_id: `manual-${Date.now()}`,
+      title: form.title.value || `${source} property`,
+      address: form.address.value || "Address to update",
+      price: form.price.value ? Number(form.price.value) : null,
+      bedrooms: form.bedrooms.value ? Number(form.bedrooms.value) : null,
+      image_url: form.image_url.value || "",
+      listing_url: listingUrl,
+      date_found: new Date().toISOString().split("T")[0],
+      status: "favourite",
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    form.reset();
+    setShowAddModal(false);
+    await loadProperties();
+  }
+
+  if (loading) {
+    return (
+      <section className="card">
+        <p>Loading properties...</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card">
+      <div className="section-header">
+        <div>
+          <h2>Latest Property Matches</h2>
+          <p>{properties.length} active properties found</p>
+        </div>
+
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => setShowAddModal(true)}
+        >
+          + Add Property
+        </button>
+      </div>
+
+      {showAddModal && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="section-header">
+              <div>
+                <h3>Add Property</h3>
+                <p>
+                  Paste a property link and manually add the key details to your
+                  watchlist.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setShowAddModal(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <form className="manual-property-form" onSubmit={addManualProperty}>
+              <label>
+                Property link
+                <input
+                  name="listing_url"
+                  type="url"
+                  placeholder="Paste Rightmove / OnTheMarket / Zoopla link"
+                  required
+                />
+              </label>
+
+              <label>
+                Main image URL
+                <input
+                  name="image_url"
+                  type="url"
+                  placeholder="Paste main image URL"
+                />
+              </label>
+
+              <label>
+                Title
+                <input
+                  name="title"
+                  type="text"
+                  placeholder="e.g. 3 bed terraced house"
+                />
+              </label>
+
+              <label>
+                Address / area
+                <input
+                  name="address"
+                  type="text"
+                  placeholder="e.g. Battersea, London"
+                />
+              </label>
+
+              <label>
+                Price
+                <input name="price" type="number" placeholder="750000" />
+              </label>
+
+              <label>
+                Bedrooms
+                <input name="bedrooms" type="number" placeholder="3" />
+              </label>
+
+              <button type="submit" className="primary-button">
+                Add to Watchlist
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="property-grid">
+        {properties.map((property) => (
+          <div className="property-card" key={property.id}>
+            {property.image_url && (
+              <img
+                src={property.image_url}
+                alt={property.address}
+                className="property-image"
+              />
+            )}
+
+            <div className="property-content">
+              <h3>
+                {property.price
+                  ? `£${Number(property.price).toLocaleString()}`
+                  : "Price unavailable"}
+              </h3>
+
+              <p>{property.address}</p>
+
+              <div className="property-meta">
+                <span>{property.source}</span>
+                {property.bedrooms && <span>{property.bedrooms} beds</span>}
+                {property.status && <span>{property.status}</span>}
+              </div>
+
+              <a href={property.listing_url} target="_blank" rel="noreferrer">
+                View Listing
+              </a>
+
+              <div className="property-actions">
+                <button
+                  onClick={() =>
+                    updateStatus(property.listing_id, "favourite")
+                  }
+                >
+                  Favourite
+                </button>
+
+                <button
+                  onClick={() => updateStatus(property.listing_id, "ignored")}
+                >
+                  Ignore
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default PropertiesView;

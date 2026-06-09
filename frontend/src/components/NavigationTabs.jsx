@@ -1,8 +1,9 @@
 function NavigationTabs({ activeView, setActiveView }) {
   const tabs = [
-    { id: "home", label: "Feed" },
-    { id: "dashboard", label: "Dashboard" },
+    { id: "properties", label: "Properties" },
     { id: "history", label: "Watchlist" },
+    { id: "calendar", label: "Calendar" },
+    { id: "dashboard", label: "Dashboard" },
     { id: "settings", label: "Settings" },
   ];
 

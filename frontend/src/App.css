@@ -383,3 +383,160 @@ button {
     width: 100%;
   }
 }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.status-favourite {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.status-viewing_booked {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.status-viewed {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.status-offer_considered {
+  background: #fefce8;
+  color: #854d0e;
+}
+
+.status-offer_made {
+  background: #fdf2f8;
+  color: #be185d;
+}
+
+.manual-property-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #f9fafb;
+}
+
+.manual-property-form input {
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  background: white;
+  border-radius: 20px;
+  padding: 1.5rem;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.25);
+}
+
+.manual-property-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.manual-property-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.manual-property-form input {
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.property-card {
+  cursor: pointer;
+}
+
+.property-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 420px) 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.property-detail-image {
+  width: 100%;
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+.details-section {
+  margin-top: 2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.details-section label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.details-section input,
+.details-section textarea {
+  padding: 0.8rem;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+  font: inherit;
+}
+
+.details-section textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.viewing-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.viewing-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.viewing-card h3 {
+  margin: 0 0 0.5rem;
+}
+
+@media (max-width: 700px) {
+  .viewing-card {
+    flex-direction: column;
+  }
+}
