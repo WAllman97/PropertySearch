@@ -49,12 +49,19 @@ function PropertiesView() {
       return;
     }
 
+    const updatedProperty = data[0];
+
     if (status === "favourite") {
-      setSelectedProperty(data[0]);
+      setSelectedProperty(updatedProperty);
       setShowScoreModal(true);
     }
 
-    await loadProperties();
+    // Remove property from the current list
+    setProperties((current) =>
+      current.filter(
+        (property) => property.listing_id !== listingId
+      )
+    );
   }
 
   function detectSource(url) {
@@ -91,7 +98,6 @@ function PropertiesView() {
 
     form.reset();
     setShowAddModal(false);
-    await loadProperties();
   }
 
   if (loading) {
