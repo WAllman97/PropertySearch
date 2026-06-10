@@ -19,7 +19,7 @@ function PropertiesView() {
     const { data, error } = await supabase
       .from("properties")
       .select("*")
-      .not("status", "in", '("ignored","archived","favourite")')
+      .or("status.eq.new,status.is.null")
       .order("created_at", { ascending: false });
 
     if (error) {
