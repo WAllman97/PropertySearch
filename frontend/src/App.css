@@ -540,3 +540,68 @@ button {
     flex-direction: column;
   }
 }
+
+.settings-card {
+  background: #fff;
+  border: 1px solid #e5e0d8;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 720px;
+  margin-top: 24px;
+}
+
+.settings-card h2 {
+  margin-bottom: 8px;
+}
+
+.settings-card p {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.settings-card label {
+  display: block;
+  font-weight: 600;
+  margin: 16px 0 6px;
+}
+
+.settings-card input[type="text"] {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #d8d0c5;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.checkbox-row {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.settings-card button {
+  margin-top: 24px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 10px;
+  background: #244033;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-card button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.success-message {
+  color: #244033;
+  font-weight: 600;
+  margin-top: 12px;
+}
