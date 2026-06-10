@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import PropertyScoreEditor from "../components/PropertyScoreEditor";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -48,10 +49,35 @@ function HistoryView() {
     if (error) {
       console.error("Error loading watchlist:", error);
     } else {
-      setProperties(data || []);
+      setProperties(
+        (data || []).sort((a, b) => {
+          const scoreA = a.overall_score || 0;
+          const scoreB = b.overall_score || 0;
+          return scoreB - scoreA;
+        })
+      );
     }
 
     setLoading(false);
+  }
+
+  async function refreshSelectedProperty(propertyId) {
+    const { data, error } = await supabase
+      .from("properties")
+      .select("*")
+      .eq("id", propertyId)
+      .single();
+
+    if (error) {
+      console.error("Error refreshing property:", error);
+      return;
+    }
+
+    if (data) {
+      setSelectedProperty(data);
+    }
+
+    await loadWatchlist();
   }
 
   async function loadNotes(propertyId) {
@@ -180,6 +206,15 @@ function HistoryView() {
 
             <p>{selectedProperty.address}</p>
 
+            <div className="property-score-strip">
+              <span>🏠 {selectedProperty.overall_score || "--"}/100</span>
+              <span>❤️ {selectedProperty.score_gut_feel || 0}/10</span>
+
+              {selectedProperty.offer_interest && (
+                <span>Offer: {selectedProperty.offer_interest}</span>
+              )}
+            </div>
+
             <div className="property-meta">
               <span>{selectedProperty.source}</span>
 
@@ -200,6 +235,15 @@ function HistoryView() {
               View original listing
             </a>
           </div>
+        </div>
+
+        <div className="details-section">
+          <PropertyScoreEditor
+            property={selectedProperty}
+            onUpdate={async () => {
+              await refreshSelectedProperty(selectedProperty.id);
+            }}
+          />
         </div>
 
         <div className="details-section">
@@ -342,6 +386,15 @@ function HistoryView() {
 
               <p>{property.address}</p>
 
+              <div className="property-score-strip">
+                <span>🏠 {property.overall_score || "--"}/100</span>
+                <span>❤️ {property.score_gut_feel || 0}/10</span>
+
+                {property.offer_interest && (
+                  <span>Offer: {property.offer_interest}</span>
+                )}
+              </div>
+
               <div className="property-meta">
                 <span>{property.source}</span>
 
@@ -382,7 +435,10 @@ function HistoryView() {
 
                 <button
                   disabled={property.status === "viewed"}
-                  onClick={() => updateStatus(property.id, "viewed")}
+                  onClick={() => {
+                    updateStatus(property.id, "viewed");
+                    setSelectedProperty({ ...property, status: "viewed" });
+                  }}
                 >
                   Viewed
                 </button>

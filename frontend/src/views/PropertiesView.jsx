@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import PropertyScoreEditor from "../components/PropertyScoreEditor";
 
 function PropertiesView() {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [showScoreModal, setShowScoreModal] = useState(false);
 
   useEffect(() => {
     loadProperties();
@@ -44,6 +47,11 @@ function PropertiesView() {
     if (!data || data.length === 0) {
       alert("No rows updated. Check listing_id.");
       return;
+    }
+
+    if (status === "favourite") {
+      setSelectedProperty(data[0]);
+      setShowScoreModal(true);
     }
 
     await loadProperties();
@@ -188,6 +196,39 @@ function PropertiesView() {
         </div>
       )}
 
+      {showScoreModal && selectedProperty && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="section-header">
+              <div>
+                <h3>Initial Property Score</h3>
+                <p>{selectedProperty.address}</p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setShowScoreModal(false);
+                  setSelectedProperty(null);
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <PropertyScoreEditor
+              property={selectedProperty}
+              onUpdate={async () => {
+                setShowScoreModal(false);
+                setSelectedProperty(null);
+                await loadProperties();
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="property-grid">
         {properties.map((property) => (
           <div className="property-card" key={property.id}>
@@ -207,6 +248,21 @@ function PropertiesView() {
               </h3>
 
               <p>{property.address}</p>
+
+              <div className="property-score-strip">
+                <span>
+                  🏠{" "}
+                  {property.overall_score
+                    ? `${property.overall_score}/100`
+                    : "Not scored"}
+                </span>
+
+                <span>❤️ {property.score_gut_feel || 0}/10</span>
+
+                {property.offer_interest && (
+                  <span>Offer: {property.offer_interest}</span>
+                )}
+              </div>
 
               <div className="property-meta">
                 <span>{property.source}</span>
