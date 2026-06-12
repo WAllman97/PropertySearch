@@ -7,6 +7,7 @@ function BuyerProfileSettings({ user }) {
     partner_work_address: "",
     school_address: "",
     has_school_commute: false,
+    commute_mode: "TRANSIT",
   });
 
   const [saving, setSaving] = useState(false);
@@ -36,6 +37,7 @@ function BuyerProfileSettings({ user }) {
         partner_work_address: data.partner_work_address || "",
         school_address: data.school_address || "",
         has_school_commute: data.has_school_commute || false,
+        commute_mode: data.commute_mode || "TRANSIT",
       });
     }
   }
@@ -84,6 +86,17 @@ function BuyerProfileSettings({ user }) {
         value={profile.partner_work_address}
         onChange={(e) => updateField("partner_work_address", e.target.value)}
       />
+
+      <label>Preferred commute method</label>
+      <select
+        value={profile.commute_mode}
+        onChange={(e) => updateField("commute_mode", e.target.value)}
+      >
+        <option value="TRANSIT">Public transport</option>
+        <option value="DRIVE">Driving</option>
+        <option value="WALK">Walking</option>
+        <option value="BICYCLE">Cycling</option>
+      </select>
 
       <label className="checkbox-row">
         <input
