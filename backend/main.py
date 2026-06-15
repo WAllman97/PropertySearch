@@ -2,6 +2,8 @@ import os
 import yaml
 
 from core.property_repository import save_property_to_supabase
+from core.alert_preferences import get_alert_preferences
+from core.emailer import send_daily_email
 
 from core.database import (
     init_db,
@@ -12,7 +14,6 @@ from core.database import (
 )
 
 from core.filters import passes_filters
-#from core.emailer import send_daily_email
 
 from scrapers import rightmove
 from scrapers import zoopla
@@ -75,12 +76,10 @@ for search in config["searches"]:
 
         unique_id = f"{source}_{property_id}"
 
-# Cloud mode: let Supabase handle duplicates
-        #if property_seen(conn, unique_id):
-         #   print(f"Already seen: {unique_id}")
-          #  continue
-
-        #print(f"Unseen candidate: {unique_id} | {property_url}")
+        # Cloud mode: let Supabase handle duplicates
+        # if property_seen(conn, unique_id):
+        #     print(f"Already seen: {unique_id}")
+        #     continue
 
         try:
             property_html = scraper.fetch_property_page(property_url)
@@ -106,16 +105,14 @@ for search in config["searches"]:
         record["source"] = source
 
         try:
-            save_property_to_supabase(record)
+            result = save_property_to_supabase(record)
             print(f"Saved to Supabase: {record.get('address')}")
+
+            if result.data:
+                new_properties.append(record)
+
         except Exception as e:
             print(f"Failed to save to Supabase: {e}")
-
-        #print(record)
-
-        new_properties.append(record)
-
-        #print(f"Added to email list. Total now: {len(new_properties)}")
 
         save_property(
             conn=conn,
@@ -126,6 +123,21 @@ for search in config["searches"]:
 
 print(f"\nFinal email list count: {len(new_properties)}")
 
-#send_daily_email(new_properties)
+try:
+    preferences = get_alert_preferences()
+
+    if (
+        preferences
+        and preferences.get("email_alerts_enabled")
+        and preferences.get("alert_email")
+        and new_properties
+    ):
+        send_daily_email(new_properties, preferences.get("alert_email"))
+        print(f"Email alert sent to {preferences.get('alert_email')}")
+    else:
+        print("Email alert skipped.")
+
+except Exception as e:
+    print(f"Email alert failed: {e}")
 
 print("\nFinished.")

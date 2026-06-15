@@ -953,3 +953,39 @@ label {
   color: #7a6a58;
   text-align: center;
 }
+
+/* Mobile scoring page/modal scroll fix */
+.scoring-page,
+.scoring-modal,
+.score-modal,
+.score-panel {
+  max-height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: calc(90px + env(safe-area-inset-bottom));
+}
+
+.scoring-form,
+.score-form {
+  min-height: 0;
+  overflow-y: visible;
+}
+
+@media (max-width: 768px) {
+  body:has(.scoring-page),
+  body:has(.scoring-modal),
+  body:has(.score-modal) {
+    overflow: hidden;
+  }
+
+  .scoring-page,
+  .scoring-modal,
+  .score-modal {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    overflow-y: auto;
+  }
+}

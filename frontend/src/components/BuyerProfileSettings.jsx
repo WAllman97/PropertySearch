@@ -8,6 +8,8 @@ function BuyerProfileSettings({ user }) {
     school_address: "",
     has_school_commute: false,
     commute_mode: "TRANSIT",
+    email_alerts_enabled: true,
+    alert_email: "",
   });
 
   const [saving, setSaving] = useState(false);
@@ -38,7 +40,14 @@ function BuyerProfileSettings({ user }) {
         school_address: data.school_address || "",
         has_school_commute: data.has_school_commute || false,
         commute_mode: data.commute_mode || "TRANSIT",
+        email_alerts_enabled: data.email_alerts_enabled ?? true,
+        alert_email: data.alert_email || user.email || "",
       });
+    } else {
+      setProfile((prev) => ({
+        ...prev,
+        alert_email: user.email || "",
+      }));
     }
   }
 
@@ -117,6 +126,31 @@ function BuyerProfileSettings({ user }) {
             placeholder="e.g. Wimbledon High School"
             value={profile.school_address}
             onChange={(e) => updateField("school_address", e.target.value)}
+          />
+        </>
+      )}
+
+      <hr />
+
+      <label className="checkbox-row">
+        <input
+          type="checkbox"
+          checked={profile.email_alerts_enabled}
+          onChange={(e) =>
+            updateField("email_alerts_enabled", e.target.checked)
+          }
+        />
+        Email me when new properties are found
+      </label>
+
+      {profile.email_alerts_enabled && (
+        <>
+          <label>Email address for alerts</label>
+          <input
+            type="email"
+            placeholder="e.g. your@email.com"
+            value={profile.alert_email}
+            onChange={(e) => updateField("alert_email", e.target.value)}
           />
         </>
       )}

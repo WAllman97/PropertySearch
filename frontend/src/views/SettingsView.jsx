@@ -18,7 +18,7 @@ function SettingsView({ user }) {
       <section className="card">
         <div className="section-header">
           <h2>Saved Searches</h2>
-          <p>Manage your saved property searches.</p>
+          <p>Manage your saved property searches and alert sources.</p>
         </div>
 
         <SearchCriteriaManager user={user} />
@@ -26,10 +26,10 @@ function SettingsView({ user }) {
 
       <section className="card">
         <div className="section-header">
-          <h2>Buyer Profile</h2>
+          <h2>Buyer Profile & Alerts</h2>
           <p>
-            Add the places that matter to your search so commute times can be
-            calculated automatically.
+            Add commute locations, choose your commute method, and manage email
+            alerts for newly found properties.
           </p>
         </div>
 
