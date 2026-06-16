@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import "./CommuteSummary.css";
 
 function getCommuteIcon(mode) {
   const icons = {
