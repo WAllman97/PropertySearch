@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
+import CommuteSummary from "../components/CommuteSummary";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -59,6 +60,18 @@ function HistoryView() {
     }
 
     setLoading(false);
+  }
+
+  function updateLocalProperty(updatedProperty) {
+    setProperties((current) =>
+      current.map((property) =>
+        property.id === updatedProperty.id ? updatedProperty : property
+      )
+    );
+
+    setSelectedProperty((current) =>
+      current?.id === updatedProperty.id ? updatedProperty : current
+    );
   }
 
   async function refreshSelectedProperty(propertyId) {
@@ -214,6 +227,11 @@ function HistoryView() {
                 <span>Offer: {selectedProperty.offer_interest}</span>
               )}
             </div>
+
+            <CommuteSummary
+              property={selectedProperty}
+              onCommuteSaved={updateLocalProperty}
+            />
 
             <div className="property-meta">
               <span>{selectedProperty.source}</span>
@@ -394,6 +412,11 @@ function HistoryView() {
                   <span>Offer: {property.offer_interest}</span>
                 )}
               </div>
+
+              <CommuteSummary
+                property={property}
+                onCommuteSaved={updateLocalProperty}
+              />
 
               <div className="property-meta">
                 <span>{property.source}</span>
