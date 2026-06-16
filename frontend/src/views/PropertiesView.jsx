@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
+import CommuteSummary from "../components/CommuteSummary";
 
 function PropertiesView() {
   const [properties, setProperties] = useState([]);
@@ -31,6 +32,14 @@ function PropertiesView() {
     setLoading(false);
   }
 
+  function updateLocalProperty(updatedProperty) {
+    setProperties((current) =>
+      current.map((property) =>
+        property.id === updatedProperty.id ? updatedProperty : property
+      )
+    );
+  }
+
   async function updateStatus(listingId, status) {
     const { data, error } = await supabase
       .from("properties")
@@ -56,11 +65,8 @@ function PropertiesView() {
       setShowScoreModal(true);
     }
 
-    // Remove property from the current list
     setProperties((current) =>
-      current.filter(
-        (property) => property.listing_id !== listingId
-      )
+      current.filter((property) => property.listing_id !== listingId)
     );
   }
 
@@ -269,6 +275,11 @@ function PropertiesView() {
                   <span>Offer: {property.offer_interest}</span>
                 )}
               </div>
+
+              <CommuteSummary
+                property={property}
+                onCommuteSaved={updateLocalProperty}
+              />
 
               <div className="property-meta">
                 <span>{property.source}</span>
