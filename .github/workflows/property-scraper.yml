@@ -9,7 +9,6 @@ jobs:
 scrape:
 runs-on: ubuntu-latest
 
-```
 defaults:
   run:
     working-directory: backend
@@ -50,4 +49,4 @@ steps:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     run: python main.py
-```
+
