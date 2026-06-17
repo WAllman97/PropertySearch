@@ -1,4 +1,7 @@
-import win32com.client as win32
+try:
+    import win32com.client as win32
+except ImportError:
+    win32 = None
 import requests
 import base64
 import urllib3
