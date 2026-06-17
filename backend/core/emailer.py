@@ -186,9 +186,8 @@ def build_property_card(item):
 
 
 def send_daily_email(new_properties):
-    if not new_properties:
-        print("No new properties to email.")
-        return
+    print("Email sending temporarily disabled.")
+    return
 
     # Pre-fetch all images as base64 before building HTML.
     # This is done here so the main script doesn't need to change.
