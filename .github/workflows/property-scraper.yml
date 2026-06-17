@@ -1,52 +1,51 @@
 name: Run property scraper
 
 on:
-workflow_dispatch:
-schedule:
-- cron: "0 7 * * *"
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * *"
 
 jobs:
-scrape:
-runs-on: ubuntu-latest
+  scrape:
+    runs-on: ubuntu-latest
 
-defaults:
-  run:
-    working-directory: backend
+    defaults:
+      run:
+        working-directory: backend
 
-steps:
-  - name: Checkout repo
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-  - name: Set up Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: "3.11"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-  - name: Debug repo state
-    run: |
-      pwd
-      ls -la
-      echo "Core files:"
-      ls -la core
-      echo "Git commit:"
-      git rev-parse HEAD
+      - name: Debug repo state
+        run: |
+          pwd
+          ls -la
+          echo "Core files:"
+          ls -la core
+          echo "Git commit:"
+          git rev-parse HEAD
 
-  - name: Install dependencies
-    run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-  - name: Debug Python imports
-    run: |
-      python --version
-      python -c "import os; print(os.getcwd())"
-      python -c "import core; print('core OK')"
-      python -c "import core.alert_preferences; print('alert_preferences OK')"
-      python -c "import yaml; print('yaml OK')"
-      python -c "import dotenv; print('dotenv OK')"
-      python -c "import supabase; print('supabase OK')"
+      - name: Debug Python imports
+        run: |
+          python --version
+          python -c "import os; print(os.getcwd())"
+          python -c "import core; print('core OK')"
+          python -c "import core.alert_preferences; print('alert_preferences OK')"
+          python -c "import yaml; print('yaml OK')"
+          python -c "import dotenv; print('dotenv OK')"
+          python -c "import supabase; print('supabase OK')"
 
-  - name: Run scraper
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-    run: python main.py
-
+      - name: Run scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python main.py
