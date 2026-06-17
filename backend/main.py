@@ -2,8 +2,6 @@ import os
 import yaml
 
 from core.property_repository import save_property_to_supabase
-from core.alert_preferences import get_alert_preferences
-from core.emailer import send_daily_email
 
 from core.database import (
     init_db,
@@ -123,21 +121,5 @@ for search in config["searches"]:
 
 print(f"\nFinal email list count: {len(new_properties)}")
 
-try:
-    preferences = get_alert_preferences()
-
-    if (
-        preferences
-        and preferences.get("email_alerts_enabled")
-        and preferences.get("alert_email")
-        and new_properties
-    ):
-        send_daily_email(new_properties, preferences.get("alert_email"))
-        print(f"Email alert sent to {preferences.get('alert_email')}")
-    else:
-        print("Email alert skipped.")
-
-except Exception as e:
-    print(f"Email alert failed: {e}")
-
+print("Email sending disabled.")
 print("\nFinished.")
