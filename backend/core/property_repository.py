@@ -1,5 +1,5 @@
 from core.supabase_client import supabase
-from core.commute_calculator import calculate_commutes_for_property
+#from core.commute_calculator import calculate_commutes_for_property
 
 
 SKIP_STATUSES = ["ignored", "archived", "lost"]
@@ -49,14 +49,7 @@ def save_property_to_supabase(record: dict):
         .execute()
     )
 
-    if result.data:
-        property_record = result.data[0]
-
-        if property_record.get("status") not in SKIP_STATUSES:
-            calculate_commutes_for_property(property_record)
-
     return result
-
 
 def clean_price(price_text):
     if not price_text:
