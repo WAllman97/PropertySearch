@@ -989,3 +989,18 @@ label {
     overflow-y: auto;
   }
 }
+
+.age-new {
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.age-medium {
+  color: #b26a00;
+  font-weight: 700;
+}
+
+.age-old {
+  color: #b3261e;
+  font-weight: 700;
+}

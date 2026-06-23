@@ -3,6 +3,30 @@ import { supabase } from "../lib/supabaseClient";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
 import CommuteSummary from "../components/CommuteSummary";
 
+function getPropertyAgeDays(property) {
+  const dateValue =
+    property.date_found ||
+    property.created_at ||
+    property.uploaded_at;
+
+  if (!dateValue) return null;
+
+  const startDate = new Date(dateValue);
+  const today = new Date();
+
+  return Math.max(
+    0,
+    Math.floor((today - startDate) / (1000 * 60 * 60 * 24))
+  );
+}
+
+function getAgeClass(days) {
+  if (days === null) return "";
+  if (days < 14) return "age-new";
+  if (days < 60) return "age-medium";
+  return "age-old";
+}
+
 function PropertiesView() {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +128,7 @@ function PropertiesView() {
 
     form.reset();
     setShowAddModal(false);
+    await loadProperties();
   }
 
   if (loading) {
@@ -242,73 +267,88 @@ function PropertiesView() {
       )}
 
       <div className="property-grid">
-        {properties.map((property) => (
-          <div className="property-card" key={property.id}>
-            {property.image_url && (
-              <img
-                src={property.image_url}
-                alt={property.address}
-                className="property-image"
-              />
-            )}
+        {properties.map((property) => {
+          const propertyAgeDays = getPropertyAgeDays(property);
 
-            <div className="property-content">
-              <h3>
-                {property.price
-                  ? `£${Number(property.price).toLocaleString()}`
-                  : "Price unavailable"}
-              </h3>
+          return (
+            <div className="property-card" key={property.id}>
+              {property.image_url && (
+                <img
+                  src={property.image_url}
+                  alt={property.address}
+                  className="property-image"
+                />
+              )}
 
-              <p>{property.address}</p>
+              <div className="property-content">
+                <h3>
+                  {property.price
+                    ? `£${Number(property.price).toLocaleString()}`
+                    : "Price unavailable"}
+                </h3>
 
-              <div className="property-score-strip">
-                <span>
-                  🏠{" "}
-                  {property.overall_score
-                    ? `${property.overall_score}/100`
-                    : "Not scored"}
-                </span>
+                <p>{property.address}</p>
 
-                <span>❤️ {property.score_gut_feel || 0}/10</span>
+                <div className="property-score-strip">
+                  <span>
+                    🏠{" "}
+                    {property.overall_score
+                      ? `${property.overall_score}/100`
+                      : "Not scored"}
+                  </span>
 
-                {property.offer_interest && (
-                  <span>Offer: {property.offer_interest}</span>
-                )}
-              </div>
+                  <span>❤️ {property.score_gut_feel || 0}/10</span>
 
-              <CommuteSummary
-                property={property}
-                onCommuteSaved={updateLocalProperty}
-              />
+                  {property.offer_interest && (
+                    <span>Offer: {property.offer_interest}</span>
+                  )}
+                </div>
 
-              <div className="property-meta">
-                <span>{property.source}</span>
-                {property.bedrooms && <span>{property.bedrooms} beds</span>}
-                {property.status && <span>{property.status}</span>}
-              </div>
+                <CommuteSummary
+                  property={property}
+                  onCommuteSaved={updateLocalProperty}
+                />
 
-              <a href={property.listing_url} target="_blank" rel="noreferrer">
-                View Listing
-              </a>
+                <div className="property-meta">
+                  <span>{property.source}</span>
 
-              <div className="property-actions">
-                <button
-                  onClick={() =>
-                    updateStatus(property.listing_id, "favourite")
-                  }
-                >
-                  Favourite
-                </button>
+                  {property.bedrooms && <span>{property.bedrooms} beds</span>}
 
-                <button
-                  onClick={() => updateStatus(property.listing_id, "ignored")}
-                >
-                  Ignore
-                </button>
+                  {propertyAgeDays !== null && (
+                    <span className={getAgeClass(propertyAgeDays)}>
+                      Added{" "}
+                      {propertyAgeDays === 0
+                        ? "today"
+                        : `${propertyAgeDays} days ago`}
+                    </span>
+                  )}
+
+                  {property.status && <span>{property.status}</span>}
+                </div>
+
+                <a href={property.listing_url} target="_blank" rel="noreferrer">
+                  View Listing
+                </a>
+
+                <div className="property-actions">
+                  <button
+                    onClick={() =>
+                      updateStatus(property.listing_id, "favourite")
+                    }
+                  >
+                    Favourite
+                  </button>
+
+                  <button
+                    onClick={() => updateStatus(property.listing_id, "ignored")}
+                  >
+                    Ignore
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

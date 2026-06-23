@@ -14,6 +14,35 @@ const emptyNotes = {
   general_notes: "",
 };
 
+function getPropertyAgeDays(property) {
+  const dateValue =
+    property.date_found ||
+    property.created_at ||
+    property.uploaded_at;
+
+  if (!dateValue) return null;
+
+  const startDate = new Date(dateValue);
+  const today = new Date();
+
+  return Math.max(
+    0,
+    Math.floor((today - startDate) / (1000 * 60 * 60 * 24))
+  );
+}
+
+function getAgeClass(days) {
+  if (days === null) return "";
+  if (days < 14) return "age-new";
+  if (days < 60) return "age-medium";
+  return "age-old";
+}
+
+function getAgeLabel(days) {
+  if (days === null) return null;
+  return days === 0 ? "Added today" : `Added ${days} days ago`;
+}
+
 function HistoryView() {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -171,11 +200,7 @@ function HistoryView() {
 
   function handleNotesChange(event) {
     const { name, value } = event.target;
-
-    setNotes((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    setNotes((current) => ({ ...current, [name]: value }));
   }
 
   function getStatusLabel(status) {
@@ -191,6 +216,8 @@ function HistoryView() {
   }
 
   if (selectedProperty) {
+    const selectedAgeDays = getPropertyAgeDays(selectedProperty);
+
     return (
       <section className="card">
         <button
@@ -222,7 +249,6 @@ function HistoryView() {
             <div className="property-score-strip">
               <span>🏠 {selectedProperty.overall_score || "--"}/100</span>
               <span>❤️ {selectedProperty.score_gut_feel || 0}/10</span>
-
               {selectedProperty.offer_interest && (
                 <span>Offer: {selectedProperty.offer_interest}</span>
               )}
@@ -238,6 +264,12 @@ function HistoryView() {
 
               {selectedProperty.bedrooms && (
                 <span>{selectedProperty.bedrooms} beds</span>
+              )}
+
+              {selectedAgeDays !== null && (
+                <span className={getAgeClass(selectedAgeDays)}>
+                  {getAgeLabel(selectedAgeDays)}
+                </span>
               )}
 
               <span className={`status-badge status-${selectedProperty.status}`}>
@@ -316,7 +348,6 @@ function HistoryView() {
               name="positives"
               value={notes.positives}
               onChange={handleNotesChange}
-              placeholder="What stands out positively?"
             />
           </label>
 
@@ -326,7 +357,6 @@ function HistoryView() {
               name="negatives"
               value={notes.negatives}
               onChange={handleNotesChange}
-              placeholder="What are the concerns?"
             />
           </label>
 
@@ -336,7 +366,6 @@ function HistoryView() {
               name="questions"
               value={notes.questions}
               onChange={handleNotesChange}
-              placeholder="Questions for the agent, seller or surveyor..."
             />
           </label>
 
@@ -346,7 +375,6 @@ function HistoryView() {
               name="general_notes"
               value={notes.general_notes}
               onChange={handleNotesChange}
-              placeholder="Anything else worth remembering?"
             />
           </label>
 
@@ -381,114 +409,124 @@ function HistoryView() {
       </div>
 
       <div className="property-grid">
-        {properties.map((property) => (
-          <div
-            className="property-card"
-            key={property.id}
-            onClick={() => setSelectedProperty(property)}
-          >
-            {property.image_url && (
-              <img
-                src={property.image_url}
-                alt={property.address}
-                className="property-image"
-              />
-            )}
+        {properties.map((property) => {
+          const propertyAgeDays = getPropertyAgeDays(property);
 
-            <div className="property-content">
-              <h3>
-                {property.price
-                  ? `£${Number(property.price).toLocaleString()}`
-                  : "Price unavailable"}
-              </h3>
+          return (
+            <div
+              className="property-card"
+              key={property.id}
+              onClick={() => setSelectedProperty(property)}
+            >
+              {property.image_url && (
+                <img
+                  src={property.image_url}
+                  alt={property.address}
+                  className="property-image"
+                />
+              )}
 
-              <p>{property.address}</p>
+              <div className="property-content">
+                <h3>
+                  {property.price
+                    ? `£${Number(property.price).toLocaleString()}`
+                    : "Price unavailable"}
+                </h3>
 
-              <div className="property-score-strip">
-                <span>🏠 {property.overall_score || "--"}/100</span>
-                <span>❤️ {property.score_gut_feel || 0}/10</span>
+                <p>{property.address}</p>
 
-                {property.offer_interest && (
-                  <span>Offer: {property.offer_interest}</span>
-                )}
-              </div>
+                <div className="property-score-strip">
+                  <span>🏠 {property.overall_score || "--"}/100</span>
+                  <span>❤️ {property.score_gut_feel || 0}/10</span>
 
-              <CommuteSummary
-                property={property}
-                onCommuteSaved={updateLocalProperty}
-              />
+                  {property.offer_interest && (
+                    <span>Offer: {property.offer_interest}</span>
+                  )}
+                </div>
 
-              <div className="property-meta">
-                <span>{property.source}</span>
+                <CommuteSummary
+                  property={property}
+                  onCommuteSaved={updateLocalProperty}
+                />
 
-                {property.bedrooms && <span>{property.bedrooms} beds</span>}
+                <div className="property-meta">
+                  <span>{property.source}</span>
 
-                <span className={`status-badge status-${property.status}`}>
-                  {getStatusLabel(property.status)}
-                </span>
-              </div>
+                  {property.bedrooms && <span>{property.bedrooms} beds</span>}
 
-              <a
-                href={property.listing_url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
-              >
-                View Listing
-              </a>
+                  {propertyAgeDays !== null && (
+                    <span className={getAgeClass(propertyAgeDays)}>
+                      {getAgeLabel(propertyAgeDays)}
+                    </span>
+                  )}
 
-              <div
-                className="property-actions"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => setSelectedProperty(property)}
+                  <span className={`status-badge status-${property.status}`}>
+                    {getStatusLabel(property.status)}
+                  </span>
+                </div>
+
+                <a
+                  href={property.listing_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  Open Details
-                </button>
+                  View Listing
+                </a>
 
-                <button
-                  disabled={property.status === "viewing_booked"}
-                  onClick={() => updateStatus(property.id, "viewing_booked")}
+                <div
+                  className="property-actions"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  Viewing booked
-                </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => setSelectedProperty(property)}
+                  >
+                    Open Details
+                  </button>
 
-                <button
-                  disabled={property.status === "viewed"}
-                  onClick={() => {
-                    updateStatus(property.id, "viewed");
-                    setSelectedProperty({ ...property, status: "viewed" });
-                  }}
-                >
-                  Viewed
-                </button>
+                  <button
+                    disabled={property.status === "viewing_booked"}
+                    onClick={() => updateStatus(property.id, "viewing_booked")}
+                  >
+                    Viewing booked
+                  </button>
 
-                <button
-                  disabled={property.status === "offer_considered"}
-                  onClick={() =>
-                    updateStatus(property.id, "offer_considered")
-                  }
-                >
-                  Offer considered
-                </button>
+                  <button
+                    disabled={property.status === "viewed"}
+                    onClick={() => {
+                      updateStatus(property.id, "viewed");
+                      setSelectedProperty({ ...property, status: "viewed" });
+                    }}
+                  >
+                    Viewed
+                  </button>
 
-                <button
-                  disabled={property.status === "offer_made"}
-                  onClick={() => updateStatus(property.id, "offer_made")}
-                >
-                  Offer made
-                </button>
+                  <button
+                    disabled={property.status === "offer_considered"}
+                    onClick={() =>
+                      updateStatus(property.id, "offer_considered")
+                    }
+                  >
+                    Offer considered
+                  </button>
 
-                <button onClick={() => updateStatus(property.id, "archived")}>
-                  Archive
-                </button>
+                  <button
+                    disabled={property.status === "offer_made"}
+                    onClick={() => updateStatus(property.id, "offer_made")}
+                  >
+                    Offer made
+                  </button>
+
+                  <button onClick={() => updateStatus(property.id, "archived")}>
+                    Archive
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
