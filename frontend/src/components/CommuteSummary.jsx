@@ -4,10 +4,10 @@ import "./CommuteSummary.css";
 
 function getCommuteIcon(mode) {
   const icons = {
-    TRANSIT: "🚇",
-    DRIVE: "🚗",
-    WALK: "🚶",
-    BICYCLE: "🚲",
+    transit: "🚇",
+    drive: "🚗",
+    walk: "🚶",
+    cycle: "🚲",
   };
 
   return icons[mode] || "🚇";
@@ -15,22 +15,28 @@ function getCommuteIcon(mode) {
 
 function getModeLabel(mode) {
   const labels = {
-    TRANSIT: "Public transport",
-    DRIVE: "Driving",
-    WALK: "Walking",
-    BICYCLE: "Cycling",
+    transit: "Public transport",
+    drive: "Driving",
+    walk: "Walking",
+    cycle: "Cycling",
   };
 
   return labels[mode] || "Public transport";
 }
 
+function getSelectedMode(profile) {
+  const mode = profile?.commute_mode || "TRANSIT";
+
+  if (mode === "DRIVE") return "drive";
+  if (mode === "WALK") return "walk";
+  if (mode === "BICYCLE") return "cycle";
+
+  return "transit";
+}
+
 function CommuteSummary({ property }) {
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
-
-  const hasUserCommute = Boolean(property.user_commute_minutes);
-  const hasPartnerCommute = Boolean(property.partner_commute_minutes);
-  const hasAnyCommute = hasUserCommute || hasPartnerCommute;
 
   useEffect(() => {
     loadBuyerProfile();
@@ -67,6 +73,15 @@ function CommuteSummary({ property }) {
     return null;
   }
 
+  const selectedMode = getSelectedMode(profile);
+
+  const userMinutes = property[`user_${selectedMode}_minutes`];
+  const partnerMinutes = property[`partner_${selectedMode}_minutes`];
+
+  const hasUserCommute = Boolean(userMinutes);
+  const hasPartnerCommute = Boolean(partnerMinutes);
+  const hasAnyCommute = hasUserCommute || hasPartnerCommute;
+
   return (
     <div className="commute-summary">
       {hasAnyCommute ? (
@@ -74,22 +89,18 @@ function CommuteSummary({ property }) {
           <div className="commute-results">
             {hasUserCommute && (
               <span>
-                {getCommuteIcon(property.commute_mode || profile?.commute_mode)} You:{" "}
-                {property.user_commute_minutes} mins
+                {getCommuteIcon(selectedMode)} You: {userMinutes} mins
               </span>
             )}
 
             {hasPartnerCommute && (
               <span>
-                {getCommuteIcon(property.commute_mode || profile?.commute_mode)} Partner:{" "}
-                {property.partner_commute_minutes} mins
+                {getCommuteIcon(selectedMode)} Partner: {partnerMinutes} mins
               </span>
             )}
           </div>
 
-          <p className="commute-message">
-            {getModeLabel(property.commute_mode || profile?.commute_mode)}
-          </p>
+          <p className="commute-message">{getModeLabel(selectedMode)}</p>
         </>
       ) : (
         <p className="commute-empty">No commute calculated yet.</p>

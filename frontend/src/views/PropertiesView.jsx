@@ -108,22 +108,40 @@ function PropertiesView() {
     const listingUrl = form.listing_url.value.trim();
     const source = detectSource(listingUrl);
 
-    const { error } = await supabase.from("properties").insert({
-      source,
-      listing_id: `manual-${Date.now()}`,
-      title: form.title.value || `${source} property`,
-      address: form.address.value || "Address to update",
-      price: form.price.value ? Number(form.price.value) : null,
-      bedrooms: form.bedrooms.value ? Number(form.bedrooms.value) : null,
-      image_url: form.image_url.value || "",
-      listing_url: listingUrl,
-      date_found: new Date().toISOString().split("T")[0],
-      status: "favourite",
-    });
+    const { data, error } = await supabase
+      .from("properties")
+      .insert({
+        source,
+        listing_id: `manual-${Date.now()}`,
+        title: form.title.value || `${source} property`,
+        address: form.address.value || "Address to update",
+        price: form.price.value ? Number(form.price.value) : null,
+        bedrooms: form.bedrooms.value ? Number(form.bedrooms.value) : null,
+        image_url: form.image_url.value || "",
+        listing_url: listingUrl,
+        date_found: new Date().toISOString().split("T")[0],
+        status: "favourite",
+      })
+      .select()
+      .single();
 
     if (error) {
       alert(error.message);
       return;
+    }
+
+    try {
+      await fetch("/api/calculate-property-commute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          property_id: data.id,
+        }),
+      });
+    } catch (err) {
+      console.error("Commute calculation failed:", err);
     }
 
     form.reset();

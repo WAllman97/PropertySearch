@@ -55,17 +55,28 @@ function BuyerProfileSettings({ user }) {
     setSaving(true);
     setSaved(false);
 
-    const { error } = await supabase.from("buyer_profiles").upsert({
-      user_id: user.id,
-      ...profile,
-      updated_at: new Date().toISOString(),
-    });
+  const { error } = await supabase
+    .from("buyer_profiles")
+    .upsert(
+      {
+        user_id: user.id,
+        ...profile,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "user_id",
+      }
+    );
 
     if (error) {
       console.error(error);
       alert("Could not save buyer profile.");
     } else {
       setSaved(true);
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     }
 
     setSaving(false);
