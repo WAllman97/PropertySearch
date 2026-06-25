@@ -8,12 +8,12 @@ function BuyerProfileSettings({ user }) {
     school_address: "",
     has_school_commute: false,
     commute_mode: "TRANSIT",
-    email_alerts_enabled: true,
-    alert_email: "",
   });
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [refreshingCommutes, setRefreshingCommutes] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState("");
 
   useEffect(() => {
     if (user) {
@@ -40,14 +40,7 @@ function BuyerProfileSettings({ user }) {
         school_address: data.school_address || "",
         has_school_commute: data.has_school_commute || false,
         commute_mode: data.commute_mode || "TRANSIT",
-        email_alerts_enabled: data.email_alerts_enabled ?? true,
-        alert_email: data.alert_email || user.email || "",
       });
-    } else {
-      setProfile((prev) => ({
-        ...prev,
-        alert_email: user.email || "",
-      }));
     }
   }
 
@@ -55,9 +48,7 @@ function BuyerProfileSettings({ user }) {
     setSaving(true);
     setSaved(false);
 
-  const { error } = await supabase
-    .from("buyer_profiles")
-    .upsert(
+    const { error } = await supabase.from("buyer_profiles").upsert(
       {
         user_id: user.id,
         ...profile,
@@ -73,13 +64,40 @@ function BuyerProfileSettings({ user }) {
       alert("Could not save buyer profile.");
     } else {
       setSaved(true);
-
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
     }
 
     setSaving(false);
+  }
+
+  async function refreshAllCommutes() {
+    setRefreshingCommutes(true);
+    setRefreshMessage("");
+
+    try {
+      const response = await fetch("/api/refresh_commutes", {
+        method: "POST",
+      });
+
+      const text = await response.text();
+
+      let result = {};
+      if (text) {
+        result = JSON.parse(text);
+      }
+
+      if (!response.ok || result.success === false) {
+        throw new Error(
+          result.error || `Request failed with status ${response.status}`
+        );
+      }
+
+      setRefreshMessage("Commute refresh complete. Reload the page to see updated commute times.");
+    } catch (error) {
+      console.error("Error refreshing commutes:", error);
+      setRefreshMessage(error.message || "Could not refresh commutes.");
+    }
+
+    setRefreshingCommutes(false);
   }
 
   function updateField(field, value) {
@@ -122,9 +140,7 @@ function BuyerProfileSettings({ user }) {
         <input
           type="checkbox"
           checked={profile.has_school_commute}
-          onChange={(e) =>
-            updateField("has_school_commute", e.target.checked)
-          }
+          onChange={(e) => updateField("has_school_commute", e.target.checked)}
         />
         Include school or nursery commute
       </label>
@@ -141,36 +157,23 @@ function BuyerProfileSettings({ user }) {
         </>
       )}
 
-      <hr />
+      <div className="settings-button-row">
+        <button onClick={saveBuyerProfile} disabled={saving}>
+          {saving ? "Saving..." : "Save buyer profile"}
+        </button>
 
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={profile.email_alerts_enabled}
-          onChange={(e) =>
-            updateField("email_alerts_enabled", e.target.checked)
-          }
-        />
-        Email me when new properties are found
-      </label>
-
-      {profile.email_alerts_enabled && (
-        <>
-          <label>Email address for alerts</label>
-          <input
-            type="email"
-            placeholder="e.g. your@email.com"
-            value={profile.alert_email}
-            onChange={(e) => updateField("alert_email", e.target.value)}
-          />
-        </>
-      )}
-
-      <button onClick={saveBuyerProfile} disabled={saving}>
-        {saving ? "Saving..." : "Save buyer profile"}
-      </button>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={refreshAllCommutes}
+          disabled={refreshingCommutes}
+        >
+          {refreshingCommutes ? "Refreshing..." : "Refresh all commutes"}
+        </button>
+      </div>
 
       {saved && <p className="success-message">Buyer profile saved.</p>}
+      {refreshMessage && <p className="form-message">{refreshMessage}</p>}
     </div>
   );
 }
