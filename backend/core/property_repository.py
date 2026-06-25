@@ -1,5 +1,5 @@
 from core.supabase_client import supabase
-#from core.commute_calculator import calculate_commutes_for_property
+from core.commute_calculator import calculate_commutes_for_property_id
 
 
 SKIP_STATUSES = ["ignored", "archived", "lost"]
@@ -37,19 +37,33 @@ def save_property_to_supabase(record: dict):
         "title": record.get("address"),
         "address": record.get("address"),
         "price": clean_price(record.get("price")),
-        "bedrooms": None,
+        "bedrooms": record.get("bedrooms"),
         "image_url": record.get("image"),
         "listing_url": listing_url,
+        "date_found": record.get("date_found"),
     }
 
     result = (
         supabase
         .table("properties")
         .upsert(payload, on_conflict="listing_url")
+        .select("*")
         .execute()
     )
 
+    if result.data:
+        property_record = result.data[0]
+        property_id = property_record.get("id")
+        address = property_record.get("address")
+
+        try:
+            print(f"Calculating commute for: {address}")
+            calculate_commutes_for_property_id(property_id, force=True)
+        except Exception as error:
+            print(f"Commute calculation failed for {address}: {error}")
+
     return result
+
 
 def clean_price(price_text):
     if not price_text:

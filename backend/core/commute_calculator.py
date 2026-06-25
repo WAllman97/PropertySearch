@@ -2,7 +2,7 @@ import os
 import requests
 from datetime import datetime, timezone, timedelta
 
-from supabase_client import supabase
+from core.supabase_client import supabase
 
 
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
@@ -269,6 +269,25 @@ def calculate_commutes_for_all_properties(limit=500, force=False):
         results.append(output)
 
     return results
+
+def calculate_commutes_for_property_id(property_id, force=True):
+    result = (
+        supabase
+        .table("properties")
+        .select("*")
+        .eq("id", property_id)
+        .single()
+        .execute()
+    )
+
+    if not result.data:
+        print(f"No property found for id: {property_id}")
+        return None
+
+    return calculate_commutes_for_property(
+        property_record=result.data,
+        force=force,
+    )
 
 
 if __name__ == "__main__":

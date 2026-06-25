@@ -2,13 +2,11 @@ import os
 import yaml
 
 from core.property_repository import save_property_to_supabase
+from core.commute_calculator import calculate_commutes_for_property
 
 from core.database import (
     init_db,
-    property_seen,
     save_property,
-    save_property_result,
-    log_search_run
 )
 
 from core.filters import passes_filters
@@ -16,6 +14,7 @@ from core.filters import passes_filters
 from scrapers import rightmove
 from scrapers import zoopla
 from scrapers import onthemarket
+from datetime import datetime
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -40,7 +39,6 @@ scraper_map = {
 
 
 for search in config["searches"]:
-
     source = search.get("source", "rightmove").lower()
     search_name = search["name"]
     search_url = search["url"]
@@ -56,7 +54,6 @@ for search in config["searches"]:
 
     try:
         properties = scraper.fetch_search_results(search_url)
-
     except Exception as e:
         print(f"Search failed: {e}")
         continue
@@ -71,17 +68,10 @@ for search in config["searches"]:
     print(f"Processing {len(property_items)} properties")
 
     for property_id, property_url in property_items:
-
         unique_id = f"{source}_{property_id}"
-
-        # Cloud mode: let Supabase handle duplicates
-        # if property_seen(conn, unique_id):
-        #     print(f"Already seen: {unique_id}")
-        #     continue
 
         try:
             property_html = scraper.fetch_property_page(property_url)
-
         except Exception as e:
             print(f"Failed to open property page: {e}")
             continue
@@ -97,17 +87,29 @@ for search in config["searches"]:
             property_url=property_url,
             property_html=property_html,
             search_name=search_name,
-            reason=reason
+            reason=reason,
         )
 
         record["source"] = source
+        record["date_found"] = datetime.now().date().isoformat()
 
         try:
             result = save_property_to_supabase(record)
             print(f"Saved to Supabase: {record.get('address')}")
 
             if result.data:
-                new_properties.append(record)
+                saved_property = result.data[0]
+
+                try:
+                    calculate_commutes_for_property(
+                        property_record=saved_property,
+                        force=True,
+                    )
+                    print(f"Commutes calculated: {record.get('address')}")
+                except Exception as commute_error:
+                    print(f"Commute calculation failed: {commute_error}")
+
+                new_properties.append(saved_property)
 
         except Exception as e:
             print(f"Failed to save to Supabase: {e}")
@@ -116,10 +118,9 @@ for search in config["searches"]:
             conn=conn,
             property_id=unique_id,
             source=source,
-            url=property_url
+            url=property_url,
         )
 
 print(f"\nFinal email list count: {len(new_properties)}")
-
 print("Email sending disabled.")
 print("\nFinished.")
