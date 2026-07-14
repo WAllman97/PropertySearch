@@ -70,28 +70,79 @@ function BuyerProfileSettings({ user }) {
   }
 
   async function refreshAllCommutes() {
+    if (!profile.user_work_address && !profile.partner_work_address) {
+      setRefreshMessage("Add a work address and save your profile first.");
+      return;
+    }
+
     setRefreshingCommutes(true);
     setRefreshMessage("");
 
     try {
-      const response = await fetch("/api/refresh_commutes", {
-        method: "POST",
-      });
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      const text = await response.text();
-
-      let result = {};
-      if (text) {
-        result = JSON.parse(text);
+      if (!session) {
+        throw new Error("You must be signed in to refresh commutes.");
       }
 
-      if (!response.ok || result.success === false) {
-        throw new Error(
-          result.error || `Request failed with status ${response.status}`
-        );
+      const { data: properties, error } = await supabase
+        .from("properties")
+        .select("id, status")
+        .order("commute_last_checked", { ascending: true, nullsFirst: true });
+
+      if (error) {
+        throw new Error(error.message);
       }
 
-      setRefreshMessage("Commute refresh complete. Reload the page to see updated commute times.");
+      const skipStatuses = ["ignored", "archived", "lost"];
+      const targets = (properties || []).filter(
+        (property) => !skipStatuses.includes(property.status)
+      );
+
+      if (targets.length === 0) {
+        setRefreshMessage("No active properties to refresh.");
+        return;
+      }
+
+      let done = 0;
+      let failed = 0;
+
+      // Recompute one property at a time via the shared commute endpoint.
+      // Keeps each request well under the serverless timeout and writes the
+      // same per-mode columns as the daily batch.
+      for (const property of targets) {
+        setRefreshMessage(`Refreshing commutes… ${done}/${targets.length}`);
+
+        try {
+          const response = await fetch("/api/calculate-commute", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ propertyId: property.id }),
+          });
+
+          if (!response.ok) {
+            failed += 1;
+          }
+        } catch (err) {
+          console.error("Commute refresh failed for", property.id, err);
+          failed += 1;
+        }
+
+        done += 1;
+      }
+
+      const succeeded = done - failed;
+
+      setRefreshMessage(
+        failed > 0
+          ? `Refreshed ${succeeded}/${targets.length} (${failed} failed). Reload to see updated times.`
+          : `Refreshed all ${targets.length} commutes. Reload to see updated times.`
+      );
     } catch (error) {
       console.error("Error refreshing commutes:", error);
       setRefreshMessage(error.message || "Could not refresh commutes.");
