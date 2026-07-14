@@ -6,63 +6,116 @@ const googleApiKey = process.env.GOOGLE_MAPS_API_KEY;
 
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
+// Keep in sync with backend/core/commute_calculator.py COMMUTE_MODES.
+const COMMUTE_MODES = {
+  transit: "TRANSIT",
+  drive: "DRIVE",
+  cycle: "BICYCLE",
+  walk: "WALK",
+};
+
 function durationToMinutes(duration) {
   if (!duration) return null;
-  const seconds = Number(duration.replace("s", ""));
+  const seconds = Number(String(duration).replace("s", ""));
+  if (Number.isNaN(seconds)) return null;
   return Math.round(seconds / 60);
 }
 
 function getPropertyAddress(property) {
-  return [
-    property.address,
-    property.display_address,
-    property.location,
-    property.postcode,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  return property.address || property.display_address || property.title || null;
 }
 
-async function calculateRoute(origin, destination, mode) {
-  if (!origin || !destination) return null;
-
-  const response = await fetch(
-    "https://routes.googleapis.com/directions/v2:computeRoutes",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": googleApiKey,
-        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters",
-      },
-      body: JSON.stringify({
-        origin: {
-          address: origin,
-        },
-        destination: {
-          address: destination,
-        },
-        travelMode: mode || "TRANSIT",
-        routingPreference: mode === "DRIVE" ? "TRAFFIC_AWARE" : undefined,
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Google Routes API error:", errorText);
-    return null;
+async function calculateRoute(origin, destination, googleMode) {
+  if (!googleApiKey) {
+    return { success: false, minutes: null, distanceMeters: null, error: "Missing GOOGLE_MAPS_API_KEY" };
   }
 
-  const data = await response.json();
-  const route = data.routes?.[0];
+  if (!origin || !destination) {
+    return { success: false, minutes: null, distanceMeters: null, error: "Missing origin or destination" };
+  }
 
-  if (!route) return null;
-
-  return {
-    minutes: durationToMinutes(route.duration),
-    distanceMeters: route.distanceMeters || null,
+  const body = {
+    origin: { address: origin },
+    destination: { address: destination },
+    travelMode: googleMode,
   };
+
+  if (googleMode === "DRIVE") {
+    body.routingPreference = "TRAFFIC_AWARE";
+  }
+
+  try {
+    const response = await fetch(
+      "https://routes.googleapis.com/directions/v2:computeRoutes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": googleApiKey,
+          "X-Goog-FieldMask": "routes.duration,routes.distanceMeters",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        success: false,
+        minutes: null,
+        distanceMeters: null,
+        error: `Google Routes API error ${response.status}: ${errorText}`,
+      };
+    }
+
+    const data = await response.json();
+    const route = data.routes?.[0];
+
+    if (!route) {
+      return { success: false, minutes: null, distanceMeters: null, error: "No route returned" };
+    }
+
+    return {
+      success: true,
+      minutes: durationToMinutes(route.duration),
+      distanceMeters: route.distanceMeters ?? null,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      minutes: null,
+      distanceMeters: null,
+      error: `Commute calculation failed: ${error.message}`,
+    };
+  }
+}
+
+async function calculateAllModesForPerson(propertyAddress, destination, personLabel) {
+  const payload = {};
+  const errors = [];
+
+  for (const [modeLabel, googleMode] of Object.entries(COMMUTE_MODES)) {
+    const route = await calculateRoute(propertyAddress, destination, googleMode);
+
+    const minutesCol = `${personLabel}_${modeLabel}_minutes`;
+    const distanceCol = `${personLabel}_${modeLabel}_distance_meters`;
+    const statusCol = `${personLabel}_${modeLabel}_status`;
+    const errorCol = `${personLabel}_${modeLabel}_error`;
+
+    if (route.success) {
+      payload[minutesCol] = route.minutes;
+      payload[distanceCol] = route.distanceMeters;
+      payload[statusCol] = "success";
+      payload[errorCol] = null;
+    } else {
+      payload[statusCol] = "failed";
+      payload[errorCol] = route.error;
+      errors.push(`${personLabel}_${modeLabel}: ${route.error}`);
+    }
+  }
+
+  return { payload, errors };
 }
 
 export default async function handler(req, res) {
@@ -71,7 +124,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { propertyId } = req.body;
+    const { propertyId } = req.body || {};
 
     if (!propertyId) {
       return res.status(400).json({ error: "Missing propertyId" });
@@ -116,31 +169,43 @@ export default async function handler(req, res) {
     }
 
     const propertyAddress = getPropertyAddress(property);
-    const mode = profile.commute_mode || "TRANSIT";
 
-    const userRoute = await calculateRoute(
-      propertyAddress,
-      profile.user_work_address,
-      mode
-    );
-
-    const partnerRoute = await calculateRoute(
-      propertyAddress,
-      profile.partner_work_address,
-      mode
-    );
-
-    const schoolRoute = profile.has_school_commute
-      ? await calculateRoute(propertyAddress, profile.school_address, mode)
-      : null;
+    if (!propertyAddress) {
+      return res.status(400).json({ error: "Property has no usable address" });
+    }
 
     const updatePayload = {
-      user_commute_minutes: userRoute?.minutes || null,
-      partner_commute_minutes: partnerRoute?.minutes || null,
-      school_commute_minutes: schoolRoute?.minutes || null,
-      commute_mode: mode,
       commute_last_checked: new Date().toISOString(),
+      commute_status: "success",
+      commute_error: null,
     };
+
+    const allErrors = [];
+
+    if (profile.user_work_address) {
+      const { payload, errors } = await calculateAllModesForPerson(
+        propertyAddress,
+        profile.user_work_address,
+        "user"
+      );
+      Object.assign(updatePayload, payload);
+      allErrors.push(...errors);
+    }
+
+    if (profile.partner_work_address) {
+      const { payload, errors } = await calculateAllModesForPerson(
+        propertyAddress,
+        profile.partner_work_address,
+        "partner"
+      );
+      Object.assign(updatePayload, payload);
+      allErrors.push(...errors);
+    }
+
+    if (allErrors.length > 0) {
+      updatePayload.commute_status = "partial_failed";
+      updatePayload.commute_error = allErrors.join(" | ").slice(0, 2000);
+    }
 
     const { data: updatedProperty, error: updateError } = await supabaseAdmin
       .from("properties")

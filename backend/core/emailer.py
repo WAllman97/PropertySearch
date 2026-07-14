@@ -52,6 +52,23 @@ def safe(value, fallback="Unknown"):
     return value if value else fallback
 
 
+# Order in which we pick a commute to display in the email.
+# Matches the per-mode columns written by commute_calculator.py.
+COMMUTE_MODE_PRIORITY = ["transit", "drive", "cycle", "walk"]
+
+
+def get_primary_commute(item, person="user"):
+    """Return the first available commute time (minutes) for a person,
+    preferring public transport, then drive, cycle, walk."""
+    for mode in COMMUTE_MODE_PRIORITY:
+        minutes = item.get(f"{person}_{mode}_minutes")
+
+        if minutes:
+            return minutes
+
+    return None
+
+
 def fetch_image_as_base64(url):
     """
     Fetch an image URL using browser-like headers and return a base64 data URI.
@@ -109,7 +126,8 @@ def build_property_card(item):
     source = safe(item.get("source", "Rightmove")).title()
     url = safe(item.get("url"), "#")
     bedrooms = safe(item.get("bedrooms"), "")
-    commute_minutes = safe(item.get("commute_minutes"), "")
+    user_commute = get_primary_commute(item, "user")
+    partner_commute = get_primary_commute(item, "partner")
     image_src = item.get("_image_b64", "")
 
     details = []
@@ -117,8 +135,11 @@ def build_property_card(item):
     if bedrooms and bedrooms != "Unknown":
         details.append(f"{bedrooms} bed")
 
-    if commute_minutes and commute_minutes != "Unknown":
-        details.append(f"{commute_minutes} min commute")
+    if user_commute:
+        details.append(f"You: {user_commute} min")
+
+    if partner_commute:
+        details.append(f"Partner: {partner_commute} min")
 
     details.append("Added today")
 
@@ -250,7 +271,7 @@ def send_daily_email(new_properties):
     Expects new_properties as a list of dictionaries containing:
     price, address, reason, search_name, source, url, image.
     Optional:
-    bedrooms, commute_minutes.
+    bedrooms, and per-mode commute columns (user_transit_minutes, etc.).
     """
     if not new_properties:
         print("No new properties found. Email not sent.")
