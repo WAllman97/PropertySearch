@@ -58,7 +58,7 @@ def save_property_to_supabase(record: dict):
 
         try:
             print(f"Calculating commute for: {address}")
-            calculate_commutes_for_property_id(property_id, force=True)
+            calculate_commutes_for_property_id(property_id, force=False)
         except Exception as error:
             print(f"Commute calculation failed for {address}: {error}")
 

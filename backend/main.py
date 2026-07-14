@@ -2,7 +2,6 @@ import os
 import yaml
 
 from core.property_repository import save_property_to_supabase
-from core.commute_calculator import calculate_commutes_for_property
 
 from core.database import (
     init_db,
@@ -94,22 +93,12 @@ for search in config["searches"]:
         record["date_found"] = datetime.now().date().isoformat()
 
         try:
+            # Commutes are calculated inside save_property_to_supabase().
             result = save_property_to_supabase(record)
-            print(f"Saved to Supabase: {record.get('address')}")
 
-            if result.data:
-                saved_property = result.data[0]
-
-                try:
-                    calculate_commutes_for_property(
-                        property_record=saved_property,
-                        force=True,
-                    )
-                    print(f"Commutes calculated: {record.get('address')}")
-                except Exception as commute_error:
-                    print(f"Commute calculation failed: {commute_error}")
-
-                new_properties.append(saved_property)
+            if result and result.data:
+                print(f"Saved to Supabase: {record.get('address')}")
+                new_properties.append(result.data[0])
 
         except Exception as e:
             print(f"Failed to save to Supabase: {e}")

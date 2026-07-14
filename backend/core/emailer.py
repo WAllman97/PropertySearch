@@ -268,7 +268,7 @@ def send_daily_email(new_properties):
             ""
         )
 
-    item["_image_b64"] = fetch_image_as_base64(raw_url)
+        item["_image_b64"] = fetch_image_as_base64(raw_url)
 
     today = datetime.now().strftime("%d %B %Y")
     count = len(new_properties)
