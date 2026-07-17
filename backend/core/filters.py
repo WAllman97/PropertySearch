@@ -44,7 +44,7 @@ def contains_any(text, keywords):
     return any(keyword in text for keyword in keywords)
 
 
-def passes_filters(property_text):
+def passes_filters(property_text, require_garden=True):
     property_text = property_text.lower()
 
     has_garden = contains_any(
@@ -62,7 +62,11 @@ def passes_filters(property_text):
         block_flat_keywords
     )
 
-    if not has_garden:
+    # When the source search already enforces a garden filter (see
+    # garden_prefiltered in config.yaml), skip the local garden check: the
+    # short structured search text often omits the word "garden" even though
+    # the listing has one, which would drop good results.
+    if require_garden and not has_garden:
         return False, "No garden"
 
     if looks_like_block_flat and not has_positive_property_type:
@@ -71,4 +75,7 @@ def passes_filters(property_text):
     if has_positive_property_type:
         return True, "Garden + maisonette/conversion signal"
 
-    return True, "Garden/outside space signal"
+    if has_garden:
+        return True, "Garden/outside space signal"
+
+    return True, "Passed (garden pre-filtered by search)"

@@ -37,8 +37,6 @@ scraper_map = {
     "onthemarket": onthemarket,
 }
 
-ZOOPLA_MAX_PROPERTIES = 8
-
 MISSING_PRICE_VALUES = {"", "unknown"}
 MISSING_ADDRESS_VALUES = {"", "unknown", "unknown location"}
 
@@ -86,14 +84,18 @@ for search in config["searches"]:
 
     scraper = scraper_map[source]
 
+    # Searches whose URL already enforces a garden filter don't need the
+    # local garden keyword re-check (see passes_filters / config.yaml).
+    require_garden = not search.get("garden_prefiltered", False)
+
     try:
-        properties = scraper.fetch_search_results(search_url)
+        listings = scraper.fetch_listings(search_url)
     except Exception as e:
         health["searches_failed"] += 1
         warn(f"Search request failed for {source}/{search_name}: {e}")
         continue
 
-    found_count = len(properties)
+    found_count = len(listings)
     health["found_total"] += found_count
     found_by_source[source] += found_count
 
@@ -107,42 +109,33 @@ for search in config["searches"]:
         )
         continue
 
-    property_items = list(properties.items())
+    print(f"Processing {found_count} properties")
 
-    if source == "zoopla" and len(property_items) > ZOOPLA_MAX_PROPERTIES:
-        warn(
-            f"Zoopla results capped at {ZOOPLA_MAX_PROPERTIES} of "
-            f"{len(property_items)} for '{search_name}' (rate-limit guard)."
+    for listing in listings:
+        property_url = listing["url"]
+        unique_id = f"{source}_{listing['id']}"
+
+        passes, reason = passes_filters(
+            listing.get("filter_text", ""),
+            require_garden=require_garden,
         )
-        property_items = property_items[:ZOOPLA_MAX_PROPERTIES]
-
-    print(f"Processing {len(property_items)} properties")
-
-    for property_id, property_url in property_items:
-        unique_id = f"{source}_{property_id}"
-
-        try:
-            property_html = scraper.fetch_property_page(property_url)
-        except Exception as e:
-            warn(f"Failed to open property page {property_url}: {e}")
-            continue
-
-        passes, reason = passes_filters(property_html)
 
         if not passes:
             print(f"Skipped by filter: {reason} | {property_url}")
             continue
 
-        record = scraper.build_property_record(
-            property_id=unique_id,
-            property_url=property_url,
-            property_html=property_html,
-            search_name=search_name,
-            reason=reason,
-        )
-
-        record["source"] = source
-        record["date_found"] = datetime.now().date().isoformat()
+        record = {
+            "id": unique_id,
+            "url": property_url,
+            "search_name": search_name,
+            "reason": reason,
+            "price": listing.get("price"),
+            "address": listing.get("address"),
+            "image": listing.get("image"),
+            "bedrooms": listing.get("bedrooms"),
+            "source": source,
+            "date_found": datetime.now().date().isoformat(),
+        }
 
         # Flag records where extraction produced junk — a strong sign the
         # parsing patterns no longer match the site's markup.

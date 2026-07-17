@@ -105,6 +105,23 @@ def image_from_json(prop):
     return clean_text(images.get("mainImageSrc") or "")
 
 
+def filter_text_from_json(prop):
+    """Concatenate the descriptive fields the keyword filter runs on."""
+    key_features = " ".join(
+        f.get("description", "") for f in (prop.get("keyFeatures") or [])
+    )
+
+    parts = [
+        prop.get("displayAddress"),
+        prop.get("propertySubType"),
+        prop.get("propertyTypeFullDescription"),
+        prop.get("summary"),
+        key_features,
+    ]
+
+    return " ".join(clean_text(part) for part in parts if part)
+
+
 # ---------------------------------------------------------------------------
 # Legacy regex extraction (fallback if __NEXT_DATA__ is missing/changed)
 # ---------------------------------------------------------------------------
@@ -160,6 +177,7 @@ def extract_properties_from_search(html):
                 "price": price_from_json(prop),
                 "address": clean_text(prop.get("displayAddress")),
                 "image": image_from_json(prop),
+                "filter_text": filter_text_from_json(prop),
             }
 
         if results:
@@ -261,6 +279,50 @@ def extract_property_details(property_html):
     details["image"] = image if image else ""
 
     return details
+
+
+def fetch_listings(search_url):
+    """Return a list of listing dicts (id, url, price, address, bedrooms,
+    image, filter_text) using only the search page — no per-property fetch —
+    when the structured data is available. Falls back to fetching each detail
+    page if a listing isn't in the search cache (e.g. JSON changed)."""
+    id_url = fetch_search_results(search_url)
+
+    listings = []
+
+    for property_id, url in id_url.items():
+        cached = _SEARCH_CACHE.get(url)
+
+        if cached and cached.get("filter_text"):
+            listings.append({
+                "id": property_id,
+                "url": url,
+                "price": cached.get("price") or "Unknown",
+                "address": cached.get("address") or "Unknown location",
+                "bedrooms": cached.get("bedrooms"),
+                "image": cached.get("image") or "",
+                "filter_text": cached["filter_text"],
+            })
+            continue
+
+        # Fallback: no structured data for this listing, fetch the page.
+        try:
+            page = fetch_property_page(url)
+        except Exception:
+            continue
+
+        details = extract_property_details(page)
+        listings.append({
+            "id": property_id,
+            "url": url,
+            "price": details["price"],
+            "address": details["address"],
+            "bedrooms": None,
+            "image": details["image"],
+            "filter_text": page,
+        })
+
+    return listings
 
 
 def build_property_record(

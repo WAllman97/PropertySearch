@@ -147,6 +147,17 @@ def address_from_item(item):
     return clean_text(related.get("address") or item.get("name") or "")
 
 
+def filter_text_from_item(item):
+    """Concatenate the descriptive fields the keyword filter runs on."""
+    parts = [
+        item.get("name"),
+        address_from_item(item),
+        item.get("description"),
+    ]
+
+    return " ".join(clean_text(part) for part in parts if part)
+
+
 # ---------------------------------------------------------------------------
 # Legacy regex extraction (fallback if the ld+json ItemList is missing/changed)
 # ---------------------------------------------------------------------------
@@ -203,6 +214,7 @@ def extract_properties_from_search(html):
                 "address": address_from_item(item),
                 "bedrooms": bedrooms_from_name(item.get("name")),
                 "image": clean_text(item.get("image") or ""),
+                "filter_text": filter_text_from_item(item),
             }
 
         if results:
@@ -310,6 +322,56 @@ def extract_property_details(property_html):
     details["image"] = image if image else ""
 
     return details
+
+
+def fetch_listings(search_url):
+    """Return a list of listing dicts (id, url, price, address, bedrooms,
+    image, filter_text) using only the search page — no per-property fetch —
+    when the structured data is available. Falls back to fetching detail pages
+    (capped, since Zoopla requests are rate-limited) if listings aren't cached."""
+    id_url = fetch_search_results(search_url)
+
+    listings = []
+    fallback_fetches = 0
+
+    for property_id, url in id_url.items():
+        cached = _SEARCH_CACHE.get(url)
+
+        if cached and cached.get("filter_text"):
+            listings.append({
+                "id": property_id,
+                "url": url,
+                "price": cached.get("price") or "Unknown",
+                "address": cached.get("address") or "Unknown location",
+                "bedrooms": cached.get("bedrooms"),
+                "image": cached.get("image") or "",
+                "filter_text": cached["filter_text"],
+            })
+            continue
+
+        # Fallback path: fetch the detail page, but cap the number of slow,
+        # rate-limited Zoopla requests we make in a single run.
+        if fallback_fetches >= MAX_ZOOPLA_PROPERTY_PAGES:
+            continue
+
+        try:
+            page = fetch_property_page(url)
+        except Exception:
+            continue
+
+        fallback_fetches += 1
+        details = extract_property_details(page)
+        listings.append({
+            "id": property_id,
+            "url": url,
+            "price": details["price"],
+            "address": details["address"],
+            "bedrooms": None,
+            "image": details["image"],
+            "filter_text": page,
+        })
+
+    return listings
 
 
 def build_property_record(
