@@ -46,13 +46,17 @@ def clean_url(url):
 
 def canonical_property_url(raw_url):
     """Reduce any Rightmove property URL to the stable canonical form
-    https://www.rightmove.co.uk/properties/<id>/ (drops tracking fragments)."""
+    https://www.rightmove.co.uk/properties/<id> (drops tracking fragments).
+
+    Note: NO trailing slash. Rightmove's own links omit it, and a trailing
+    slash breaks their client-side rendering (the page loads then shows
+    "We can't show your page")."""
     raw_url = clean_text(raw_url)
 
     match = re.search(r'/properties/(\d+)', raw_url)
 
     if match:
-        return f"https://www.rightmove.co.uk/properties/{match.group(1)}/"
+        return f"https://www.rightmove.co.uk/properties/{match.group(1)}"
 
     return clean_url(raw_url)
 
