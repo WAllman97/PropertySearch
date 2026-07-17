@@ -31,10 +31,25 @@ def duration_to_minutes(duration):
         return None
 
 
+def has_any_commute_data(property_record):
+    """True if any per-mode commute minutes have been recorded."""
+    for key, value in property_record.items():
+        if key.endswith("_minutes") and value is not None:
+            return True
+
+    return False
+
+
 def should_recalculate(property_record, days=7):
     last_checked = property_record.get("commute_last_checked")
 
     if not last_checked:
+        return True
+
+    # A previous run may have stamped commute_last_checked while every route
+    # failed (e.g. the API key was missing), leaving no commute times. Retry
+    # those instead of leaving them blank until the staleness window passes.
+    if not has_any_commute_data(property_record):
         return True
 
     try:
