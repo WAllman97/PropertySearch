@@ -1,5 +1,6 @@
 import requests
 import re
+import json
 import time
 import random
 import urllib3
@@ -19,6 +20,11 @@ headers = {
 
 session = requests.Session()
 session.headers.update(headers)
+
+# Structured data harvested from the search page's __NEXT_DATA__ blob, keyed by
+# canonical property URL. build_property_record() reads this so we get reliable
+# price/address/bedrooms/image without re-parsing each detail page.
+_SEARCH_CACHE = {}
 
 
 def clean_text(value):
@@ -49,16 +55,74 @@ def clean_url(url):
     return "https://www.onthemarket.com/" + url
 
 
-def extract_properties_from_search(html):
+def canonical_property_url(raw_url):
+    """Reduce any OnTheMarket listing URL to the stable canonical form
+    https://www.onthemarket.com/details/<id>/."""
+    raw_url = clean_text(raw_url)
+
+    match = re.search(r'/details/(\d+)', raw_url)
+
+    if match:
+        return f"https://www.onthemarket.com/details/{match.group(1)}/"
+
+    return clean_url(raw_url)
+
+
+# ---------------------------------------------------------------------------
+# __NEXT_DATA__ (preferred) extraction
+# ---------------------------------------------------------------------------
+
+def extract_next_data(html):
+    match = re.search(
+        r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+        html,
+        flags=re.DOTALL,
+    )
+
+    if not match:
+        return None
+
+    try:
+        return json.loads(match.group(1))
+    except Exception:
+        return None
+
+
+def listings_from_next_data(data):
+    try:
+        return data["props"]["initialReduxState"]["results"]["list"] or []
+    except Exception:
+        return []
+
+
+def image_from_listing(listing):
+    cover = listing.get("cover-image") or {}
+
+    if isinstance(cover, dict):
+        return clean_text(cover.get("default") or cover.get("webp") or "")
+
+    images = listing.get("images") or []
+
+    if images and isinstance(images[0], dict):
+        return clean_text(images[0].get("default") or "")
+
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Legacy regex extraction (fallback if __NEXT_DATA__ is missing/changed)
+# ---------------------------------------------------------------------------
+
+def extract_properties_regex(html):
     results = {}
 
     # Common OnTheMarket property URL pattern
     url_patterns = [
         r'(/details/\d+[^"\\]*)',
         r'(/for-sale/property/[^"\\]+/\d+[^"\\]*)',
-        
+
     ]
-    
+
     for pattern in url_patterns:
         matches = re.findall(pattern, html)
 
@@ -93,6 +157,42 @@ def extract_properties_from_search(html):
             results[property_id] = url
 
     return results
+
+
+def extract_properties_from_search(html):
+    data = extract_next_data(html)
+    listings = listings_from_next_data(data) if data else []
+
+    if listings:
+        results = {}
+
+        for listing in listings:
+            raw_url = listing.get("details-url")
+
+            if not raw_url:
+                continue
+
+            url = canonical_property_url(raw_url)
+            match = re.search(r'/details/(\d+)', url)
+
+            if not match:
+                continue
+
+            property_id = match.group(1)
+            results[property_id] = url
+
+            _SEARCH_CACHE[url] = {
+                "price": clean_text(listing.get("price")),
+                "address": clean_text(listing.get("address")),
+                "bedrooms": listing.get("bedrooms"),
+                "image": image_from_listing(listing),
+            }
+
+        if results:
+            return results
+
+    # Fall back to the legacy regex if the JSON blob is absent/empty.
+    return extract_properties_regex(html)
 
 
 def fetch_search_results(search_url):
@@ -200,6 +300,38 @@ def build_property_record(
     search_name,
     reason
 ):
+    cached = _SEARCH_CACHE.get(property_url)
+
+    if cached:
+        record = {
+            "id": property_id,
+            "url": property_url,
+            "search_name": search_name,
+            "reason": reason,
+            "price": cached.get("price") or "Unknown",
+            "address": cached.get("address") or "Unknown location",
+            "image": cached.get("image") or "",
+            "bedrooms": cached.get("bedrooms"),
+        }
+
+        # Safety net: backfill anything the search JSON was missing from the
+        # detail page so we never regress below the legacy behaviour.
+        if record["address"] in ("", "Unknown location") or record["price"] in ("", "Unknown") or not record["image"]:
+            details = extract_property_details(property_html)
+
+            if record["address"] in ("", "Unknown location"):
+                record["address"] = details["address"]
+
+            if record["price"] in ("", "Unknown"):
+                record["price"] = details["price"]
+
+            if not record["image"]:
+                record["image"] = details["image"]
+
+        return record
+
+    # No cached search data (JSON changed, or came via the regex fallback):
+    # parse the detail page directly, as before.
     details = extract_property_details(property_html)
 
     return {
@@ -210,4 +342,5 @@ def build_property_record(
         "price": details["price"],
         "address": details["address"],
         "image": details["image"],
+        "bedrooms": None,
     }
