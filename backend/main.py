@@ -4,11 +4,6 @@ import yaml
 
 from core.property_repository import save_property_to_supabase
 
-from core.database import (
-    init_db,
-    save_property,
-)
-
 from core.filters import passes_filters
 
 from scrapers import rightmove
@@ -20,14 +15,9 @@ from datetime import datetime
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 config_path = os.path.join(BASE_DIR, "config.yaml")
-db_path = os.path.join(BASE_DIR, "seen_properties.db")
-
-print(f"Using DB: {db_path}")
 
 with open(config_path, "r", encoding="utf-8") as file:
     config = yaml.safe_load(file)
-
-conn = init_db(db_path)
 
 new_properties = []
 
@@ -158,13 +148,6 @@ for search in config["searches"]:
 
         except Exception as e:
             warn(f"Failed to save to Supabase ({property_url}): {e}")
-
-        save_property(
-            conn=conn,
-            property_id=unique_id,
-            source=source,
-            url=property_url,
-        )
 
 
 # ---- Run summary / health report ----
