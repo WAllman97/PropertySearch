@@ -34,6 +34,14 @@ function PropertiesView() {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [showScoreModal, setShowScoreModal] = useState(false);
 
+  const [shareProperty, setShareProperty] = useState(null);
+  const [shareEmail, setShareEmail] = useState(
+    () => localStorage.getItem("shareRecipient") || ""
+  );
+  const [shareMessage, setShareMessage] = useState("");
+  const [sharing, setSharing] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
+
   useEffect(() => {
     loadProperties();
   }, []);
@@ -92,6 +100,73 @@ function PropertiesView() {
     setProperties((current) =>
       current.filter((property) => property.listing_id !== listingId)
     );
+  }
+
+  function openShareModal(property) {
+    setShareProperty(property);
+    setShareMessage("");
+    setShareStatus("");
+  }
+
+  function closeShareModal() {
+    setShareProperty(null);
+    setShareMessage("");
+    setShareStatus("");
+    setSharing(false);
+  }
+
+  async function sendShare(event) {
+    event.preventDefault();
+
+    const toEmail = shareEmail.trim();
+
+    if (!toEmail) {
+      setShareStatus("Enter a recipient email.");
+      return;
+    }
+
+    setSharing(true);
+    setShareStatus("Sending…");
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("You must be signed in to share.");
+      }
+
+      const response = await fetch("/api/share-property", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          propertyId: shareProperty.id,
+          toEmail,
+          message: shareMessage.trim(),
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result.error || `Failed (status ${response.status})`);
+      }
+
+      // Remember the recipient for next time.
+      localStorage.setItem("shareRecipient", toEmail);
+
+      setShareStatus(`Sent to ${toEmail}.`);
+      setTimeout(closeShareModal, 1200);
+    } catch (error) {
+      console.error("Share failed:", error);
+      setShareStatus(error.message || "Could not send.");
+    } finally {
+      setSharing(false);
+    }
   }
 
   function detectSource(url) {
@@ -289,6 +364,56 @@ function PropertiesView() {
         </div>
       )}
 
+      {shareProperty && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="section-header">
+              <div>
+                <h3>Share property</h3>
+                <p>{shareProperty.address}</p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={closeShareModal}
+              >
+                Close
+              </button>
+            </div>
+
+            <form className="manual-property-form" onSubmit={sendShare}>
+              <label>
+                Send to
+                <input
+                  type="email"
+                  value={shareEmail}
+                  onChange={(event) => setShareEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  required
+                />
+              </label>
+
+              <label>
+                Message (optional)
+                <textarea
+                  value={shareMessage}
+                  onChange={(event) => setShareMessage(event.target.value)}
+                  placeholder="Thought you'd like this one…"
+                  rows={3}
+                />
+              </label>
+
+              <button type="submit" className="primary-button" disabled={sharing}>
+                {sharing ? "Sending…" : "Send email"}
+              </button>
+
+              {shareStatus && <p className="form-message">{shareStatus}</p>}
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="property-grid">
         {properties.map((property) => {
           const propertyAgeDays = getPropertyAgeDays(property);
@@ -366,6 +491,10 @@ function PropertiesView() {
                     onClick={() => updateStatus(property.listing_id, "ignored")}
                   >
                     Ignore
+                  </button>
+
+                  <button onClick={() => openShareModal(property)}>
+                    Share
                   </button>
                 </div>
               </div>
