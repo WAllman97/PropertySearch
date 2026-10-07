@@ -79,7 +79,10 @@ for search in config["searches"]:
     require_garden = not search.get("garden_prefiltered", False)
 
     try:
-        listings = scraper.fetch_listings(search_url)
+        listings = scraper.fetch_listings(
+            search_url,
+            max_pages=search.get("max_pages", 1),
+        )
     except Exception as e:
         health["searches_failed"] += 1
         warn(f"Search request failed for {source}/{search_name}: {e}")

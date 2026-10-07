@@ -1,16 +1,15 @@
 import os
-import base64
+import html
 from datetime import datetime
 
 import requests
-import urllib3
 import yaml
 import resend
 from dotenv import load_dotenv
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 load_dotenv()
+
+APP_URL = "https://property-search-4jcc.vercel.app/"
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -32,16 +31,6 @@ if not RESEND_API_KEY:
     raise ValueError("RESEND_API_KEY is missing from your .env file")
 
 resend.api_key = RESEND_API_KEY
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Referer": "https://www.rightmove.co.uk/",
-    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-}
 
 
 def safe(value, fallback="Unknown"):
@@ -69,37 +58,6 @@ def get_primary_commute(item, person="user"):
     return None
 
 
-def fetch_image_as_base64(url):
-    """
-    Fetch an image URL using browser-like headers and return a base64 data URI.
-    This helps avoid email clients failing to load Rightmove CDN images directly.
-    Returns an empty string on failure so the card renders without an image.
-    """
-    if not url or url == "Unknown":
-        return ""
-
-    try:
-        response = requests.get(
-            url,
-            headers=HEADERS,
-            timeout=10,
-            verify=False
-        )
-        response.raise_for_status()
-
-        content_type = response.headers.get(
-            "Content-Type",
-            "image/jpeg"
-        ).split(";")[0]
-
-        b64 = base64.b64encode(response.content).decode("utf-8")
-        return f"data:{content_type};base64,{b64}"
-
-    except Exception as e:
-        print(f"Could not fetch image ({url[:60]}...): {e}")
-        return ""
-
-
 def send_resend_email(subject, html_body, recipients):
     """
     Send email through Resend.
@@ -118,21 +76,44 @@ def send_resend_email(subject, html_body, recipients):
     return response
 
 
+SOURCE_LABELS = {
+    "rightmove": "Rightmove",
+    "zoopla": "Zoopla",
+    "onthemarket": "OnTheMarket",
+    "manual": "Added manually",
+}
+
+
+def get_image_url(item):
+    return (
+        item.get("image_url")
+        or item.get("image")
+        or item.get("thumbnail_url")
+        or item.get("main_image")
+        or item.get("property_image")
+        or ""
+    )
+
+
 def build_property_card(item):
-    price = safe(item.get("price"))
-    address = safe(item.get("address"))
-    reason = safe(item.get("reason"))
-    search_name = safe(item.get("search_name"))
-    source = safe(item.get("source", "Rightmove")).title()
-    url = safe(item.get("url"), "#")
-    bedrooms = safe(item.get("bedrooms"), "")
+    # Rows come straight from the properties table, so use its column names
+    # (listing_url, image_url, integer price). search_name/reason are only
+    # present on in-memory scraper records, so show them only when set.
+    price = format_price(item.get("price"))
+    address = html.escape(safe(item.get("address")))
+    reason = item.get("reason")
+    search_name = item.get("search_name")
+    source_key = safe(item.get("source"), "").lower()
+    source = SOURCE_LABELS.get(source_key, source_key.title() or "Listing")
+    listing_url = item.get("listing_url") or item.get("url") or ""
+    bedrooms = item.get("bedrooms")
     user_commute = get_primary_commute(item, "user")
     partner_commute = get_primary_commute(item, "partner")
-    image_src = item.get("_image_b64", "")
+    image_src = get_image_url(item)
 
     details = []
 
-    if bedrooms and bedrooms != "Unknown":
+    if bedrooms:
         details.append(f"{bedrooms} bed")
 
     if user_commute:
@@ -141,15 +122,60 @@ def build_property_card(item):
     if partner_commute:
         details.append(f"Partner: {partner_commute} min")
 
-    details.append("Added today")
-
     detail_line = " · ".join(details)
+
+    eyebrow = source
+    if search_name:
+        eyebrow += f" &nbsp;·&nbsp; {html.escape(str(search_name))}"
+
+    reason_badge = ""
+    if reason:
+        reason_badge = f"""
+                            <div style="
+                                display:inline-block;
+                                background:#f0fdf4;
+                                color:#166534;
+                                border:1px solid #bbf7d0;
+                                padding:4px 10px;
+                                border-radius:20px;
+                                font-family:Arial,sans-serif;
+                                font-size:11px;
+                                font-weight:bold;
+                                letter-spacing:0.3px;
+                                margin-bottom:16px;
+                            ">
+                                ✓ &nbsp;{html.escape(str(reason))}
+                            </div>
+
+                            <br>
+        """
+
+    listing_button = ""
+    if listing_url:
+        listing_button = f"""
+                            <a href="{html.escape(listing_url, quote=True)}"
+                                style="
+                                        display:inline-block;
+                                        background:#dc2626;
+                                        color:#ffffff;
+                                        padding:10px 20px;
+                                        border-radius:7px;
+                                        text-decoration:none;
+                                        font-family:Arial,sans-serif;
+                                        font-size:13px;
+                                        font-weight:bold;
+                                        letter-spacing:0.2px;
+                                        margin-right:8px;
+                                ">
+                                    View listing &rarr;
+                                </a>
+        """
 
     image_cell = ""
     if image_src:
         image_cell = f"""
         <td width="200" valign="top" style="padding:0 20px 0 0;">
-            <img src="{image_src}"
+            <img src="{html.escape(image_src, quote=True)}"
                  width="200" height="150"
                  style="
                     display:block;
@@ -187,7 +213,7 @@ def build_property_card(item):
                                 color:#9ca3af;
                                 margin-bottom:6px;
                             ">
-                                {source} &nbsp;·&nbsp; {search_name}
+                                {eyebrow}
                             </div>
 
                             <div style="
@@ -221,29 +247,15 @@ def build_property_card(item):
                                 {detail_line}
                             </div>
 
-                            <div style="
-                                display:inline-block;
-                                background:#f0fdf4;
-                                color:#166534;
-                                border:1px solid #bbf7d0;
-                                padding:4px 10px;
-                                border-radius:20px;
-                                font-family:Arial,sans-serif;
-                                font-size:11px;
-                                font-weight:bold;
-                                letter-spacing:0.3px;
-                                margin-bottom:16px;
-                            ">
-                                ✓ &nbsp;{reason}
-                            </div>
+                            {reason_badge}
 
-                            <br>
+                            {listing_button}
 
-                            <a href="https://property-search-4jcc.vercel.app/"
+                            <a href="{APP_URL}"
                                 style="
                                         display:inline-block;
-                                        background:#dc2626;
-                                        color:#ffffff;
+                                        background:#f3f4f6;
+                                        color:#111827;
                                         padding:10px 20px;
                                         border-radius:7px;
                                         text-decoration:none;
@@ -264,32 +276,23 @@ def build_property_card(item):
     """
 
 
-def send_daily_email(new_properties):
+def send_daily_email(new_properties, recipients=None, frequency="daily"):
     """
-    Send daily property alert email through Resend.
+    Send a property alert email through Resend.
 
-    Expects new_properties as a list of dictionaries containing:
-    price, address, reason, search_name, source, url, image.
-    Optional:
-    bedrooms, and per-mode commute columns (user_transit_minutes, etc.).
+    Expects new_properties as rows from the properties table (price,
+    address, source, listing_url, image_url, bedrooms, per-mode commute
+    columns such as user_transit_minutes). recipients defaults to
+    config/recipients.yaml; frequency ("daily"/"weekly") sets the wording.
     """
     if not new_properties:
         print("No new properties found. Email not sent.")
         return None
 
-    print("Fetching property images...")
+    if recipients is None:
+        recipients = EMAIL_RECIPIENTS
 
-    for item in new_properties:
-        raw_url = safe(
-            item.get("image")
-            or item.get("image_url")
-            or item.get("thumbnail_url")
-            or item.get("main_image")
-            or item.get("property_image"),
-            ""
-        )
-
-        item["_image_b64"] = fetch_image_as_base64(raw_url)
+    alert_label = "Weekly alert" if frequency == "weekly" else "Daily alert"
 
     today = datetime.now().strftime("%d %B %Y")
     count = len(new_properties)
@@ -333,7 +336,7 @@ def send_daily_email(new_properties):
                                 color:#6b7280;
                                 margin-bottom:10px;
                             ">
-                                Daily alert &nbsp;·&nbsp; {today}
+                                {alert_label} &nbsp;·&nbsp; {today}
                             </div>
 
                             <div style="
@@ -393,11 +396,11 @@ def send_daily_email(new_properties):
     response = send_resend_email(
         subject=subject,
         html_body=html_body,
-        recipients=EMAIL_RECIPIENTS
+        recipients=recipients
     )
 
     print(
-        f"Email sent to {len(EMAIL_RECIPIENTS)} recipient(s) "
+        f"Email sent to {len(recipients)} recipient(s) "
         f"with {count} properties."
     )
 

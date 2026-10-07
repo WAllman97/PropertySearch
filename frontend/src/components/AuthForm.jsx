@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+// Sign-up is deliberately not offered here: any signed-in account can send
+// share emails from our domain and spend Google Maps quota. New users should
+// be invited from the Supabase dashboard (Authentication -> Users -> Invite).
 function AuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -15,25 +17,12 @@ function AuthForm() {
     setMessage("");
 
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-        if (error) throw error;
-
-        setMessage(
-          "Account created. Check your email for the confirmation link."
-        );
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) throw error;
-      }
+      if (error) throw error;
     } catch (error) {
       setMessage(error.message);
     }
@@ -43,7 +32,7 @@ function AuthForm() {
 
   return (
     <div className="auth-card">
-      <h2>{isSignUp ? "Create Account" : "Log In"}</h2>
+      <h2>Log In</h2>
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
@@ -73,11 +62,7 @@ function AuthForm() {
           className="primary-button"
           disabled={loading}
         >
-          {loading
-            ? "Please wait..."
-            : isSignUp
-            ? "Create Account"
-            : "Log In"}
+          {loading ? "Please wait..." : "Log In"}
         </button>
       </form>
 
@@ -86,17 +71,6 @@ function AuthForm() {
           {message}
         </p>
       )}
-
-      <button
-        type="button"
-        className="secondary-button"
-        onClick={() => setIsSignUp(!isSignUp)}
-        style={{ marginTop: "1rem" }}
-      >
-        {isSignUp
-          ? "Already have an account? Log In"
-          : "Need an account? Sign Up"}
-      </button>
     </div>
   );
 }

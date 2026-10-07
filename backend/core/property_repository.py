@@ -5,9 +5,9 @@ from core.commute_calculator import calculate_commutes_for_property_id
 SKIP_STATUSES = ["ignored", "archived", "lost"]
 
 
-def should_skip_property(listing_url: str) -> bool:
+def get_existing_property(listing_url: str):
     if not listing_url:
-        return False
+        return None
 
     result = (
         supabase
@@ -17,17 +17,14 @@ def should_skip_property(listing_url: str) -> bool:
         .execute()
     )
 
-    if not result.data:
-        return False
-
-    status = result.data[0].get("status")
-    return status in SKIP_STATUSES
+    return result.data[0] if result.data else None
 
 
 def save_property_to_supabase(record: dict):
     listing_url = record.get("url")
+    existing = get_existing_property(listing_url)
 
-    if should_skip_property(listing_url):
+    if existing and existing.get("status") in SKIP_STATUSES:
         print(f"Skipped previously ignored/archived/lost: {listing_url}")
         return None
 
@@ -40,8 +37,12 @@ def save_property_to_supabase(record: dict):
         "bedrooms": record.get("bedrooms"),
         "image_url": record.get("image"),
         "listing_url": listing_url,
-        "date_found": record.get("date_found"),
     }
+
+    # Only stamp date_found the first time we see a listing. Re-sending it on
+    # every run reset "Added X days ago" to today for anything still listed.
+    if not existing:
+        payload["date_found"] = record.get("date_found")
 
     result = (
         supabase

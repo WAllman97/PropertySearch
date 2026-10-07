@@ -1,18 +1,22 @@
 searches:
   - name: "Herne Hill or Battersea Garden Under 800k"
     source: "rightmove"
-    url: "https://www.rightmove.co.uk/property-for-sale/find.html?propertyTypes=detached%2Csemi-detached%2Cterraced&sortType=2&minPrice=450000&areaSizeUnit=sqft&channel=BUY&index=0&mustHave=garden&maxPrice=800000&propFeature=Garden&locationIdentifier=USERDEFINEDAREA%5E%7B%22polylines%22%3A%22%7BpeyH%60__%40Inc%40%7ECvQjSbWbn%40%60VhJtWtEjZjD%7Cb%40%3FpbAuG%7Cx%40uE%60VuJxQkDs%40iDtHjIxRvd%40yC%7EtBNvd%40cPxi%40%7Bh%40jHyY%7ECqs%40i%40kpCuKasCgaAwlAuEeWjLo%7EDJyh%40kHgQmRmLk%5CsHwON_NlEaUd_%40aXrqAmPtWkc%40bWkQp%5DwXfdAkGlc%40iBzyB%5EuA%22%7D&transactionType=BUY&displayLocationIdentifier=undefined"
+    url: "https://www.rightmove.co.uk/property-for-sale/find.html?propertyTypes=detached%2Csemi-detached%2Cterraced&sortType=6&minPrice=450000&areaSizeUnit=sqft&channel=BUY&index=0&mustHave=garden&maxPrice=800000&propFeature=Garden&locationIdentifier=USERDEFINEDAREA%5E%7B%22polylines%22%3A%22%7BpeyH%60__%40Inc%40%7ECvQjSbWbn%40%60VhJtWtEjZjD%7Cb%40%3FpbAuG%7Cx%40uE%60VuJxQkDs%40iDtHjIxRvd%40yC%7EtBNvd%40cPxi%40%7Bh%40jHyY%7ECqs%40i%40kpCuKasCgaAwlAuEeWjLo%7EDJyh%40kHgQmRmLk%5CsHwON_NlEaUd_%40aXrqAmPtWkc%40bWkQp%5DwXfdAkGlc%40iBzyB%5EuA%22%7D&transactionType=BUY&displayLocationIdentifier=undefined"
     max_price: 800000
     # The search URL already enforces a garden filter (mustHave=garden),
     # so skip the local garden keyword re-check (see passes_filters).
     garden_prefiltered: true
+    # Results are sorted newest-first; read this many pages per run.
+    max_pages: 3
 
   - name: "Zoopla South London 2 Bed Garden Under 550k"
     source: "zoopla"
-    url: "https://www.zoopla.co.uk/for-sale/houses/london/south-west/?beds_min=2&feature=has_garden&is_retirement_home=false&is_shared_ownership=false&new_homes=exclude&polyenc=yffyHzf%255Cl%255E%257CsB%2560k%2540f%2560%2540rbBsGdw%2540od%2540%2560WkcEce%2540epEys%2540wIwYvXesAjrEys%2540tcA&price_max=800000&property_sub_type=semi_detached&property_sub_type=detached&property_sub_type=terraced&q=South%20West%20London&radius=0&search_source=for-sale"
+    url: "https://www.zoopla.co.uk/for-sale/houses/london/south-west/?beds_min=2&feature=has_garden&is_retirement_home=false&is_shared_ownership=false&new_homes=exclude&polyenc=yffyHzf%255Cl%255E%257CsB%2560k%2540f%2560%2540rbBsGdw%2540od%2540%2560WkcEce%2540epEys%2540wIwYvXesAjrEys%2540tcA&price_max=800000&property_sub_type=semi_detached&property_sub_type=detached&property_sub_type=terraced&q=South%20West%20London&radius=0&search_source=for-sale&results_sort=newest_listings"
     max_price: 800000
     # Search URL enforces feature=has_garden.
     garden_prefiltered: true
+    # Results are sorted newest-first; read this many pages per run.
+    max_pages: 3
 
   - name: "OnTheMarket South London 2 Bed Garden Under 800k"
     source: "onthemarket"
@@ -20,6 +24,8 @@ searches:
     max_price: 800000
     # Search URL enforces keywords=outside+space.
     garden_prefiltered: true
+    # Results are sorted newest-first; read this many pages per run.
+    max_pages: 3
 
 keywords:
   - garden
