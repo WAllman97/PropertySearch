@@ -1,11 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
+import { requireHouseholdUser, supabaseAdmin, underRateLimit } from "./_lib/household.js";
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.FROM_EMAIL || "PropertySearch <onboarding@resend.dev>";
 
-const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+const MAX_MESSAGE_LENGTH = 1000;
+const MAX_SHARES_PER_DAY = 20;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -105,26 +104,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing propertyId" });
     }
 
-    if (!toEmail || !EMAIL_RE.test(toEmail)) {
+    if (
+      typeof toEmail !== "string" ||
+      toEmail.length > 254 ||
+      !EMAIL_RE.test(toEmail)
+    ) {
       return res.status(400).json({ error: "Please provide a valid recipient email" });
     }
 
-    const authHeader = req.headers.authorization || "";
-    const token = authHeader.replace("Bearer ", "");
-
-    if (!token) {
-      return res.status(401).json({ error: "Missing auth token" });
+    if (message && (typeof message !== "string" || message.length > MAX_MESSAGE_LENGTH)) {
+      return res.status(400).json({
+        error: `Message must be ${MAX_MESSAGE_LENGTH} characters or fewer`,
+      });
     }
 
-    const userClient = createClient(supabaseUrl, process.env.VITE_SUPABASE_ANON_KEY);
-    const {
-      data: { user },
-      error: userError,
-    } = await userClient.auth.getUser(token);
-
-    if (userError || !user) {
-      return res.status(401).json({ error: "Invalid user token" });
-    }
+    const user = await requireHouseholdUser(req, res);
+    if (!user) return;
 
     if (!resendApiKey) {
       return res.status(500).json({
@@ -140,6 +135,12 @@ export default async function handler(req, res) {
 
     if (propertyError || !property) {
       return res.status(404).json({ error: "Property not found" });
+    }
+
+    if (!(await underRateLimit(user.id, "share_property", MAX_SHARES_PER_DAY, 24 * 60))) {
+      return res.status(429).json({
+        error: `Share limit reached (${MAX_SHARES_PER_DAY} per day). Try again tomorrow.`,
+      });
     }
 
     const html = buildShareHtml(property, message, user.email);
@@ -165,9 +166,10 @@ export default async function handler(req, res) {
     if (!response.ok) {
       const details = await response.text();
       console.error("Resend error:", details);
+      // Log the provider's details server-side only; they can include
+      // account/domain configuration we don't want to hand to the browser.
       return res.status(502).json({
         error: "The email provider rejected the message",
-        details,
       });
     }
 

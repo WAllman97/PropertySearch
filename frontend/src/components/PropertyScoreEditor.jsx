@@ -2,7 +2,17 @@ import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { calculateOverallScore } from "../utils/propertyScoring";
 
+const AI_FIELDS = {
+  score_location: "location",
+  score_quality: "quality",
+  score_commute: "commute",
+  score_value: "value",
+  score_future_fit: "future_fit",
+};
+
 function PropertyScoreEditor({ property, onUpdate }) {
+  const ai = property.ai_scores || null;
+  const isAiSuggestion = property.scores_source === "ai";
   const [scores, setScores] = useState({
     score_location: property.score_location || 5,
     score_quality: property.score_quality || 5,
@@ -21,6 +31,8 @@ function PropertyScoreEditor({ property, onUpdate }) {
       .update({
         ...scores,
         overall_score: overall,
+        // Saved by hand: AI scoring will no longer overwrite these.
+        scores_source: "manual",
       })
       .eq("id", property.id);
 
@@ -46,6 +58,12 @@ function PropertyScoreEditor({ property, onUpdate }) {
 
           <strong>{scores[field]}/10</strong>
         </div>
+
+        {ai && AI_FIELDS[field] && ai[AI_FIELDS[field]] && (
+          <p className="ai-reason">
+            AI {ai[AI_FIELDS[field]].score}/10: {ai[AI_FIELDS[field]].reason}
+          </p>
+        )}
 
         <input
           type="range"
@@ -80,6 +98,22 @@ function PropertyScoreEditor({ property, onUpdate }) {
           {calculateOverallScore(scores)}/100
         </div>
       </div>
+
+      {ai && (
+        <div className="ai-triage">
+          <strong>
+            {isAiSuggestion ? "AI first pass, review and save" : "AI first pass"}
+          </strong>
+          <p>{ai.summary}</p>
+          {ai.red_flags && ai.red_flags.length > 0 && (
+            <ul>
+              {ai.red_flags.map((flag) => (
+                <li key={flag}>{flag}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {renderSlider("Location", "score_location", "Area, feel, amenities, safety")}
       {renderSlider("Property Quality", "score_quality", "Layout, light, storage, garden, noise")}

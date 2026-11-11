@@ -38,3 +38,17 @@ keywords:
 negative_keywords:
   - retirement
   - shared ownership
+# AI triage scoring (core/ai_scorer.py). Needs the ANTHROPIC_API_KEY secret.
+ai_scoring:
+  enabled: true
+  # Cap per scraper run; unscored properties carry over to the next run.
+  max_per_run: 40
+  # low | medium | high — higher is more careful but slower and pricier.
+  effort: medium
+  # What you're looking for, in your own words. This is the single biggest
+  # lever on score quality, so be specific about must-haves and deal-breakers.
+  brief: >
+    Family house (detached, semi or terrace) with a private garden in South
+    London, around Herne Hill / Battersea / South West London, up to £800k.
+    2+ bedrooms. Prefer period properties with good light and a usable garden
+    over new builds. Avoid main roads, retirement and shared ownership.

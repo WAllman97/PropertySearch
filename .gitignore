@@ -7,3 +7,7 @@ __pycache__/
 node_modules/
 dist/
 
+
+# Local Claude Code settings / worktrees
+.claude/settings.local.json
+.claude/worktrees/

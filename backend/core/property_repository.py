@@ -39,6 +39,12 @@ def save_property_to_supabase(record: dict):
         "listing_url": listing_url,
     }
 
+    # Kept for AI triage scoring. Only sent when present so a scrape that
+    # falls back to a thinner parser doesn't blank a stored description.
+    description = (record.get("description") or "").strip()
+    if description:
+        payload["description"] = description[:5000]
+
     # Only stamp date_found the first time we see a listing. Re-sending it on
     # every run reset "Added X days ago" to today for anything still listed.
     if not existing:

@@ -1,6 +1,7 @@
 import os
 import html
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 import yaml
@@ -417,6 +418,9 @@ def format_viewing_datetime(value):
 
     try:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        # Stored in UTC; show the time the viewing is actually at in London.
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(ZoneInfo("Europe/London"))
         return parsed.strftime("%a %d %b %Y at %H:%M")
     except Exception:
         return str(value)

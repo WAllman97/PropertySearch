@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { postAuthed, SESSION_EXPIRED_MESSAGE } from "../lib/api";
 
 function BuyerProfileSettings({ user }) {
   const [profile, setProfile] = useState({
@@ -108,6 +109,8 @@ function BuyerProfileSettings({ user }) {
 
       let done = 0;
       let failed = 0;
+      let skipped = 0;
+      let stopReason = "";
 
       // Recompute one property at a time via the shared commute endpoint.
       // Keeps each request well under the serverless timeout and writes the
@@ -116,19 +119,24 @@ function BuyerProfileSettings({ user }) {
         setRefreshMessage(`Refreshing commutes… ${done}/${targets.length}`);
 
         try {
-          const response = await fetch("/api/calculate-commute", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ propertyId: property.id }),
+          const response = await postAuthed("/api/calculate-commute", {
+            propertyId: property.id,
           });
+
+          if (response.status === 429 || response.status === 403) {
+            const body = await response.json().catch(() => ({}));
+            stopReason = body.error || "Stopped by the server.";
+            break;
+          }
 
           if (!response.ok) {
             failed += 1;
+          } else {
+            const body = await response.json().catch(() => ({}));
+            if (body.skipped) skipped += 1;
           }
         } catch (err) {
+          if (err.message === SESSION_EXPIRED_MESSAGE) throw err;
           console.error("Commute refresh failed for", property.id, err);
           failed += 1;
         }
@@ -136,19 +144,22 @@ function BuyerProfileSettings({ user }) {
         done += 1;
       }
 
-      const succeeded = done - failed;
+      const recalculated = done - failed - skipped;
+      const parts = [`Recalculated ${recalculated}`];
+      if (skipped > 0) parts.push(`${skipped} already up to date`);
+      if (failed > 0) parts.push(`${failed} failed`);
 
       setRefreshMessage(
-        failed > 0
-          ? `Refreshed ${succeeded}/${targets.length} (${failed} failed). Reload to see updated times.`
-          : `Refreshed all ${targets.length} commutes. Reload to see updated times.`
+        stopReason
+          ? `${parts.join(", ")}. ${stopReason}`
+          : `${parts.join(", ")} of ${targets.length}. Reload to see updated times.`
       );
     } catch (error) {
       console.error("Error refreshing commutes:", error);
       setRefreshMessage(error.message || "Could not refresh commutes.");
+    } finally {
+      setRefreshingCommutes(false);
     }
-
-    setRefreshingCommutes(false);
   }
 
   function updateField(field, value) {

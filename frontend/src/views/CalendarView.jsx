@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
+import BookingRequests from "../components/BookingRequests";
 
 function getMonthStart(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -152,6 +154,7 @@ function downloadIcsFile(viewing) {
 
 function CalendarView() {
   const [viewings, setViewings] = useState([]);
+  const [bookingRequests, setBookingRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingViewing, setEditingViewing] = useState(null);
   const [selectedViewing, setSelectedViewing] = useState(null);
@@ -159,10 +162,31 @@ function CalendarView() {
 
   useEffect(() => {
     loadViewings();
+    loadBookingRequests();
   }, []);
 
-  async function loadViewings() {
-    setLoading(true);
+  async function loadBookingRequests() {
+    // Table only exists once migration 004 has run; treat errors as "none".
+    const { data, error } = await supabase
+      .from("booking_requests")
+      .select("*")
+      .in("status", ["pending", "accepted"])
+      .order("starts_at", { ascending: true });
+
+    if (error) {
+      console.error("Error loading booking requests:", error);
+      setBookingRequests([]);
+    } else {
+      setBookingRequests(data || []);
+    }
+  }
+
+  async function refreshAll() {
+    await Promise.all([loadViewings({ quiet: true }), loadBookingRequests()]);
+  }
+
+  async function loadViewings({ quiet = false } = {}) {
+    if (!quiet) setLoading(true);
 
     const { data, error } = await supabase
       .from("property_notes")
@@ -195,6 +219,17 @@ function CalendarView() {
     [currentMonth]
   );
 
+  // Accepted calls show on the grid too (accepted viewings already appear
+  // via property_notes).
+  function getCallsForDate(date) {
+    return bookingRequests.filter(
+      (r) =>
+        r.status === "accepted" &&
+        r.kind === "call" &&
+        isSameDay(new Date(r.starts_at), date)
+    );
+  }
+
   function getViewingsForDate(date) {
     return viewings.filter((viewing) =>
       isSameDay(new Date(viewing.viewing_datetime), date)
@@ -220,9 +255,7 @@ function CalendarView() {
   function startEditing(viewing) {
     setEditingViewing({
       id: viewing.id,
-      viewing_datetime: viewing.viewing_datetime
-        ? viewing.viewing_datetime.slice(0, 16)
-        : "",
+      viewing_datetime: toLocalInputValue(viewing.viewing_datetime),
       estate_agent: viewing.estate_agent || "",
       estate_agent_email: viewing.estate_agent_email || "",
       estate_agent_phone: viewing.estate_agent_phone || "",
@@ -244,7 +277,7 @@ function CalendarView() {
     const { error } = await supabase
       .from("property_notes")
       .update({
-        viewing_datetime: editingViewing.viewing_datetime || null,
+        viewing_datetime: fromLocalInputValue(editingViewing.viewing_datetime),
         estate_agent: editingViewing.estate_agent,
         estate_agent_email: editingViewing.estate_agent_email,
         estate_agent_phone: editingViewing.estate_agent_phone,
@@ -299,6 +332,8 @@ function CalendarView() {
         </div>
       </div>
 
+      <BookingRequests requests={bookingRequests} onChanged={refreshAll} />
+
       <div className="calendar-header">
         <h3>{formatMonthTitle(currentMonth)}</h3>
       </div>
@@ -316,6 +351,7 @@ function CalendarView() {
       <div className="calendar-grid">
         {calendarDays.map((day) => {
           const dayViewings = getViewingsForDate(day.date);
+          const dayCalls = getCallsForDate(day.date);
 
           return (
             <div
@@ -339,6 +375,15 @@ function CalendarView() {
                     <span>{formatTime(viewing.viewing_datetime)}</span>
                     <strong>{viewing.properties?.address}</strong>
                   </button>
+                ))}
+                {dayCalls.map((call) => (
+                  <div className="calendar-event calendar-event-call" key={call.id}>
+                    <span>{formatTime(call.starts_at)}</span>
+                    <strong>
+                      Call: {call.agent_name}
+                      {call.agency ? `, ${call.agency}` : ""}
+                    </strong>
+                  </div>
                 ))}
               </div>
             </div>

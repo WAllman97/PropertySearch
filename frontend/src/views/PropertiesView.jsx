@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { postAuthed } from "../lib/api";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
 import CommuteSummary from "../components/CommuteSummary";
 
@@ -129,25 +130,10 @@ function PropertiesView() {
     setShareStatus("Sending…");
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
-        throw new Error("You must be signed in to share.");
-      }
-
-      const response = await fetch("/api/share-property", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          propertyId: shareProperty.id,
-          toEmail,
-          message: shareMessage.trim(),
-        }),
+      const response = await postAuthed("/api/share-property", {
+        propertyId: shareProperty.id,
+        toEmail,
+        message: shareMessage.trim(),
       });
 
       const result = await response.json().catch(() => ({}));
@@ -206,20 +192,7 @@ function PropertiesView() {
     }
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      await fetch("/api/calculate-commute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({
-          propertyId: data.id,
-        }),
-      });
+      await postAuthed("/api/calculate-commute", { propertyId: data.id });
     } catch (err) {
       console.error("Commute calculation failed:", err);
     }
@@ -443,6 +416,7 @@ function PropertiesView() {
                     {property.overall_score
                       ? `${property.overall_score}/100`
                       : "Not scored"}
+                    {property.scores_source === "ai" && " (AI)"}
                   </span>
 
                   <span>❤️ {property.score_gut_feel || 0}/10</span>
