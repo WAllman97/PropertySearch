@@ -23,11 +23,23 @@ function durationToMinutes(duration) {
   return Math.round(seconds / 60);
 }
 
-function hasCommuteData(property) {
-  return ["user", "partner"].some((person) =>
-    Object.keys(COMMUTE_MODES).some(
-      (mode) => property[`${person}_${mode}_minutes`] != null
-    )
+// buyer_profiles.commute_mode -> column label. Only the preferred mode is
+// calculated: it's the only one the app shows, and doing all four cost 4x
+// the Google requests. Keep in sync with backend/core/commute_calculator.py.
+const PROFILE_MODE_TO_LABEL = {
+  TRANSIT: "transit",
+  DRIVE: "drive",
+  BICYCLE: "cycle",
+  WALK: "walk",
+};
+
+function selectedModeLabel(profile) {
+  return PROFILE_MODE_TO_LABEL[(profile?.commute_mode || "TRANSIT").toUpperCase()] || "transit";
+}
+
+function hasCommuteData(property, modeLabel) {
+  return ["user", "partner"].some(
+    (person) => property[`${person}_${modeLabel}_minutes`] != null
   );
 }
 
@@ -35,7 +47,10 @@ function hasCommuteData(property) {
 // (work addresses) last changed. Re-running them would only re-buy the same
 // answer from Google.
 function commutesAreCurrent(property, profile) {
-  if (!property.commute_last_checked || !hasCommuteData(property)) {
+  if (
+    !property.commute_last_checked ||
+    !hasCommuteData(property, selectedModeLabel(profile))
+  ) {
     return false;
   }
 
@@ -115,11 +130,12 @@ async function calculateRoute(origin, destination, googleMode) {
   }
 }
 
-async function calculateAllModesForPerson(propertyAddress, destination, personLabel) {
+async function calculateModesForPerson(propertyAddress, destination, personLabel, modeLabels) {
   const payload = {};
   const errors = [];
 
-  for (const [modeLabel, googleMode] of Object.entries(COMMUTE_MODES)) {
+  for (const modeLabel of modeLabels) {
+    const googleMode = COMMUTE_MODES[modeLabel];
     const route = await calculateRoute(propertyAddress, destination, googleMode);
 
     const minutesCol = `${personLabel}_${modeLabel}_minutes`;
@@ -200,6 +216,8 @@ export default async function handler(req, res) {
       });
     }
 
+    const modeLabels = [selectedModeLabel(profile)];
+
     const updatePayload = {
       commute_last_checked: new Date().toISOString(),
       commute_status: "success",
@@ -209,20 +227,22 @@ export default async function handler(req, res) {
     const allErrors = [];
 
     if (profile.user_work_address) {
-      const { payload, errors } = await calculateAllModesForPerson(
+      const { payload, errors } = await calculateModesForPerson(
         propertyAddress,
         profile.user_work_address,
-        "user"
+        "user",
+        modeLabels
       );
       Object.assign(updatePayload, payload);
       allErrors.push(...errors);
     }
 
     if (profile.partner_work_address) {
-      const { payload, errors } = await calculateAllModesForPerson(
+      const { payload, errors } = await calculateModesForPerson(
         propertyAddress,
         profile.partner_work_address,
-        "partner"
+        "partner",
+        modeLabels
       );
       Object.assign(updatePayload, payload);
       allErrors.push(...errors);
@@ -243,6 +263,15 @@ export default async function handler(req, res) {
     if (updateError) {
       console.error(updateError);
       return res.status(500).json({ error: "Could not update property" });
+    }
+
+    // Google's daily quota is used up: tell the client to stop its refresh
+    // loop rather than spend the next N requests on guaranteed failures.
+    if (allErrors.some((e) => e.includes("Google Routes API error 429"))) {
+      return res.status(429).json({
+        error: "Google's daily commute quota is used up. Try again tomorrow.",
+        property: updatedProperty,
+      });
     }
 
     return res.status(200).json({

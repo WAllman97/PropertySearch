@@ -15,6 +15,25 @@ COMMUTE_MODES = {
     "walk": "WALK",
 }
 
+# buyer_profiles.commute_mode value -> column label used above.
+PROFILE_MODE_TO_LABEL = {
+    "TRANSIT": "transit",
+    "DRIVE": "drive",
+    "BICYCLE": "cycle",
+    "WALK": "walk",
+}
+
+# Set when Google reports the daily quota is used up (HTTP 429). Further
+# calls in the same run would only fail too, so skip them.
+_quota_exhausted = {"value": False}
+
+
+def selected_mode_label(profile):
+    """Only the buyer's preferred mode is calculated: it's the only one the
+    app displays, and calculating all four cost 4x the Google requests."""
+    mode = ((profile or {}).get("commute_mode") or "TRANSIT").upper()
+    return PROFILE_MODE_TO_LABEL.get(mode, "transit")
+
 
 def now_utc():
     return datetime.now(timezone.utc)
@@ -31,35 +50,50 @@ def duration_to_minutes(duration):
         return None
 
 
-def has_any_commute_data(property_record):
-    """True if any per-mode commute minutes have been recorded."""
-    for key, value in property_record.items():
-        if key.endswith("_minutes") and value is not None:
-            return True
-
-    return False
+def parse_ts(value):
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
 
 
-def should_recalculate(property_record, days=7):
-    last_checked = property_record.get("commute_last_checked")
+def has_commute_for_mode(property_record, mode_label):
+    """True if minutes exist for this mode for the buyer or partner."""
+    return any(
+        property_record.get(f"{person}_{mode_label}_minutes") is not None
+        for person in ("user", "partner")
+    )
 
-    if not last_checked:
+
+def should_recalculate(property_record, profile=None, days=7):
+    last_checked_dt = parse_ts(property_record.get("commute_last_checked"))
+
+    if not last_checked_dt:
         return True
 
     # A previous run may have stamped commute_last_checked while every route
-    # failed (e.g. the API key was missing), leaving no commute times. Retry
-    # those instead of leaving them blank until the staleness window passes.
-    if not has_any_commute_data(property_record):
+    # failed (missing key, quota), leaving no times for the mode we show.
+    # Retry those instead of leaving them blank until the window passes.
+    if not has_commute_for_mode(property_record, selected_mode_label(profile)):
         return True
 
-    try:
-        last_checked_dt = datetime.fromisoformat(last_checked.replace("Z", "+00:00"))
-        return now_utc() - last_checked_dt > timedelta(days=days)
-    except Exception:
+    # Work address or preferred mode changed since these were calculated.
+    profile_updated = parse_ts((profile or {}).get("updated_at"))
+    if profile_updated and profile_updated > last_checked_dt:
         return True
+
+    return now_utc() - last_checked_dt > timedelta(days=days)
 
 
 def calculate_route(origin, destination, mode):
+    if _quota_exhausted["value"]:
+        return {
+            "success": False,
+            "minutes": None,
+            "distance_meters": None,
+            "error": "Skipped: Google Routes daily quota already exhausted this run",
+        }
+
     if not GOOGLE_MAPS_API_KEY:
         return {
             "success": False,
@@ -98,6 +132,10 @@ def calculate_route(origin, destination, mode):
             headers=headers,
             timeout=20,
         )
+
+        if response.status_code == 429:
+            _quota_exhausted["value"] = True
+            print("WARNING: Google Routes daily quota exhausted; skipping remaining commutes this run.")
 
         if response.status_code != 200:
             return {
@@ -189,11 +227,12 @@ def get_property_address(property_record):
     )
 
 
-def calculate_all_modes_for_person(property_address, destination, person_label):
+def calculate_modes_for_person(property_address, destination, person_label, mode_labels):
     payload = {}
     errors = []
 
-    for mode_label, google_mode in COMMUTE_MODES.items():
+    for mode_label in mode_labels:
+        google_mode = COMMUTE_MODES[mode_label]
         route = calculate_route(
             origin=property_address,
             destination=destination,
@@ -223,14 +262,21 @@ def calculate_commutes_for_property(property_record, force=False):
         print("No property record provided.")
         return None
 
-    if not force and not should_recalculate(property_record):
-        print("Commute recently checked. Skipping.")
-        return None
-
     profile = get_default_buyer_profile()
 
     if not profile:
         return None
+
+    if not force and not should_recalculate(property_record, profile):
+        print("Commute recently checked. Skipping.")
+        return None
+
+    if _quota_exhausted["value"]:
+        # Leave the row untouched so it's retried on the next run.
+        print("Commute skipped: Google Routes quota exhausted this run.")
+        return None
+
+    mode_labels = [selected_mode_label(profile)]
 
     property_address = get_property_address(property_record)
 
@@ -250,20 +296,22 @@ def calculate_commutes_for_property(property_record, force=False):
     partner_work_address = profile.get("partner_work_address")
 
     if user_work_address:
-        user_payload, user_errors = calculate_all_modes_for_person(
+        user_payload, user_errors = calculate_modes_for_person(
             property_address=property_address,
             destination=user_work_address,
             person_label="user",
+            mode_labels=mode_labels,
         )
 
         update_payload.update(user_payload)
         all_errors.extend(user_errors)
 
     if partner_work_address:
-        partner_payload, partner_errors = calculate_all_modes_for_person(
+        partner_payload, partner_errors = calculate_modes_for_person(
             property_address=property_address,
             destination=partner_work_address,
             person_label="partner",
+            mode_labels=mode_labels,
         )
 
         update_payload.update(partner_payload)
@@ -287,11 +335,18 @@ def calculate_commutes_for_property(property_record, force=False):
     return result
 
 
+INACTIVE_STATUSES = ("ignored", "archived", "lost")
+
+
 def calculate_commutes_for_all_properties(limit=500, force=False):
+    """Backfill commutes for active properties, newest first. Without force,
+    only properties missing/stale times for the preferred mode are routed."""
     result = (
         supabase
         .table("properties")
         .select("*")
+        .or_("status.is.null,status.not.in.(" + ",".join(INACTIVE_STATUSES) + ")")
+        .order("date_found", desc=True)
         .limit(limit)
         .execute()
     )
@@ -303,6 +358,10 @@ def calculate_commutes_for_all_properties(limit=500, force=False):
     results = []
 
     for index, property_record in enumerate(result.data, start=1):
+        if _quota_exhausted["value"]:
+            print("Stopping backfill: Google Routes quota exhausted.")
+            break
+
         print(f"\nProcessing property {index} of {len(result.data)}")
 
         output = calculate_commutes_for_property(
@@ -335,4 +394,6 @@ def calculate_commutes_for_property_id(property_id, force=True):
 
 
 if __name__ == "__main__":
-    calculate_commutes_for_all_properties(limit=500, force=True)
+    # Backfill: active properties missing commute times for the preferred
+    # mode. Run from backend/:  python -m core.commute_calculator
+    calculate_commutes_for_all_properties(limit=500, force=False)
