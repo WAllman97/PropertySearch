@@ -5,6 +5,8 @@ import time
 import random
 import urllib3
 
+from scrapers.paging import with_query_param
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 headers = {
@@ -308,46 +310,73 @@ def extract_property_details(property_html):
     return details
 
 
-def fetch_listings(search_url):
+def search_page_url(search_url, page_index):
+    """OnTheMarket paginates with page=<page number>, starting at 1."""
+    return with_query_param(search_url, "page", page_index + 1)
+
+
+def fetch_listings(search_url, max_pages=1):
     """Return a list of listing dicts (id, url, price, address, bedrooms,
-    image, filter_text) using only the search page — no per-property fetch —
+    image, filter_text) using only the search pages — no per-property fetch —
     when the structured data is available. Falls back to fetching each detail
-    page if a listing isn't in the search cache (e.g. JSON changed)."""
-    id_url = fetch_search_results(search_url)
+    page if a listing isn't in the search cache (e.g. JSON changed).
 
+    Reads up to max_pages result pages, stopping early once a page adds no
+    new listings (end of results, or the site ignored the page number)."""
     listings = []
+    seen_ids = set()
 
-    for property_id, url in id_url.items():
-        cached = _SEARCH_CACHE.get(url)
+    for page_index in range(max_pages):
+        try:
+            id_url = fetch_search_results(search_page_url(search_url, page_index))
+        except Exception:
+            # Page 1 failing is a real failure; later pages just end the run.
+            if page_index == 0:
+                raise
+            break
 
-        if cached and cached.get("filter_text"):
+        new_items = {
+            property_id: url
+            for property_id, url in id_url.items()
+            if property_id not in seen_ids
+        }
+
+        if not new_items:
+            break
+
+        seen_ids.update(new_items)
+
+        for property_id, url in new_items.items():
+            cached = _SEARCH_CACHE.get(url)
+
+            if cached and cached.get("filter_text"):
+                listings.append({
+                    "id": property_id,
+                    "url": url,
+                    "price": cached.get("price") or "Unknown",
+                    "address": cached.get("address") or "Unknown location",
+                    "bedrooms": cached.get("bedrooms"),
+                    "image": cached.get("image") or "",
+                    "filter_text": cached["filter_text"],
+                })
+                continue
+
+            # Fallback: no structured data for this listing, fetch the page.
+            try:
+                page = fetch_property_page(url)
+            except Exception:
+                continue
+
+            details = extract_property_details(page)
             listings.append({
                 "id": property_id,
                 "url": url,
-                "price": cached.get("price") or "Unknown",
-                "address": cached.get("address") or "Unknown location",
-                "bedrooms": cached.get("bedrooms"),
-                "image": cached.get("image") or "",
-                "filter_text": cached["filter_text"],
+                "price": details["price"],
+                "address": details["address"],
+                "bedrooms": None,
+                "image": details["image"],
+                "filter_text": page,
             })
-            continue
-
-        # Fallback: no structured data for this listing, fetch the page.
-        try:
-            page = fetch_property_page(url)
-        except Exception:
-            continue
-
-        details = extract_property_details(page)
-        listings.append({
-            "id": property_id,
-            "url": url,
-            "price": details["price"],
-            "address": details["address"],
-            "bedrooms": None,
-            "image": details["image"],
-            "filter_text": page,
-        })
 
     return listings
 

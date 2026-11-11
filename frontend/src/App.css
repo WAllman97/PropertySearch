@@ -748,6 +748,32 @@ label {
   font-size: 13px;
 }
 
+.ai-reason {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.ai-triage {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.ai-triage p {
+  margin: 4px 0 0;
+}
+
+.ai-triage ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--danger);
+}
+
 .slider-header strong {
   font-size: 14px;
   color: var(--primary);
@@ -1108,4 +1134,374 @@ label {
   .calendar-day-muted {
     display: none;
   }
+}
+/* ============================================================================
+   Shared button classes used across views (previously unstyled)
+============================================================================ */
+
+.primary-button,
+a.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: white;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  padding: 11px 16px;
+  font-weight: 800;
+}
+
+.primary-button:hover,
+a.primary-button:hover {
+  background: var(--primary-hover);
+  color: white;
+}
+
+a.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  color: var(--primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 11px 16px;
+  font-weight: 800;
+}
+
+/* ============================================================================
+   Agent booking: public page
+============================================================================ */
+
+.booking-shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+}
+
+.booking-header {
+  margin-bottom: 20px;
+}
+
+.booking-header h1 {
+  margin: 0 0 8px;
+  font-size: clamp(28px, 6vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--primary);
+}
+
+.booking-header p {
+  margin: 0;
+}
+
+.booking-kind {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.booking-step {
+  margin: 22px 0 10px;
+  font-size: 15px;
+  color: var(--primary);
+}
+
+.booking-days,
+.booking-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.booking-days button,
+.booking-slots button {
+  padding: 9px 14px;
+}
+
+.booking-count {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--primary);
+  font-size: 11px;
+  text-align: center;
+}
+
+.booking-form {
+  display: grid;
+  gap: 14px;
+}
+
+.booking-form label,
+.booking-settings label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.booking-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.booking-honeypot {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.booking-error {
+  margin: 0;
+  color: var(--danger);
+  background: var(--danger-bg);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.booking-footer {
+  margin-top: 16px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.booking-done h2 {
+  margin: 0 0 10px;
+  color: var(--primary);
+}
+
+/* ============================================================================
+   Agent booking: buyer settings
+============================================================================ */
+
+.booking-settings {
+  display: grid;
+  gap: 16px;
+}
+
+.booking-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+  overflow-wrap: anywhere;
+}
+
+.availability-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.availability-day {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.availability-windows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.availability-window {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.availability-window input[type="time"] {
+  width: auto;
+  padding: 7px 8px;
+}
+
+.icon-button {
+  padding: 4px 10px;
+  line-height: 1;
+}
+
+button.link-button {
+  border: none;
+  background: none;
+  padding: 4px 0;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+button.link-button:hover {
+  transform: none;
+  text-decoration: underline;
+}
+
+.booking-settings label.booking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.booking-toggle input {
+  width: auto;
+}
+
+/* ============================================================================
+   Agent booking: requests in the calendar
+============================================================================ */
+
+.booking-requests {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 22px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+}
+
+.booking-requests h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--primary);
+}
+
+.booking-request {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.booking-request p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.booking-request-message {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.booking-kind-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.booking-kind-tag.call {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.booking-kind-tag.viewing {
+  background: var(--accent-soft);
+  color: #6f4e21;
+}
+
+.booking-upcoming {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.booking-upcoming li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-event-call {
+  background: var(--primary-soft);
+  border-color: #b7d9c6;
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  .booking-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Days become a swipeable strip instead of a tall stack. */
+  .booking-days {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    margin: 0 -4px;
+    scroll-snap-type: x proximity;
+  }
+
+  .booking-days button {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
+  .booking-request {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .availability-day {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+/* ============================================================================
+   Auth: forgot / reset password
+============================================================================ */
+
+.auth-card {
+  max-width: 420px;
+}
+
+.auth-card form {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.auth-card .form-group {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-message {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.auth-banner {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 800;
 }

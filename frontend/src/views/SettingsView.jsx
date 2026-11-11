@@ -1,4 +1,4 @@
-import SearchCriteriaManager from "../components/SearchCriteriaManager";
+import BookingSettings from "../components/BookingSettings";
 import BuyerProfileSettings from "../components/BuyerProfileSettings";
 import NotificationSettings from "../components/NotificationSettings";
 
@@ -16,13 +16,20 @@ function SettingsView({ user }) {
 
   return (
     <>
+      {/* Saved Searches is hidden: the scraper reads backend/config.yaml, not
+          the search_criteria table, so edits there had no effect. Bring it
+          back once searches are per-user. */}
       <section className="card">
         <div className="section-header">
-          <h2>Saved Searches</h2>
-          <p>Manage your saved property searches and alert sources.</p>
+          <h2>Agent Booking Page</h2>
+          <p>
+            Give agents this link instead of your number. They pick a free
+            slot for a call or viewing, you accept it, and it lands in your
+            calendar.
+          </p>
         </div>
 
-        <SearchCriteriaManager user={user} />
+        <BookingSettings user={user} />
       </section>
 
       <section className="card">

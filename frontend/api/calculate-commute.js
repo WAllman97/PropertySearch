@@ -1,10 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
+import { requireHouseholdUser, supabaseAdmin, underRateLimit } from "./_lib/household.js";
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const googleApiKey = process.env.GOOGLE_MAPS_API_KEY;
 
-const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+// Each recalculation is up to 8 billable Google Routes calls (4 modes x 2
+// people). Cap how many properties one user can recalculate per day; a full
+// "Refresh commutes" after an address change fits inside this. The hard
+// ceiling on spend should still be a quota on the Google Cloud key.
+const MAX_RECALCULATIONS_PER_DAY = 300;
 
 // Keep in sync with backend/core/commute_calculator.py COMMUTE_MODES.
 const COMMUTE_MODES = {
@@ -19,6 +21,43 @@ function durationToMinutes(duration) {
   const seconds = Number(String(duration).replace("s", ""));
   if (Number.isNaN(seconds)) return null;
   return Math.round(seconds / 60);
+}
+
+// buyer_profiles.commute_mode -> column label. Only the preferred mode is
+// calculated: it's the only one the app shows, and doing all four cost 4x
+// the Google requests. Keep in sync with backend/core/commute_calculator.py.
+const PROFILE_MODE_TO_LABEL = {
+  TRANSIT: "transit",
+  DRIVE: "drive",
+  BICYCLE: "cycle",
+  WALK: "walk",
+};
+
+function selectedModeLabel(profile) {
+  return PROFILE_MODE_TO_LABEL[(profile?.commute_mode || "TRANSIT").toUpperCase()] || "transit";
+}
+
+function hasCommuteData(property, modeLabel) {
+  return ["user", "partner"].some(
+    (person) => property[`${person}_${modeLabel}_minutes`] != null
+  );
+}
+
+// Commutes are still valid if they were calculated after the buyer profile
+// (work addresses) last changed. Re-running them would only re-buy the same
+// answer from Google.
+function commutesAreCurrent(property, profile) {
+  if (
+    !property.commute_last_checked ||
+    !hasCommuteData(property, selectedModeLabel(profile))
+  ) {
+    return false;
+  }
+
+  const checkedAt = new Date(property.commute_last_checked).getTime();
+  const profileChangedAt = new Date(profile.updated_at || 0).getTime();
+
+  return checkedAt >= profileChangedAt;
 }
 
 function getPropertyAddress(property) {
@@ -91,11 +130,12 @@ async function calculateRoute(origin, destination, googleMode) {
   }
 }
 
-async function calculateAllModesForPerson(propertyAddress, destination, personLabel) {
+async function calculateModesForPerson(propertyAddress, destination, personLabel, modeLabels) {
   const payload = {};
   const errors = [];
 
-  for (const [modeLabel, googleMode] of Object.entries(COMMUTE_MODES)) {
+  for (const modeLabel of modeLabels) {
+    const googleMode = COMMUTE_MODES[modeLabel];
     const route = await calculateRoute(propertyAddress, destination, googleMode);
 
     const minutesCol = `${personLabel}_${modeLabel}_minutes`;
@@ -124,29 +164,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { propertyId } = req.body || {};
+    const { propertyId, force } = req.body || {};
 
     if (!propertyId) {
       return res.status(400).json({ error: "Missing propertyId" });
     }
 
-    const authHeader = req.headers.authorization || "";
-    const token = authHeader.replace("Bearer ", "");
-
-    if (!token) {
-      return res.status(401).json({ error: "Missing auth token" });
-    }
-
-    const userClient = createClient(supabaseUrl, process.env.VITE_SUPABASE_ANON_KEY);
-
-    const {
-      data: { user },
-      error: userError,
-    } = await userClient.auth.getUser(token);
-
-    if (userError || !user) {
-      return res.status(401).json({ error: "Invalid user token" });
-    }
+    const user = await requireHouseholdUser(req, res);
+    if (!user) return;
 
     const { data: property, error: propertyError } = await supabaseAdmin
       .from("properties")
@@ -168,11 +193,30 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: "Buyer profile not found" });
     }
 
+    if (!force && commutesAreCurrent(property, profile)) {
+      return res.status(200).json({ success: true, skipped: true, property });
+    }
+
     const propertyAddress = getPropertyAddress(property);
 
     if (!propertyAddress) {
       return res.status(400).json({ error: "Property has no usable address" });
     }
+
+    if (
+      !(await underRateLimit(
+        user.id,
+        "calculate_commute",
+        MAX_RECALCULATIONS_PER_DAY,
+        24 * 60
+      ))
+    ) {
+      return res.status(429).json({
+        error: `Commute limit reached (${MAX_RECALCULATIONS_PER_DAY} per day). Try again tomorrow.`,
+      });
+    }
+
+    const modeLabels = [selectedModeLabel(profile)];
 
     const updatePayload = {
       commute_last_checked: new Date().toISOString(),
@@ -183,20 +227,22 @@ export default async function handler(req, res) {
     const allErrors = [];
 
     if (profile.user_work_address) {
-      const { payload, errors } = await calculateAllModesForPerson(
+      const { payload, errors } = await calculateModesForPerson(
         propertyAddress,
         profile.user_work_address,
-        "user"
+        "user",
+        modeLabels
       );
       Object.assign(updatePayload, payload);
       allErrors.push(...errors);
     }
 
     if (profile.partner_work_address) {
-      const { payload, errors } = await calculateAllModesForPerson(
+      const { payload, errors } = await calculateModesForPerson(
         propertyAddress,
         profile.partner_work_address,
-        "partner"
+        "partner",
+        modeLabels
       );
       Object.assign(updatePayload, payload);
       allErrors.push(...errors);
@@ -217,6 +263,15 @@ export default async function handler(req, res) {
     if (updateError) {
       console.error(updateError);
       return res.status(500).json({ error: "Could not update property" });
+    }
+
+    // Google's daily quota is used up: tell the client to stop its refresh
+    // loop rather than spend the next N requests on guaranteed failures.
+    if (allErrors.some((e) => e.includes("Google Routes API error 429"))) {
+      return res.status(429).json({
+        error: "Google's daily commute quota is used up. Try again tomorrow.",
+        property: updatedProperty,
+      });
     }
 
     return res.status(200).json({

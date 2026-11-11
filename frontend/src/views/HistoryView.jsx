@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
 import CommuteSummary from "../components/CommuteSummary";
 
@@ -138,7 +139,7 @@ function HistoryView() {
     }
 
     setNotes({
-      viewing_datetime: data?.viewing_datetime || "",
+      viewing_datetime: toLocalInputValue(data?.viewing_datetime),
       estate_agent: data?.estate_agent || "",
       estate_agent_email: data?.estate_agent_email || "",
       estate_agent_phone: data?.estate_agent_phone || "",
@@ -159,6 +160,7 @@ function HistoryView() {
       {
         property_id: selectedProperty.id,
         ...notes,
+        viewing_datetime: fromLocalInputValue(notes.viewing_datetime),
         updated_at: new Date().toISOString(),
       },
       {

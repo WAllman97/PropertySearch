@@ -4,12 +4,8 @@ import yaml
 
 from core.property_repository import save_property_to_supabase
 
-from core.database import (
-    init_db,
-    save_property,
-)
-
 from core.filters import passes_filters
+from core import ai_scorer
 
 from scrapers import rightmove
 from scrapers import zoopla
@@ -20,14 +16,9 @@ from datetime import datetime
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 config_path = os.path.join(BASE_DIR, "config.yaml")
-db_path = os.path.join(BASE_DIR, "seen_properties.db")
-
-print(f"Using DB: {db_path}")
 
 with open(config_path, "r", encoding="utf-8") as file:
     config = yaml.safe_load(file)
-
-conn = init_db(db_path)
 
 new_properties = []
 
@@ -43,6 +34,18 @@ MISSING_ADDRESS_VALUES = {"", "unknown", "unknown location"}
 
 def warn(message):
     print(f"WARNING: {message}")
+
+
+def description_from(listing):
+    """The listing summary + key features, for AI scoring. The scrapers'
+    regex fallback puts the whole page HTML in filter_text; don't store that."""
+    text = listing.get("filter_text") or ""
+    lowered = text[:5000].lower()
+
+    if "<html" in lowered or "<div" in lowered or "<script" in lowered:
+        return ""
+
+    return text
 
 
 def is_missing(value, missing_values):
@@ -89,7 +92,10 @@ for search in config["searches"]:
     require_garden = not search.get("garden_prefiltered", False)
 
     try:
-        listings = scraper.fetch_listings(search_url)
+        listings = scraper.fetch_listings(
+            search_url,
+            max_pages=search.get("max_pages", 1),
+        )
     except Exception as e:
         health["searches_failed"] += 1
         warn(f"Search request failed for {source}/{search_name}: {e}")
@@ -134,6 +140,7 @@ for search in config["searches"]:
             "image": listing.get("image"),
             "bedrooms": listing.get("bedrooms"),
             "source": source,
+            "description": description_from(listing),
             "date_found": datetime.now().date().isoformat(),
         }
 
@@ -159,12 +166,42 @@ for search in config["searches"]:
         except Exception as e:
             warn(f"Failed to save to Supabase ({property_url}): {e}")
 
-        save_property(
-            conn=conn,
-            property_id=unique_id,
-            source=source,
-            url=property_url,
-        )
+
+# ---- AI triage scoring ----
+# Runs after scraping so commute times are already saved. Capped per run so
+# the first run after enabling it (every listing unscored) can't run long or
+# spend much; the rest are picked up on following days.
+health["ai_scored"] = 0
+health["ai_failed"] = 0
+
+if ai_scorer.is_enabled():
+    scoring_config = ai_scorer.load_scoring_config()
+    max_per_run = int(scoring_config.get("max_per_run", 40))
+    # Dedupe: the same listing can match more than one search.
+    unscored = list({
+        p["id"]: p for p in new_properties if not p.get("ai_scored_at")
+    }.values())
+
+    print(f"\nAI scoring {min(len(unscored), max_per_run)} of {len(unscored)} unscored properties")
+
+    if unscored:
+        buyer_profile = ai_scorer.get_buyer_profile()
+        client = ai_scorer.get_client()
+
+        for property_record in unscored[:max_per_run]:
+            try:
+                ai_scorer.score_property(
+                    property_record["id"],
+                    buyer_profile=buyer_profile,
+                    config=scoring_config,
+                    client=client,
+                )
+                health["ai_scored"] += 1
+            except Exception as e:
+                health["ai_failed"] += 1
+                warn(f"AI scoring failed for {property_record.get('address')}: {e}")
+else:
+    print("\nAI scoring disabled (ai_scoring.enabled is false or ANTHROPIC_API_KEY unset).")
 
 
 # ---- Run summary / health report ----
@@ -178,6 +215,7 @@ print(f"Properties found: {health['found_total']}")
 print(f"Properties saved: {health['saved_total']}")
 print(f"Missing price:    {health['missing_price']}")
 print(f"Missing address:  {health['missing_address']}")
+print(f"AI scored:        {health['ai_scored']} (failed {health['ai_failed']})")
 print("Found by source:")
 for source, count in found_by_source.items():
     marker = "  <-- ZERO" if count == 0 else ""

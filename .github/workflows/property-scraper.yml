@@ -52,4 +52,10 @@ jobs:
           # property is saved). Without it every route fails and properties
           # are saved with no commute times.
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          # Optional: pins which buyer profile commutes/AI scoring use. Only
+          # needed once more than one account has saved a profile.
+          BUYER_USER_ID: ${{ secrets.BUYER_USER_ID }}
+          # AI triage scoring (core/ai_scorer.py). If unset, scoring is
+          # skipped and the scraper runs as before.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python main.py
