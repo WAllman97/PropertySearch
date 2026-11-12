@@ -96,6 +96,69 @@ def get_image_url(item):
     )
 
 
+def _pill(text, fg, bg, border):
+    return (
+        f'<span style="display:inline-block;background:{bg};color:{fg};'
+        f"border:1px solid {border};padding:3px 9px;border-radius:20px;"
+        f"font-family:Arial,sans-serif;font-size:12px;font-weight:bold;"
+        f'margin:0 6px 6px 0;">{text}</span>'
+    )
+
+
+def _short_gbp(value):
+    value = int(value)
+    if value >= 1_000_000:
+        return f"£{value / 1_000_000:.2f}m".replace(".00m", "m")
+    return f"£{round(value / 1000)}k"
+
+
+def build_market_line(item):
+    """Price cut, time on market and local sold-price pills for a card."""
+    pills = []
+    price = item.get("price")
+    previous = item.get("previous_price")
+
+    if isinstance(price, int) and isinstance(previous, int) and previous > price:
+        cut = previous - price
+        pills.append(_pill(
+            f"↓ {_short_gbp(cut)} ({cut / previous:.1%}) · was {format_price(previous)}",
+            "#166534", "#f0fdf4", "#bbf7d0",
+        ))
+
+    first_listed = item.get("first_listed_at")
+    if first_listed:
+        try:
+            listed = datetime.fromisoformat(str(first_listed).replace("Z", "+00:00"))
+            days = (datetime.now(listed.tzinfo) - listed).days
+            if days >= 60:
+                pills.append(_pill(f"On market {days} days", "#92400e", "#fffbeb", "#fde68a"))
+        except Exception:
+            pass
+
+    comps = item.get("comps") or {}
+    if comps.get("median") and isinstance(price, int):
+        diff = price / comps["median"] - 1
+        beds = f"{comps['bedrooms_basis']}-bed " if comps.get("bedrooms_basis") else ""
+        pills.append(_pill(
+            f"Local sales median {_short_gbp(comps['median'])} · asking {diff:+.0%} "
+            f"({comps.get('count')} {beds}sales)",
+            "#1f2937", "#f3f4f6", "#e5e7eb",
+        ))
+
+    if not pills:
+        return ""
+
+    return f'<div style="margin-bottom:10px;">{"".join(pills)}</div>'
+
+
+def _section_heading(text):
+    return f"""
+    <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;
+                text-transform:uppercase;letter-spacing:1px;color:#6b7280;
+                margin:8px 0 12px;">{text}</div>
+    """
+
+
 def build_property_card(item):
     # Rows come straight from the properties table, so use its column names
     # (listing_url, image_url, integer price). search_name/reason are only
@@ -124,6 +187,7 @@ def build_property_card(item):
         details.append(f"Partner: {partner_commute} min")
 
     detail_line = " · ".join(details)
+    market_line = build_market_line(item)
 
     eyebrow = source
     if search_name:
@@ -248,6 +312,8 @@ def build_property_card(item):
                                 {detail_line}
                             </div>
 
+                            {market_line}
+
                             {reason_badge}
 
                             {listing_button}
@@ -277,17 +343,21 @@ def build_property_card(item):
     """
 
 
-def send_daily_email(new_properties, recipients=None, frequency="daily"):
+def send_daily_email(new_properties, recipients=None, frequency="daily", price_drops=None):
     """
     Send a property alert email through Resend.
 
     Expects new_properties as rows from the properties table (price,
     address, source, listing_url, image_url, bedrooms, per-mode commute
-    columns such as user_transit_minutes). recipients defaults to
-    config/recipients.yaml; frequency ("daily"/"weekly") sets the wording.
+    columns such as user_transit_minutes). price_drops are rows of
+    properties whose asking price fell in the period, each with an added
+    previous_price. recipients defaults to config/recipients.yaml;
+    frequency ("daily"/"weekly") sets the wording.
     """
-    if not new_properties:
-        print("No new properties found. Email not sent.")
+    price_drops = price_drops or []
+
+    if not new_properties and not price_drops:
+        print("No new properties or price drops. Email not sent.")
         return None
 
     if recipients is None:
@@ -297,10 +367,26 @@ def send_daily_email(new_properties, recipients=None, frequency="daily"):
 
     today = datetime.now().strftime("%d %B %Y")
     count = len(new_properties)
+    drop_count = len(price_drops)
 
-    cards_html = "".join(build_property_card(item) for item in new_properties)
+    cards_html = ""
+    if price_drops:
+        cards_html += _section_heading(f"Price drops ({drop_count})")
+        cards_html += "".join(build_property_card(item) for item in price_drops)
+    if new_properties:
+        if price_drops:
+            cards_html += _section_heading(f"New listings ({count})")
+        cards_html += "".join(build_property_card(item) for item in new_properties)
 
     listing_word = "listing" if count == 1 else "listings"
+    drop_word = "price drop" if drop_count == 1 else "price drops"
+
+    headline_parts = []
+    if count:
+        headline_parts.append(f"{count} new {listing_word}")
+    if drop_count:
+        headline_parts.append(f"{drop_count} {drop_word}")
+    headline = " and ".join(headline_parts)
 
     html_body = f"""
     <!DOCTYPE html>
@@ -349,7 +435,7 @@ def send_daily_email(new_properties, recipients=None, frequency="daily"):
                                 margin-bottom:12px;
                                 letter-spacing:-0.5px;
                             ">
-                                {count} new {listing_word} found
+                                {headline}
                             </div>
 
                             <div style="
@@ -380,6 +466,9 @@ def send_daily_email(new_properties, recipients=None, frequency="daily"):
                             padding:12px 0 24px;
                         ">
                             Generated automatically by PropertySearch.
+                            <br>
+                            Sold prices contain HM Land Registry data &copy; Crown copyright
+                            and database right, licensed under the Open Government Licence v3.0.
                         </td>
                     </tr>
 
@@ -392,7 +481,7 @@ def send_daily_email(new_properties, recipients=None, frequency="daily"):
     </html>
     """
 
-    subject = f"Property Alerts — {count} new {listing_word} — {today}"
+    subject = f"Property Alerts — {headline} — {today}"
 
     response = send_resend_email(
         subject=subject,
@@ -402,7 +491,7 @@ def send_daily_email(new_properties, recipients=None, frequency="daily"):
 
     print(
         f"Email sent to {len(recipients)} recipient(s) "
-        f"with {count} properties."
+        f"with {count} new properties and {drop_count} price drops."
     )
 
     return response

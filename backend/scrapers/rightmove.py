@@ -24,6 +24,18 @@ headers = {
 # get reliable price/address/bedrooms/image without re-parsing each page.
 _SEARCH_CACHE = {}
 
+# Extra per-listing fields passed through to the repository when the search
+# JSON has them (see listing_facts_from_json).
+LISTING_FACT_KEYS = (
+    "latitude",
+    "longitude",
+    "property_sub_type",
+    "first_listed_at",
+    "price_reduced_at",
+    "listing_status",
+    "price_amount",
+)
+
 
 def clean_text(value):
     if not value:
@@ -113,6 +125,35 @@ def image_from_json(prop):
     return clean_text(images.get("mainImageSrc") or "")
 
 
+def listing_facts_from_json(prop):
+    """Location, type and listing dates for price tracking and sold-price
+    comparisons. Keys match the properties table columns (see migration 005)."""
+    location = prop.get("location") or {}
+    update = prop.get("listingUpdate") or {}
+    reason = (update.get("listingUpdateReason") or "").lower()
+
+    facts = {
+        "latitude": location.get("latitude"),
+        "longitude": location.get("longitude"),
+        "property_sub_type": clean_text(prop.get("propertySubType") or ""),
+        "first_listed_at": prop.get("firstVisibleDate"),
+        "price_amount": (prop.get("price") or {}).get("amount"),
+    }
+
+    if reason == "price_reduced":
+        facts["price_reduced_at"] = update.get("listingUpdateDate")
+
+    status = clean_text(prop.get("displayStatus") or "").lower()
+    if "sold" in status:
+        facts["listing_status"] = "sold_stc"
+    elif "offer" in status:
+        facts["listing_status"] = "under_offer"
+    else:
+        facts["listing_status"] = "live"
+
+    return facts
+
+
 def filter_text_from_json(prop):
     """Concatenate the descriptive fields the keyword filter runs on."""
     key_features = " ".join(
@@ -186,6 +227,7 @@ def extract_properties_from_search(html):
                 "address": clean_text(prop.get("displayAddress")),
                 "image": image_from_json(prop),
                 "filter_text": filter_text_from_json(prop),
+                **listing_facts_from_json(prop),
             }
 
         if results:
@@ -337,6 +379,11 @@ def fetch_listings(search_url, max_pages=1):
                     "bedrooms": cached.get("bedrooms"),
                     "image": cached.get("image") or "",
                     "filter_text": cached["filter_text"],
+                    **{
+                        key: cached[key]
+                        for key in LISTING_FACT_KEYS
+                        if cached.get(key) is not None
+                    },
                 })
                 continue
 

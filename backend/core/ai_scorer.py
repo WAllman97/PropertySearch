@@ -138,6 +138,61 @@ def format_commutes(property_record):
     return "\n".join(lines) if lines else "- Not available"
 
 
+def _days_ago(value):
+    try:
+        then = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    return (datetime.now(timezone.utc) - then).days
+
+
+def format_market_signals(property_record):
+    """Price history, time on market and Land Registry comps, as plain lines."""
+    lines = []
+    price = property_record.get("price")
+    initial = property_record.get("initial_price")
+
+    if isinstance(price, int) and isinstance(initial, int) and initial > price:
+        lines.append(
+            f"- Price cut: £{initial - price:,} ({(initial - price) / initial:.1%}) "
+            f"since first seen at £{initial:,}"
+        )
+
+    reduced_days = _days_ago(property_record.get("price_reduced_at"))
+    if reduced_days is not None:
+        lines.append(f"- Portal shows it was last reduced {reduced_days} days ago")
+
+    listed_days = _days_ago(property_record.get("first_listed_at"))
+    if listed_days is not None:
+        lines.append(f"- On the market for {listed_days} days")
+
+    status = property_record.get("listing_status")
+    if status and status != "live":
+        lines.append(f"- Listing status: {status.replace('_', ' ')}")
+
+    comps = property_record.get("comps") or {}
+    if comps.get("median"):
+        beds = f"{comps['bedrooms_basis']}-bed " if comps.get("bedrooms_basis") else ""
+        matched = "" if comps.get("method") == "bedrooms" else " (any size: not bedroom-matched)"
+        lines.append(
+            f"- Local sold prices ({comps['count']} {beds}{comps.get('type_basis')} sales within "
+            f"{comps.get('radius_m')}m over {comps.get('window_months')} months{matched}): "
+            f"median £{comps['median']:,}, middle half £{comps.get('p25'):,}–£{comps.get('p75'):,}"
+        )
+        if isinstance(price, int):
+            gap = price / comps["median"] - 1
+            lines.append(f"- Asking is {gap:+.0%} vs that median")
+            if gap <= -0.2:
+                lines.append(
+                    "- A gap this large usually means the comparison isn't like-for-like "
+                    "(condition, lease, size, estate vs period housing), not a bargain"
+                )
+        if comps.get("low_confidence"):
+            lines.append("- Few comparable sales: treat the median as a rough guide only")
+
+    return "\n".join(lines) if lines else "- Not available"
+
+
 def build_prompt(property_record, buyer_profile, brief):
     price = property_record.get("price")
     price_text = f"£{price:,}" if isinstance(price, int) else "Unknown"
@@ -165,16 +220,25 @@ def build_prompt(property_record, buyer_profile, brief):
 Address: {property_record.get("address") or "Unknown"}
 Price: {price_text}
 Bedrooms: {property_record.get("bedrooms") or "Unknown"}
+Type: {property_record.get("property_sub_type") or property_record.get("property_type") or "Unknown"}
+Tenure: {property_record.get("tenure") or "Unknown"}
+Floor area: {f"{property_record['size_sqft']:,} sq ft" if property_record.get("size_sqft") else "Unknown"}
 Portal: {property_record.get("source") or "Unknown"}
 Description and key features:
 {description or "Not available"}
 </listing>
 
+<market_signals>
+{format_market_signals(property_record)}
+</market_signals>
+
 <commute_times>
 {format_commutes(property_record)}
 </commute_times>
 
-Score this listing."""
+Score this listing. For value, weigh the asking price against the local \
+sold prices above (mind the sale count and that type, not size, is the \
+match) and any price cuts or long time on market."""
 
 
 def build_content(prompt, image_url):

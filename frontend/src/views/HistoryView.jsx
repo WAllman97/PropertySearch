@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
 import CommuteSummary from "../components/CommuteSummary";
+import MarketSignals from "../components/MarketSignals";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -248,6 +249,8 @@ function HistoryView() {
 
             <p>{selectedProperty.address}</p>
 
+            <MarketSignals property={selectedProperty} defaultOpen />
+
             <div className="property-score-strip">
               <span>🏠 {selectedProperty.overall_score || "--"}/100</span>
               <span>❤️ {selectedProperty.score_gut_feel || 0}/10</span>
@@ -436,6 +439,8 @@ function HistoryView() {
                 </h3>
 
                 <p>{property.address}</p>
+
+                <MarketSignals property={property} />
 
                 <div className="property-score-strip">
                   <span>🏠 {property.overall_score || "--"}/100</span>

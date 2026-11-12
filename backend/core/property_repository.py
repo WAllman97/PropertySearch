@@ -1,5 +1,6 @@
 from core.supabase_client import supabase
 from core.commute_calculator import calculate_commutes_for_property_id
+from core.listing_tracker import fact_payload, record_price, now_iso
 
 
 SKIP_STATUSES = ["ignored", "archived", "lost"]
@@ -12,7 +13,7 @@ def get_existing_property(listing_url: str):
     result = (
         supabase
         .table("properties")
-        .select("status")
+        .select("id,status,price,initial_price")
         .eq("listing_url", listing_url)
         .execute()
     )
@@ -28,16 +29,31 @@ def save_property_to_supabase(record: dict):
         print(f"Skipped previously ignored/archived/lost: {listing_url}")
         return None
 
+    price = record.get("price_amount") or clean_price(record.get("price"))
+
     payload = {
         "source": record.get("source", "rightmove"),
         "listing_id": record.get("id"),
         "title": record.get("address"),
         "address": record.get("address"),
-        "price": clean_price(record.get("price")),
+        "price": price,
         "bedrooms": record.get("bedrooms"),
         "image_url": record.get("image"),
         "listing_url": listing_url,
     }
+
+    # Location, type, listing dates and status when the portal gave them
+    # (price tracking + sold-price comparisons; see core/listing_tracker.py).
+    # Type falls back to the listing title only (descriptions say things like
+    # "flat roof" or "semi-detached neighbours" and would mislead).
+    payload.update(fact_payload(record, record.get("address") or ""))
+
+    old_price = existing.get("price") if existing else None
+    if existing and price and old_price and price != old_price:
+        payload["last_price_change_at"] = now_iso()
+
+    if not existing or existing.get("initial_price") is None:
+        payload["initial_price"] = old_price or price
 
     # Kept for AI triage scoring. Only sent when present so a scrape that
     # falls back to a thinner parser doesn't blank a stored description.
@@ -62,6 +78,12 @@ def save_property_to_supabase(record: dict):
         property_record = result.data[0]
         property_id = property_record.get("id")
         address = property_record.get("address")
+
+        try:
+            # First sighting, or the asking price changed since last run.
+            record_price(property_id, old_price if existing else None, price, source="scrape")
+        except Exception as error:
+            print(f"Price history write failed for {address}: {error}")
 
         try:
             print(f"Calculating commute for: {address}")
