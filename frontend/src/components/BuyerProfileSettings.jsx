@@ -123,7 +123,7 @@ function BuyerProfileSettings({ user }) {
             propertyId: property.id,
           });
 
-          if (response.status === 429 || response.status === 403) {
+          if ([403, 429, 503].includes(response.status)) {
             const body = await response.json().catch(() => ({}));
             stopReason = body.error || "Stopped by the server.";
             break;
