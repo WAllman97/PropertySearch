@@ -16,6 +16,10 @@ const COMMUTE_MODES = {
   walk: "WALK",
 };
 
+// Google refused the key itself (Routes API not enabled, key restricted to
+// other APIs or to websites): every further call will fail the same way.
+const KEY_REJECTED = /Google Routes API error (401|403)/;
+
 function durationToMinutes(duration) {
   if (!duration) return null;
   const seconds = Number(String(duration).replace("s", ""));
@@ -237,7 +241,11 @@ export default async function handler(req, res) {
       allErrors.push(...errors);
     }
 
-    if (profile.partner_work_address) {
+    // If the first person's call showed every call will fail (quota or key),
+    // don't spend another request on the partner.
+    const halted = allErrors.some((e) => /Google Routes API error 429/.test(e) || KEY_REJECTED.test(e));
+
+    if (profile.partner_work_address && !halted) {
       const { payload, errors } = await calculateModesForPerson(
         propertyAddress,
         profile.partner_work_address,
@@ -265,11 +273,20 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Could not update property" });
     }
 
-    // Google's daily quota is used up: tell the client to stop its refresh
-    // loop rather than spend the next N requests on guaranteed failures.
+    // Google's daily quota is used up, or it rejected the key: tell the
+    // client to stop its refresh loop rather than spend the next N requests
+    // on guaranteed failures (rejected calls still count against the quota).
     if (allErrors.some((e) => e.includes("Google Routes API error 429"))) {
       return res.status(429).json({
         error: "Google's daily commute quota is used up. Try again tomorrow.",
+        property: updatedProperty,
+      });
+    }
+
+    if (allErrors.some((e) => KEY_REJECTED.test(e))) {
+      return res.status(503).json({
+        error:
+          "Google rejected the commute API key. Enable the Routes API for GOOGLE_MAPS_API_KEY and remove any website restriction.",
         property: updatedProperty,
       });
     }

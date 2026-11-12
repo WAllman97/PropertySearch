@@ -23,9 +23,23 @@ PROFILE_MODE_TO_LABEL = {
     "WALK": "walk",
 }
 
-# Set when Google reports the daily quota is used up (HTTP 429). Further
-# calls in the same run would only fail too, so skip them.
-_quota_exhausted = {"value": False}
+# Set when Google reports the daily quota is used up (HTTP 429) or rejects
+# the API key (HTTP 401/403: Routes API not enabled, key restricted to other
+# APIs or to websites). Every further call in the same run would fail the
+# same way, and rejected calls still count against the daily quota, so stop.
+_quota_exhausted = {"value": False, "reason": None}
+
+# Status codes that mean "every request will fail", not "this route failed".
+_HALT_STATUS = {
+    429: "Google Routes daily quota exhausted",
+    401: "Google rejected the API key (401): check GOOGLE_MAPS_API_KEY",
+    403: "Google rejected the API key (403): enable the Routes API for this key "
+         "and remove any website restriction",
+}
+
+
+def _halt_reason():
+    return _quota_exhausted.get("reason") or "Google Routes unavailable"
 
 
 def selected_mode_label(profile):
@@ -91,7 +105,7 @@ def calculate_route(origin, destination, mode):
             "success": False,
             "minutes": None,
             "distance_meters": None,
-            "error": "Skipped: Google Routes daily quota already exhausted this run",
+            "error": f"Skipped: {_halt_reason()} earlier this run",
         }
 
     if not GOOGLE_MAPS_API_KEY:
@@ -133,9 +147,10 @@ def calculate_route(origin, destination, mode):
             timeout=20,
         )
 
-        if response.status_code == 429:
+        if response.status_code in _HALT_STATUS:
             _quota_exhausted["value"] = True
-            print("WARNING: Google Routes daily quota exhausted; skipping remaining commutes this run.")
+            _quota_exhausted["reason"] = _HALT_STATUS[response.status_code]
+            print(f"WARNING: {_halt_reason()}; skipping remaining commutes this run.")
 
         if response.status_code != 200:
             return {
@@ -273,7 +288,7 @@ def calculate_commutes_for_property(property_record, force=False):
 
     if _quota_exhausted["value"]:
         # Leave the row untouched so it's retried on the next run.
-        print("Commute skipped: Google Routes quota exhausted this run.")
+        print(f"Commute skipped: {_halt_reason()}.")
         return None
 
     mode_labels = [selected_mode_label(profile)]
@@ -359,7 +374,7 @@ def calculate_commutes_for_all_properties(limit=500, force=False):
 
     for index, property_record in enumerate(result.data, start=1):
         if _quota_exhausted["value"]:
-            print("Stopping backfill: Google Routes quota exhausted.")
+            print(f"Stopping backfill: {_halt_reason()}.")
             break
 
         print(f"\nProcessing property {index} of {len(result.data)}")
