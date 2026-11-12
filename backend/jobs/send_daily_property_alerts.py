@@ -61,6 +61,49 @@ def recipients_for(settings):
     ]
 
 
+PRICE_DROP_STATUSES = ("ignored", "archived", "lost")
+
+
+def get_price_drops(since):
+    """Properties whose asking price fell since `since` (new, favourites and
+    booked ones alike: a cut on a favourite is the most useful alert).
+    Each row gets previous_price = the asking price before the latest change."""
+    changed = (
+        supabase
+        .table("properties")
+        .select("*")
+        .gte("last_price_change_at", since)
+        .or_("status.is.null,status.not.in.(" + ",".join(PRICE_DROP_STATUSES) + ")")
+        .order("last_price_change_at", desc=True)
+        .execute()
+    ).data or []
+
+    if not changed:
+        return []
+
+    history = (
+        supabase
+        .table("price_history")
+        .select("property_id,price,observed_at")
+        .in_("property_id", [p["id"] for p in changed])
+        .order("observed_at", desc=True)
+        .execute()
+    ).data or []
+
+    by_property = {}
+    for row in history:
+        by_property.setdefault(row["property_id"], []).append(row["price"])
+
+    drops = []
+    for prop in changed:
+        prices = by_property.get(prop["id"], [])
+        previous = prices[1] if len(prices) > 1 else prop.get("initial_price")
+        if isinstance(previous, int) and isinstance(prop.get("price"), int) and prop["price"] < previous:
+            drops.append({**prop, "previous_price": previous})
+
+    return drops
+
+
 def run_property_alerts():
     settings_result = (
         supabase
@@ -110,10 +153,15 @@ def run_property_alerts():
         )
 
         new_properties = properties_result.data or []
+        new_ids = {p["id"] for p in new_properties}
+        price_drops = [p for p in get_price_drops(since) if p["id"] not in new_ids]
 
-        print(f"{frequency} alert - found {len(new_properties)} new properties")
+        print(
+            f"{frequency} alert - found {len(new_properties)} new properties "
+            f"and {len(price_drops)} price drops"
+        )
 
-        if not new_properties:
+        if not new_properties and not price_drops:
             continue
 
         if not recipients:
@@ -122,7 +170,12 @@ def run_property_alerts():
             print(f"No recipients resolved for {frequency} alert; using recipients.yaml")
             recipients = None
 
-        send_daily_email(new_properties, recipients=recipients, frequency=frequency)
+        send_daily_email(
+            new_properties,
+            recipients=recipients,
+            frequency=frequency,
+            price_drops=price_drops,
+        )
 
 
 if __name__ == "__main__":

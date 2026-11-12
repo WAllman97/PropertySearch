@@ -3,6 +3,9 @@ import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
 import CommuteSummary from "../components/CommuteSummary";
+import MarketSignals from "../components/MarketSignals";
+import MarketToolbar from "../components/MarketToolbar";
+import { applyMarketView } from "../utils/market";
 
 function getPropertyAgeDays(property) {
   const dateValue =
@@ -34,6 +37,8 @@ function PropertiesView() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [showScoreModal, setShowScoreModal] = useState(false);
+  const [marketFilter, setMarketFilter] = useState("all");
+  const [marketSort, setMarketSort] = useState("newest");
 
   const [shareProperty, setShareProperty] = useState(null);
   const [shareEmail, setShareEmail] = useState(
@@ -387,8 +392,16 @@ function PropertiesView() {
         </div>
       )}
 
+      <MarketToolbar
+        properties={properties}
+        filter={marketFilter}
+        sort={marketSort}
+        onFilter={setMarketFilter}
+        onSort={setMarketSort}
+      />
+
       <div className="property-grid">
-        {properties.map((property) => {
+        {applyMarketView(properties, marketFilter, marketSort).map((property) => {
           const propertyAgeDays = getPropertyAgeDays(property);
 
           return (
@@ -409,6 +422,8 @@ function PropertiesView() {
                 </h3>
 
                 <p>{property.address}</p>
+
+                <MarketSignals property={property} />
 
                 <div className="property-score-strip">
                   <span>

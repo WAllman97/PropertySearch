@@ -3,6 +3,9 @@ import sys
 import yaml
 
 from core.property_repository import save_property_to_supabase
+from core import listing_tracker
+from core import sales_comps
+from scrapers.rightmove import LISTING_FACT_KEYS
 
 from core.filters import passes_filters
 from core import ai_scorer
@@ -142,6 +145,13 @@ for search in config["searches"]:
             "source": source,
             "description": description_from(listing),
             "date_found": datetime.now().date().isoformat(),
+            # Location, type, listing dates (Rightmove only for now): used
+            # for price-drop tracking and sold-price comparisons.
+            **{
+                key: listing[key]
+                for key in LISTING_FACT_KEYS
+                if listing.get(key) is not None
+            },
         }
 
         # Flag records where extraction produced junk — a strong sign the
@@ -165,6 +175,29 @@ for search in config["searches"]:
 
         except Exception as e:
             warn(f"Failed to save to Supabase ({property_url}): {e}")
+
+
+# ---- Price tracking: re-check active listings not in today's results ----
+# Picks up price changes on listings that have dropped out of the search
+# results, plus removed / sold STC. Listings saved above were stamped
+# listing_checked_at just now, so they're skipped.
+try:
+    health["listing_refresh"] = listing_tracker.refresh_active_listings(
+        limit=int(config.get("listing_refresh", {}).get("max_per_run", 150)),
+    )
+except Exception as e:
+    health["listing_refresh"] = {"error": str(e)}
+    warn(f"Listing refresh failed: {e}")
+
+# ---- Local sold-price comparisons (HM Land Registry) ----
+# Cached on each property for 30 days; new listings get theirs today.
+try:
+    health["sales_comps"] = sales_comps.refresh_comps(
+        limit=int(config.get("sales_comps", {}).get("max_per_run", 60)),
+    )
+except Exception as e:
+    health["sales_comps"] = {"error": str(e)}
+    warn(f"Sold-price comparisons failed: {e}")
 
 
 # ---- AI triage scoring ----
@@ -216,6 +249,8 @@ print(f"Properties saved: {health['saved_total']}")
 print(f"Missing price:    {health['missing_price']}")
 print(f"Missing address:  {health['missing_address']}")
 print(f"AI scored:        {health['ai_scored']} (failed {health['ai_failed']})")
+print(f"Listing refresh:  {health.get('listing_refresh')}")
+print(f"Sold-price comps: {health.get('sales_comps')}")
 print("Found by source:")
 for source, count in found_by_source.items():
     marker = "  <-- ZERO" if count == 0 else ""
