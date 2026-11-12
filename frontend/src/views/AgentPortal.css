@@ -1,0 +1,216 @@
+.agent-auth .booking-kind {
+  margin-bottom: 16px;
+}
+
+.agent-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.agent-dashboard-head h2 {
+  margin: 2px 0 4px;
+}
+
+.agent-wide {
+  grid-column: 1 / -1;
+}
+
+.agent-listing.paused {
+  opacity: 0.7;
+}
+
+.agent-listing-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.agent-listing-head h3 {
+  margin: 0 0 2px;
+}
+
+.agent-listing-head p {
+  margin: 0;
+}
+
+.agent-day h4 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  color: var(--primary);
+}
+
+.agent-slots {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-slot {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.agent-slot.booked {
+  border-color: #c4e3d0;
+  background: var(--primary-soft);
+}
+
+.agent-slot-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agent-slot-main .link-button {
+  margin-left: auto;
+}
+
+.agent-booking {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+}
+
+.agent-times-form {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.agent-times-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.agent-times-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agent-times-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .agent-listing-head {
+    flex-direction: column;
+  }
+}
+
+/* Buyer side: viewing times on property cards */
+
+.viewing-slots {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #c4e3d0;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  font-size: 13px;
+}
+
+.viewing-slots-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.viewing-slots-head strong {
+  color: var(--primary);
+}
+
+.viewing-day {
+  margin-top: 8px;
+}
+
+.viewing-day h5 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.viewing-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.viewing-slots .viewing-times button {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.viewing-slots .viewing-times button.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.viewing-slots .viewing-times button small {
+  margin-left: 4px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.viewing-confirm {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.viewing-confirm label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.viewing-booked {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.viewing-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}

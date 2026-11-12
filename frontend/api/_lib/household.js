@@ -14,6 +14,32 @@ export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 //
 // Returns the user, or sends the error response and returns null.
 export async function requireHouseholdUser(req, res) {
+  const user = await requireUser(req, res);
+  if (!user) return null;
+
+  const { data: member, error: memberError } = await supabaseAdmin
+    .from("household_members")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (memberError) {
+    console.error("household_members lookup failed:", memberError);
+    res.status(500).json({ error: "Could not verify access" });
+    return null;
+  }
+
+  if (!member) {
+    res.status(403).json({ error: "This account doesn't have access" });
+    return null;
+  }
+
+  return user;
+}
+
+// Any signed-in account (household member or estate agent). Callers must
+// check what this particular user is allowed to touch.
+export async function requireUser(req, res) {
   const authHeader = req.headers.authorization || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
 
@@ -30,23 +56,6 @@ export async function requireHouseholdUser(req, res) {
   if (userError || !user) {
     console.error("Token verification failed:", userError?.status, userError?.message);
     res.status(401).json({ error: "Invalid user token" });
-    return null;
-  }
-
-  const { data: member, error: memberError } = await supabaseAdmin
-    .from("household_members")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (memberError) {
-    console.error("household_members lookup failed:", memberError);
-    res.status(500).json({ error: "Could not verify access" });
-    return null;
-  }
-
-  if (!member) {
-    res.status(403).json({ error: "This account doesn't have access" });
     return null;
   }
 

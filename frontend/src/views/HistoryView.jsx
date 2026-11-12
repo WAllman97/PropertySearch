@@ -4,6 +4,7 @@ import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
 import CommuteSummary from "../components/CommuteSummary";
 import MarketSignals from "../components/MarketSignals";
+import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -46,6 +47,7 @@ function getAgeLabel(days) {
 }
 
 function HistoryView() {
+  const { byProperty: viewingsByProperty, reload: reloadViewings } = useAvailableViewings();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedProperty, setSelectedProperty] = useState(null);
@@ -250,6 +252,11 @@ function HistoryView() {
             <p>{selectedProperty.address}</p>
 
             <MarketSignals property={selectedProperty} defaultOpen />
+            <ViewingSlots
+              property={selectedProperty}
+              slots={viewingsByProperty[selectedProperty.id]}
+              onChanged={reloadViewings}
+            />
 
             <div className="property-score-strip">
               <span>🏠 {selectedProperty.overall_score || "--"}/100</span>
@@ -441,6 +448,11 @@ function HistoryView() {
                 <p>{property.address}</p>
 
                 <MarketSignals property={property} />
+                <ViewingSlots
+                  property={property}
+                  slots={viewingsByProperty[property.id]}
+                  onChanged={reloadViewings}
+                />
 
                 <div className="property-score-strip">
                   <span>🏠 {property.overall_score || "--"}/100</span>
