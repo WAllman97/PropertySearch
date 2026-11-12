@@ -4,6 +4,7 @@ import { postAuthed } from "../lib/api";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
 import CommuteSummary from "../components/CommuteSummary";
 import MarketSignals from "../components/MarketSignals";
+import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 import MarketToolbar from "../components/MarketToolbar";
 import { applyMarketView } from "../utils/market";
 
@@ -32,6 +33,7 @@ function getAgeClass(days) {
 }
 
 function PropertiesView() {
+  const { byProperty: viewingsByProperty, reload: reloadViewings } = useAvailableViewings();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -424,6 +426,11 @@ function PropertiesView() {
                 <p>{property.address}</p>
 
                 <MarketSignals property={property} />
+                <ViewingSlots
+                  property={property}
+                  slots={viewingsByProperty[property.id]}
+                  onChanged={reloadViewings}
+                />
 
                 <div className="property-score-strip">
                   <span>

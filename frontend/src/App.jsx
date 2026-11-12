@@ -10,6 +10,7 @@ import PropertiesView from "./views/PropertiesView";
 import NavigationTabs from "./components/NavigationTabs";
 import CalendarView from "./views/CalendarView";
 import BookingPage from "./views/BookingPage";
+import AgentPortal from "./views/AgentPortal";
 import "./App.css";
 
 const VIEWS = ["properties", "history", "calendar", "dashboard", "settings"];
@@ -31,6 +32,11 @@ function App() {
 
   if (bookingSlug) {
     return <BookingPage slug={bookingSlug} />;
+  }
+
+  // Estate agent area: own sign-up/login, listings and viewing times.
+  if (/^\/agent\/?$/.test(window.location.pathname)) {
+    return <AgentPortal />;
   }
 
   return <MainApp />;
@@ -62,6 +68,19 @@ function MainApp() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Agents who log in on the main page belong in the agent area: they can't
+  // see household data, so the tabs would just be empty.
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const [{ data: isMember }, { data: agent }] = await Promise.all([
+        supabase.rpc("is_household_member"),
+        supabase.from("agents").select("user_id").eq("user_id", user.id).maybeSingle(),
+      ]);
+      if (agent && isMember === false) window.location.replace("/agent");
+    })();
+  }, [user]);
 
   return (
     <div className="app-shell">
