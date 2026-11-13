@@ -95,6 +95,17 @@ export const MARKET_FILTERS = [
 
 export const MARKET_SORTS = [
   { key: "newest", label: "Newest" },
+  // Listings with no price always sort last.
+  {
+    key: "price_low",
+    label: "Price: low to high",
+    compare: (a, b) => (a.price || Infinity) - (b.price || Infinity),
+  },
+  {
+    key: "price_high",
+    label: "Price: high to low",
+    compare: (a, b) => (b.price || -Infinity) - (a.price || -Infinity),
+  },
   {
     key: "biggest_drop",
     label: "Biggest price cut",

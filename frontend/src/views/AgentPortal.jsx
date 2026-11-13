@@ -499,6 +499,7 @@ function SlotRow({ slot, bookings, onChanged }) {
         <div key={booking.id} className="agent-booking">
           <span>
             <strong>{booking.buyer_name}</strong>
+            {!booking.buyer_id && <span className="agent-via"> via your link</span>}
             {booking.buyer_phone && (
               <>
                 {" · "}
@@ -524,6 +525,71 @@ function SlotRow({ slot, bookings, onChanged }) {
         </div>
       ))}
     </li>
+  );
+}
+
+// The public booking link for one listing, with quick ways to send it.
+function ShareLink({ listing }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/viewings/${listing.id}`;
+  const text = `Book a viewing of ${listing.address} here: ${url}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt("Copy this link:", url);
+    }
+  }
+
+  async function share() {
+    try {
+      await navigator.share({ title: `Viewings: ${listing.address}`, text, url });
+    } catch {
+      // Cancelled, or not supported: the other buttons still work.
+    }
+  }
+
+  return (
+    <div className="agent-share">
+      <span className="agent-share-label">Send to buyers:</span>
+      <a href={url} target="_blank" rel="noreferrer" className="agent-share-url">
+        {url.replace(/^https?:\/\//, "")}
+      </a>
+      <div className="agent-share-buttons">
+        <button type="button" className="secondary-button" onClick={copy}>
+          {copied ? "Copied" : "Copy link"}
+        </button>
+        <a
+          className="secondary-button"
+          href={`https://wa.me/?text=${encodeURIComponent(text)}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          WhatsApp
+        </a>
+        <a
+          className="secondary-button"
+          href={`mailto:?subject=${encodeURIComponent(`Viewings: ${listing.address}`)}&body=${encodeURIComponent(
+            `Hi,
+
+You can book a viewing of ${listing.address} at a time that suits you here:
+${url}
+
+Thanks`
+          )}`}
+        >
+          Email
+        </a>
+        {typeof navigator !== "undefined" && navigator.share && (
+          <button type="button" className="secondary-button" onClick={share}>
+            Share
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -566,8 +632,10 @@ function ListingCard({ listing, slots, bookingsBySlot, agentId, onChanged }) {
         </button>
       </div>
 
-      {!listing.is_active && (
-        <p className="muted">Hidden: buyers can't see or book these times.</p>
+      {listing.is_active ? (
+        <ShareLink listing={listing} />
+      ) : (
+        <p className="muted">Hidden: buyers can't see or book these times, and the link is off.</p>
       )}
 
       {days.length === 0 ? (
