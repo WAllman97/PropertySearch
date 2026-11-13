@@ -117,7 +117,50 @@
   flex-wrap: wrap;
 }
 
+.agent-share {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  font-size: 13px;
+}
+
+.agent-share-label {
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.agent-share-url {
+  word-break: break-all;
+}
+
+.agent-share-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.agent-share-buttons .secondary-button {
+  padding: 5px 12px;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.agent-via {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 @media (max-width: 640px) {
+  .agent-share-buttons {
+    margin-left: 0;
+  }
+
   .agent-listing-head {
     flex-direction: column;
   }

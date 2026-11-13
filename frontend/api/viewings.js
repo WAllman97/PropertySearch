@@ -8,45 +8,17 @@
 // calendar (property_notes) in step, which also drives the reminder emails.
 import { requireHouseholdUser, requireUser, supabaseAdmin, underRateLimit } from "./_lib/household.js";
 import { appBaseUrl } from "./_lib/booking.js";
-import { buildIcs, emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
+import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
 import { listingKey } from "./_lib/listing.js";
-import { formatLondon } from "./_lib/time.js";
+import {
+  BOOKING_ERRORS,
+  agentLabel,
+  loadSlot,
+  sendBookingEmails,
+  slotLabel,
+} from "./_lib/viewings.js";
 
 const MAX_BOOKINGS_PER_DAY = 20;
-
-const BOOKING_ERRORS = {
-  SLOT_GONE: [410, "Sorry, the agent has removed that time."],
-  SLOT_PAST: [410, "That time has already passed."],
-  SLOT_FULL: [409, "Sorry, that time has just been taken. Please pick another."],
-  ALREADY_BOOKED: [409, "You already have a viewing booked for this property."],
-};
-
-function slotLabel(slot) {
-  const start = new Date(slot.starts_at);
-  const end = new Date(slot.ends_at);
-  return `${formatLondon(start)}–${formatLondon(end, { weekday: undefined, day: undefined, month: undefined })}`;
-}
-
-function agentLabel(agent) {
-  return [agent.name, [agent.agency, agent.branch].filter(Boolean).join(" ")]
-    .filter(Boolean)
-    .join(", ");
-}
-
-function detailRow(label, value) {
-  if (!value) return "";
-  return `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">${escapeHtml(label)}</td><td style="padding:4px 0;">${value}</td></tr>`;
-}
-
-// Slot + listing + agent in one go (service role).
-async function loadSlot(slotId) {
-  const { data } = await supabaseAdmin
-    .from("viewing_slots")
-    .select("*, agent_listings(*), agents(*)")
-    .eq("id", slotId)
-    .maybeSingle();
-  return data;
-}
 
 async function buyerIdentity(user) {
   const { data: page } = await supabaseAdmin
@@ -145,79 +117,15 @@ async function handleBook(req, res) {
     return res.status(500).json({ error: "Could not book that viewing. Please try again." });
   }
 
-  const listing = slot.agent_listings;
-  const agent = slot.agents;
-  const when = slotLabel(slot);
-  const address = listing.address || property.address;
-  const isOpenHouse = slot.capacity > 1;
+  await setCalendarViewing(property.id, slot, slot.agents);
 
-  await setCalendarViewing(property.id, slot, agent);
-
-  const ics = (summary, description) =>
-    buildIcs({
-      uid: bookingId,
-      start: new Date(slot.starts_at),
-      end: new Date(slot.ends_at),
-      summary,
-      description,
-      location: address,
-    });
-
-  const { count: booked } = await supabaseAdmin
-    .from("viewing_bookings")
-    .select("id", { count: "exact", head: true })
-    .eq("slot_id", slot.id)
-    .eq("status", "confirmed");
-
-  const base = appBaseUrl(req);
-
-  await Promise.all([
-    sendEmail({
-      to: agent.email,
-      replyTo: user.email,
-      subject: `Viewing booked: ${address}, ${when}`,
-      html: emailLayout(
-        "New viewing booked",
-        `<p style="margin:0 0 12px;">${escapeHtml(identity.name)} has booked a viewing through PropertySearch.</p>
-        <table style="border-collapse:collapse;font-size:14px;margin-bottom:16px;">
-          ${detailRow("Property", escapeHtml(address))}
-          ${detailRow("When", escapeHtml(when))}
-          ${isOpenHouse ? detailRow("Open house", `${booked ?? "?"} of ${slot.capacity} spaces booked`) : ""}
-          ${detailRow("Buyer", escapeHtml(identity.name))}
-          ${detailRow("Phone", escapeHtml(buyerPhone))}
-          ${detailRow("Email", `<a href="mailto:${escapeHtml(user.email)}">${escapeHtml(user.email)}</a>`)}
-        </table>
-        <p style="margin:0;"><a href="${escapeHtml(base)}/agent" style="color:#223a33;font-weight:bold;">See all your viewings</a></p>`
-      ),
-      ics: ics(`Viewing: ${address} (${identity.name})`, [
-        `Buyer: ${identity.name}`,
-        buyerPhone ? `Phone: ${buyerPhone}` : "",
-        `Email: ${user.email}`,
-      ].filter(Boolean).join("\n")),
-    }),
-    sendEmail({
-      to: user.email,
-      replyTo: agent.email,
-      subject: `Viewing confirmed: ${address}, ${when}`,
-      html: emailLayout(
-        "Your viewing is booked",
-        `<table style="border-collapse:collapse;font-size:14px;margin-bottom:16px;">
-          ${detailRow("Property", escapeHtml(address))}
-          ${detailRow("When", escapeHtml(when))}
-          ${isOpenHouse ? detailRow("Type", "Open house") : ""}
-          ${detailRow("Agent", escapeHtml(agentLabel(agent)))}
-          ${detailRow("Agent phone", escapeHtml(agent.phone))}
-          ${detailRow("Notes", escapeHtml(listing.notes))}
-        </table>
-        <p style="margin:0;">It's in your PropertySearch calendar, and you'll get a reminder the day before.</p>`
-      ),
-      ics: ics(`Viewing: ${address}`, [
-        `Agent: ${agentLabel(agent)}`,
-        agent.phone ? `Phone: ${agent.phone}` : "",
-        listing.notes || "",
-      ].filter(Boolean).join("\n")),
-    }),
-  ]);
+  await sendBookingEmails({
+    slot,
+    bookingId,
+    buyer: { name: identity.name, email: user.email, phone: buyerPhone },
+    base: appBaseUrl(req),
+    inCalendar: true,
+  });
 
   return res.status(200).json({ success: true, bookingId });
 }

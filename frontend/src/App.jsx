@@ -11,6 +11,7 @@ import NavigationTabs from "./components/NavigationTabs";
 import CalendarView from "./views/CalendarView";
 import BookingPage from "./views/BookingPage";
 import AgentPortal from "./views/AgentPortal";
+import PublicViewingPage from "./views/PublicViewingPage";
 import "./App.css";
 
 const VIEWS = ["properties", "history", "calendar", "dashboard", "settings"];
@@ -32,6 +33,12 @@ function App() {
 
   if (bookingSlug) {
     return <BookingPage slug={bookingSlug} />;
+  }
+
+  // Public page an agent shares with buyers to book a listing's viewings.
+  const viewingsMatch = window.location.pathname.match(/^\/viewings\/([0-9a-f-]{36})\/?$/i);
+  if (viewingsMatch) {
+    return <PublicViewingPage listingId={viewingsMatch[1]} />;
   }
 
   // Estate agent area: own sign-up/login, listings and viewing times.
