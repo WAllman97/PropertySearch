@@ -9,6 +9,7 @@ import { supabaseAdmin, underRateLimit } from "./_lib/household.js";
 import { appBaseUrl, getFreeSlots, loadActivePage } from "./_lib/booking.js";
 import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
 import { formatLondon } from "./_lib/time.js";
+import { withCors } from "./_lib/cors.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_REQUESTS_PER_DAY = 30; // per buyer, protects them from form spam
@@ -162,7 +163,9 @@ async function handlePost(req, res) {
   return res.status(200).json({ success: true, id: created.id });
 }
 
-export default async function handler(req, res) {
+export default withCors(handler);
+
+async function handler(req, res) {
   try {
     if (req.method === "GET") return await handleGet(req, res);
     if (req.method === "POST") return await handlePost(req, res);

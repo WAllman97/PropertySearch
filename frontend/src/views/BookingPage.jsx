@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { apiUrl } from "../lib/platform";
 
 // Public page an agent opens from the buyer's link (/book/<slug>). No login.
 // Shows only free slots; the buyer's contact details are never shown here.
@@ -61,7 +62,7 @@ function BookingPage({ slug }) {
   async function load() {
     setState((s) => ({ ...s, loading: true, error: "" }));
     try {
-      const response = await fetch(`/api/booking?slug=${encodeURIComponent(slug)}`);
+      const response = await fetch(apiUrl(`/api/booking?slug=${encodeURIComponent(slug)}`));
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "This booking page isn't available.");
       setState({ loading: false, error: "", page: body.page, slots: body.slots || [] });
@@ -92,7 +93,7 @@ function BookingPage({ slug }) {
     setSubmitError("");
 
     try {
-      const response = await fetch("/api/booking", {
+      const response = await fetch(apiUrl("/api/booking"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, slug, kind, startsAt: selectedSlot.start }),

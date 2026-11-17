@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { siteUrl } from "../lib/platform";
 
 // Sign-up is deliberately not offered here: any signed-in account can send
 // share emails from our domain and spend Google Maps quota. New users should
@@ -48,7 +49,7 @@ function AuthForm() {
     // This URL must be listed under Authentication -> URL Configuration ->
     // Redirect URLs in Supabase, otherwise the Site URL is used instead.
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: siteUrl,
     });
 
     setLoading(false);
@@ -141,6 +142,12 @@ function AuthForm() {
       <button type="button" className="link-button" onClick={() => switchMode("forgot")}>
         Forgot password?
       </button>
+
+      {/* In the phone app there's no address bar, so agents need a way in. */}
+      <p className="muted auth-agent-link">
+        Estate agent? <a href="/agent">Sign in or sign up here</a> ·{" "}
+        <a href="/privacy">Privacy</a>
+      </p>
     </div>
   );
 }

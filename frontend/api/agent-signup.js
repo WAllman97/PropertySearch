@@ -10,6 +10,7 @@
 // If AGENT_SIGNUP_CODE is set, agents must enter it (hand it out with the
 // link) so strangers can't fill buyers' cards with fake viewing times.
 import { supabaseAdmin } from "./_lib/household.js";
+import { withCors } from "./_lib/cors.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -18,7 +19,9 @@ function clean(value, max) {
   return value.trim().slice(0, max);
 }
 
-export default async function handler(req, res) {
+export default withCors(handler);
+
+async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

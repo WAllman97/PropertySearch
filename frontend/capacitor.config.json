@@ -1,0 +1,9 @@
+{
+  "appId": "com.propertysearch.app",
+  "appName": "PropertySearch",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#f8f6f2"
+  }
+}

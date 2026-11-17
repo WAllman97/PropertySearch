@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
+import { apiUrl, siteUrl } from "../lib/platform";
 import { listingKey } from "../../api/_lib/listing.js";
 import { londonToUtc } from "../../api/_lib/time.js";
 import "./AgentPortal.css";
@@ -67,7 +68,7 @@ function AgentAuth() {
 
     try {
       if (mode === "signup") {
-        const response = await fetch("/api/agent-signup", {
+        const response = await fetch(apiUrl("/api/agent-signup"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
@@ -531,7 +532,7 @@ function SlotRow({ slot, bookings, onChanged }) {
 // The public booking link for one listing, with quick ways to send it.
 function ShareLink({ listing }) {
   const [copied, setCopied] = useState(false);
-  const url = `${window.location.origin}/viewings/${listing.id}`;
+  const url = `${siteUrl}/viewings/${listing.id}`;
   const text = `Book a viewing of ${listing.address} here: ${url}`;
 
   async function copy() {
@@ -761,6 +762,74 @@ function AgentDashboard({ agent }) {
 }
 
 // ---------------------------------------------------------------------------
+// Account deletion (Apple requires it for apps with sign-up).
+
+function DeleteAccount() {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function remove() {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await postAuthed("/api/delete-account", { confirm: typed });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Could not delete your account");
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card delete-account">
+      <h3>Delete account</h3>
+      {!open ? (
+        <>
+          <p className="muted">
+            Permanently deletes your profile, listings and viewing times. Buyers with upcoming
+            viewings are emailed that they're cancelled.
+          </p>
+          <button type="button" className="danger-button" onClick={() => setOpen(true)}>
+            Delete my account
+          </button>
+        </>
+      ) : (
+        <>
+          <p>
+            This can't be undone. Type <strong>DELETE</strong> to confirm.
+          </p>
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoCapitalize="characters"
+            autoComplete="off"
+            aria-label="Type DELETE to confirm"
+          />
+          {error && <p className="booking-error">{error}</p>}
+          <div className="delete-account-actions">
+            <button
+              type="button"
+              className="danger-button"
+              disabled={typed !== "DELETE" || busy}
+              onClick={remove}
+            >
+              {busy ? "Deleting..." : "Delete permanently"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} disabled={busy}>
+              Keep my account
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 function AgentPortal() {
   const [user, setUser] = useState(undefined);
@@ -811,11 +880,20 @@ function AgentPortal() {
         ) : !user ? (
           <AgentAuth />
         ) : !agent ? (
-          <AgentProfileForm user={user} onCreated={loadAgent} />
+          <>
+            <AgentProfileForm user={user} onCreated={loadAgent} />
+            <DeleteAccount />
+          </>
         ) : (
-          <AgentDashboard agent={agent} />
+          <>
+            <AgentDashboard agent={agent} />
+            <DeleteAccount />
+          </>
         )}
       </main>
+      <footer className="app-footer muted">
+        <a href="/privacy">Privacy policy</a>
+      </footer>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./AgentPortal.css";
+import { apiUrl } from "../lib/platform";
 
 // Public page an agent shares with buyers: /viewings/<listing id>. Anyone can
 // book one of the agent's times without an account. ?cancel=<token> shows
@@ -31,7 +32,7 @@ function CancelBooking({ token }) {
   const [state, setState] = useState({ loading: true });
 
   useEffect(() => {
-    fetch(`/api/listing-viewings?cancel=${encodeURIComponent(token)}`)
+    fetch(apiUrl(`/api/listing-viewings?cancel=${encodeURIComponent(token)}`))
       .then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => ({})) }))
       .then(({ ok, body }) =>
         setState(ok ? { booking: body.booking } : { error: body.error || "Booking not found" })
@@ -40,7 +41,7 @@ function CancelBooking({ token }) {
 
   async function cancel() {
     setState({ ...state, busy: true });
-    const response = await fetch("/api/listing-viewings", {
+    const response = await fetch(apiUrl("/api/listing-viewings"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "cancel", token }),
@@ -109,7 +110,7 @@ function PublicViewingPage({ listingId }) {
   const [done, setDone] = useState(null);
 
   async function load() {
-    const response = await fetch(`/api/listing-viewings?listing=${encodeURIComponent(listingId)}`);
+    const response = await fetch(apiUrl(`/api/listing-viewings?listing=${encodeURIComponent(listingId)}`));
     const body = await response.json().catch(() => ({}));
     setState(response.ok ? body : { error: body.error || "This booking link isn't active" });
   }
@@ -137,7 +138,7 @@ function PublicViewingPage({ listingId }) {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const response = await fetch("/api/listing-viewings", {
+    const response = await fetch(apiUrl("/api/listing-viewings"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "book", listingId, slotId: selected.id, ...form }),
