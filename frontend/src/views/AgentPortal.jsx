@@ -243,11 +243,83 @@ function AgentProfileForm({ user, onCreated }) {
 // ---------------------------------------------------------------------------
 // Dashboard
 
-function AddListingForm({ agentId, onAdded }) {
-  const [form, setForm] = useState({ url: "", address: "", price: "", notes: "" });
+// Postcode with or without the space: "SW17 0AB", "sw170ab".
+const POSTCODE_RE = /^[A-Z]{1,2}[0-9][0-9A-Z]?\s*[0-9][A-Z]{2}$/i;
+
+const EMPTY_LISTING = {
+  url: "",
+  address: "",
+  postcode: "",
+  price: "",
+  bedrooms: "",
+  property_type: "",
+  has_garden: "",
+  image_url: "",
+  notes: "",
+};
+
+function listingToForm(listing) {
+  return {
+    url: listing.listing_url,
+    address: listing.address,
+    postcode: listing.postcode || "",
+    price: listing.price ?? "",
+    bedrooms: listing.bedrooms ?? "",
+    property_type: listing.property_type || "",
+    has_garden: listing.has_garden == null ? "" : listing.has_garden ? "yes" : "no",
+    image_url: listing.image_url || "",
+    notes: listing.notes || "",
+  };
+}
+
+function formToRow(form) {
+  const price = Number(String(form.price).replace(/[^0-9]/g, ""));
+  return {
+    listing_url: form.url.trim(),
+    address: form.address.trim(),
+    postcode: form.postcode.trim().toUpperCase().replace(/\s+/g, " ") || null,
+    price: price > 0 ? price : null,
+    bedrooms: form.bedrooms === "" ? null : Number(form.bedrooms),
+    property_type: form.property_type || null,
+    has_garden: form.has_garden === "" ? null : form.has_garden === "yes",
+    image_url: form.image_url.trim() || null,
+    notes: form.notes.trim() || null,
+  };
+}
+
+// "12 buyers match" while the agent fills the form. Count only, never who.
+function useMatchCount(row) {
+  const [count, setCount] = useState(null);
+  const ready = POSTCODE_RE.test(row.postcode || "");
+
+  useEffect(() => {
+    if (!ready) {
+      setCount(null);
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase.rpc("count_matching_buyers", {
+        p_postcode: row.postcode,
+        p_price: row.price,
+        p_bedrooms: row.bedrooms,
+        p_property_type: row.property_type,
+        p_has_garden: row.has_garden,
+      });
+      setCount(error ? null : data);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [ready, row.postcode, row.price, row.bedrooms, row.property_type, row.has_garden]);
+
+  return count;
+}
+
+function ListingForm({ agentId, listing, onSaved, onCancel }) {
+  const [form, setForm] = useState(listing ? listingToForm(listing) : EMPTY_LISTING);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const update = (key) => (event) => setForm({ ...form, [key]: event.target.value });
+  const row = formToRow(form);
+  const matchCount = useMatchCount(row);
 
   async function submit(event) {
     event.preventDefault();
@@ -257,29 +329,28 @@ function AddListingForm({ agentId, onAdded }) {
       setError("Paste the full Rightmove, Zoopla or OnTheMarket link for the listing.");
       return;
     }
-
-    setBusy(true);
-    const price = Number(String(form.price).replace(/[^0-9]/g, ""));
-    const { error: insertError } = await supabase.from("agent_listings").insert({
-      agent_id: agentId,
-      listing_url: form.url.trim(),
-      address: form.address.trim(),
-      price: price > 0 ? price : null,
-      notes: form.notes.trim() || null,
-    });
-    setBusy(false);
-
-    if (insertError) {
-      setError(
-        insertError.code === "23505"
-          ? "You've already added this listing."
-          : insertError.message
-      );
+    if (!POSTCODE_RE.test(form.postcode.trim())) {
+      setError("Add the full postcode, e.g. SW17 0AB. It's how we find matching buyers.");
+      return;
+    }
+    if (row.image_url && !/^https:\/\//i.test(row.image_url)) {
+      setError("The photo link should start with https://");
       return;
     }
 
-    setForm({ url: "", address: "", price: "", notes: "" });
-    onAdded();
+    setBusy(true);
+    const { error: saveError } = listing
+      ? await supabase.from("agent_listings").update(row).eq("id", listing.id)
+      : await supabase.from("agent_listings").insert({ ...row, agent_id: agentId });
+    setBusy(false);
+
+    if (saveError) {
+      setError(saveError.code === "23505" ? "You've already added this listing." : saveError.message);
+      return;
+    }
+
+    if (!listing) setForm(EMPTY_LISTING);
+    onSaved();
   }
 
   return (
@@ -300,8 +371,56 @@ function AddListingForm({ agentId, onAdded }) {
           <input required maxLength={200} value={form.address} onChange={update("address")} />
         </label>
         <label>
+          Postcode *
+          <input
+            required
+            maxLength={10}
+            autoCapitalize="characters"
+            placeholder="SW17 0AB"
+            value={form.postcode}
+            onChange={update("postcode")}
+          />
+        </label>
+        <label>
           Asking price
           <input inputMode="numeric" placeholder="£" value={form.price} onChange={update("price")} />
+        </label>
+        <label>
+          Bedrooms
+          <select value={form.bedrooms} onChange={update("bedrooms")}>
+            <option value="">Not set</option>
+            {[0, 1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>
+                {n === 0 ? "Studio" : n === 6 ? "6+" : n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Type
+          <select value={form.property_type} onChange={update("property_type")}>
+            <option value="">Not set</option>
+            <option value="house">House</option>
+            <option value="flat">Flat</option>
+            <option value="bungalow">Bungalow</option>
+          </select>
+        </label>
+        <label>
+          Garden
+          <select value={form.has_garden} onChange={update("has_garden")}>
+            <option value="">Not set</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </label>
+        <label className="agent-wide">
+          Main photo link
+          <input
+            type="url"
+            placeholder="https://... (right-click the main photo, Copy image address)"
+            value={form.image_url}
+            onChange={update("image_url")}
+          />
         </label>
         <label className="agent-wide">
           Note for buyers
@@ -313,11 +432,85 @@ function AddListingForm({ agentId, onAdded }) {
           />
         </label>
       </div>
+
+      <p className="agent-match-preview" aria-live="polite">
+        {matchCount === null
+          ? "Add the postcode to see how many buyers this matches."
+          : matchCount === 0
+            ? "No buyers' searches match this yet. You can still share your booking link."
+            : `${matchCount} buyer${matchCount === 1 ? "" : "s"} on PropertySearch match${matchCount === 1 ? "es" : ""} this.`}
+      </p>
+
       {error && <p className="booking-error">{error}</p>}
-      <button type="submit" className="primary-button" disabled={busy}>
-        {busy ? "Adding..." : "Add listing"}
-      </button>
+      <div className="delete-account-actions">
+        <button type="submit" className="primary-button" disabled={busy}>
+          {busy ? "Saving..." : listing ? "Save details" : "Add listing"}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
+  );
+}
+
+// Send to every matching buyer who hasn't had it yet.
+function ListingReach({ listing, reach, onSent }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  if (!listing.is_active) return null;
+  if (!listing.postcode) {
+    return (
+      <p className="agent-reach muted">
+        Add the postcode (Edit details) to send this to matching buyers.
+      </p>
+    );
+  }
+
+  const matching = reach?.matching ?? 0;
+  const sent = reach?.sent ?? 0;
+
+  async function send() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await postAuthed("/api/send-listing", { listingId: listing.id });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Could not send");
+      setMessage(
+        body.sent
+          ? `Sent to ${body.sent} buyer${body.sent === 1 ? "" : "s"}.`
+          : "Everyone who matches has already had it."
+      );
+      onSent();
+    } catch (err) {
+      setMessage(err.message);
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="agent-reach">
+      <p>
+        <strong>
+          {matching} matching buyer{matching === 1 ? "" : "s"}
+        </strong>
+        {sent ? ` · sent to ${sent}` : ""}
+      </p>
+      {matching > 0 && (
+        <button type="button" className="primary-button" disabled={busy} onClick={send}>
+          {busy
+            ? "Sending..."
+            : sent
+              ? "Send to new matches"
+              : `Send to ${matching} buyer${matching === 1 ? "" : "s"}`}
+        </button>
+      )}
+      {message && <p className="muted">{message}</p>}
+    </div>
   );
 }
 
@@ -594,8 +787,21 @@ Thanks`
   );
 }
 
-function ListingCard({ listing, slots, bookingsBySlot, agentId, onChanged }) {
+function listingFacts(listing) {
+  return [
+    listing.postcode,
+    listing.price ? `£${listing.price.toLocaleString("en-GB")}` : "",
+    listing.bedrooms != null ? (listing.bedrooms === 0 ? "studio" : `${listing.bedrooms} bed`) : "",
+    listing.property_type || "",
+    listing.has_garden ? "garden" : listing.has_garden === false ? "no garden" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function ListingCard({ listing, slots, bookingsBySlot, agentId, reach, onChanged }) {
   const [adding, setAdding] = useState(slots.length === 0);
+  const [editing, setEditing] = useState(false);
 
   const days = useMemo(() => {
     const groups = new Map();
@@ -618,20 +824,40 @@ function ListingCard({ listing, slots, bookingsBySlot, agentId, onChanged }) {
   return (
     <section className={`card agent-listing ${listing.is_active ? "" : "paused"}`}>
       <div className="agent-listing-head">
+        {listing.image_url && <img className="agent-listing-photo" src={listing.image_url} alt="" />}
         <div>
           <h3>{listing.address}</h3>
           <p className="muted">
-            {listing.price ? `£${listing.price.toLocaleString("en-GB")} · ` : ""}
+            {listingFacts(listing) ? `${listingFacts(listing)} · ` : ""}
             <a href={listing.listing_url} target="_blank" rel="noreferrer">
               View listing
             </a>
             {listing.notes ? ` · ${listing.notes}` : ""}
           </p>
         </div>
-        <button type="button" className="secondary-button" onClick={toggleActive}>
-          {listing.is_active ? "Hide from buyers" : "Show to buyers"}
-        </button>
+        <div className="agent-listing-buttons">
+          <button type="button" className="secondary-button" onClick={() => setEditing(!editing)}>
+            {editing ? "Close" : "Edit details"}
+          </button>
+          <button type="button" className="secondary-button" onClick={toggleActive}>
+            {listing.is_active ? "Hide from buyers" : "Show to buyers"}
+          </button>
+        </div>
       </div>
+
+      {editing && (
+        <ListingForm
+          agentId={agentId}
+          listing={listing}
+          onSaved={() => {
+            setEditing(false);
+            onChanged();
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      )}
+
+      <ListingReach listing={listing} reach={reach} onSent={onChanged} />
 
       {listing.is_active ? (
         <ShareLink listing={listing} />
@@ -681,11 +907,12 @@ function AgentDashboard({ agent }) {
   const [listings, setListings] = useState([]);
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [reach, setReach] = useState({});
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     const since = new Date(Date.now() - 2 * 3600000).toISOString();
-    const [listingsResult, slotsResult, bookingsResult] = await Promise.all([
+    const [listingsResult, slotsResult, bookingsResult, reachResult] = await Promise.all([
       supabase.from("agent_listings").select("*").order("created_at", { ascending: false }),
       supabase
         .from("viewing_slots")
@@ -698,7 +925,11 @@ function AgentDashboard({ agent }) {
         .select("*")
         .eq("status", "confirmed")
         .order("created_at"),
+      supabase.rpc("agent_listing_reach"),
     ]);
+    const reachMap = {};
+    for (const r of reachResult.data || []) reachMap[r.listing_id] = r;
+    setReach(reachMap);
     setListings(listingsResult.data || []);
     setSlots(slotsResult.data || []);
     setBookings(bookingsResult.data || []);
@@ -740,7 +971,7 @@ function AgentDashboard({ agent }) {
 
       <section className="card">
         <h3>Add a listing</h3>
-        <AddListingForm agentId={agent.user_id} onAdded={load} />
+        <ListingForm agentId={agent.user_id} onSaved={load} />
       </section>
 
       {loading ? (
@@ -753,6 +984,7 @@ function AgentDashboard({ agent }) {
             slots={slotsByListing[listing.id] || []}
             bookingsBySlot={bookingsBySlot}
             agentId={agent.user_id}
+            reach={reach[listing.id]}
             onChanged={load}
           />
         ))

@@ -280,3 +280,44 @@
   text-align: center;
   font-size: 13px;
 }
+
+/* Listing details, match preview and sending */
+.agent-listing-photo {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex: none;
+}
+
+.agent-listing-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.agent-match-preview {
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.agent-reach {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.agent-reach p {
+  margin: 0;
+}
