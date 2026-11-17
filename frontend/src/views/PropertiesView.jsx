@@ -6,6 +6,7 @@ import CommuteSummary from "../components/CommuteSummary";
 import MarketSignals from "../components/MarketSignals";
 import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 import MarketToolbar from "../components/MarketToolbar";
+import SaveLinkForm from "../components/SaveLinkForm";
 import { applyMarketView } from "../utils/market";
 
 function getPropertyAgeDays(property) {
@@ -162,53 +163,6 @@ function PropertiesView() {
     }
   }
 
-  function detectSource(url) {
-    if (url.includes("rightmove.co.uk")) return "rightmove";
-    if (url.includes("zoopla.co.uk")) return "zoopla";
-    if (url.includes("onthemarket.com")) return "onthemarket";
-    return "manual";
-  }
-
-  async function addManualProperty(event) {
-    event.preventDefault();
-
-    const form = event.target;
-    const listingUrl = form.listing_url.value.trim();
-    const source = detectSource(listingUrl);
-
-    const { data, error } = await supabase
-      .from("properties")
-      .insert({
-        source,
-        listing_id: `manual-${Date.now()}`,
-        title: form.title.value || `${source} property`,
-        address: form.address.value || "Address to update",
-        price: form.price.value ? Number(form.price.value) : null,
-        bedrooms: form.bedrooms.value ? Number(form.bedrooms.value) : null,
-        image_url: form.image_url.value || "",
-        listing_url: listingUrl,
-        date_found: new Date().toISOString().split("T")[0],
-        status: "favourite",
-      })
-      .select()
-      .single();
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    try {
-      await postAuthed("/api/calculate-commute", { propertyId: data.id });
-    } catch (err) {
-      console.error("Commute calculation failed:", err);
-    }
-
-    form.reset();
-    setShowAddModal(false);
-    await loadProperties();
-  }
-
   if (loading) {
     return (
       <section className="card">
@@ -241,8 +195,7 @@ function PropertiesView() {
               <div>
                 <h3>Add Property</h3>
                 <p>
-                  Paste a property link and manually add the key details to your
-                  watchlist.
+                  Paste a property link. We fill in the details for you to check.
                 </p>
               </div>
 
@@ -255,58 +208,12 @@ function PropertiesView() {
               </button>
             </div>
 
-            <form className="manual-property-form" onSubmit={addManualProperty}>
-              <label>
-                Property link
-                <input
-                  name="listing_url"
-                  type="url"
-                  placeholder="Paste Rightmove / OnTheMarket / Zoopla link"
-                  required
-                />
-              </label>
-
-              <label>
-                Main image URL
-                <input
-                  name="image_url"
-                  type="url"
-                  placeholder="Paste main image URL"
-                />
-              </label>
-
-              <label>
-                Title
-                <input
-                  name="title"
-                  type="text"
-                  placeholder="e.g. 3 bed terraced house"
-                />
-              </label>
-
-              <label>
-                Address / area
-                <input
-                  name="address"
-                  type="text"
-                  placeholder="e.g. Battersea, London"
-                />
-              </label>
-
-              <label>
-                Price
-                <input name="price" type="number" placeholder="750000" />
-              </label>
-
-              <label>
-                Bedrooms
-                <input name="bedrooms" type="number" placeholder="3" />
-              </label>
-
-              <button type="submit" className="primary-button">
-                Add to Watchlist
-              </button>
-            </form>
+            <SaveLinkForm
+              onSaved={async () => {
+                setShowAddModal(false);
+                await loadProperties();
+              }}
+            />
           </div>
         </div>
       )}
