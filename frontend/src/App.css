@@ -578,6 +578,10 @@ label {
   border-radius: var(--radius-xl);
   padding: 1.6rem;
   box-shadow: var(--shadow-modal);
+  /* Taller than the screen (photo + form, small phones): scroll inside. */
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ============================================================================
@@ -1628,4 +1632,59 @@ button.link-button:hover {
   padding: 0;
   margin-bottom: 6px;
   font-weight: 600;
+}
+
+/* ---- Save a link (Add Property) -------------------------------------- */
+.save-link {
+  display: grid;
+  gap: 14px;
+}
+
+.save-link-lookup {
+  display: grid;
+  gap: 10px;
+}
+
+.save-link-lookup label,
+.save-link-grid label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.save-link-preview {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.save-link-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.save-link-wide {
+  grid-column: 1 / -1;
+}
+
+.save-link-photo {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.save-link-note {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.save-link-note.warn {
+  background: var(--accent-soft);
+  color: var(--text);
 }
