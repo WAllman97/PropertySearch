@@ -1505,3 +1505,127 @@ button.link-button:hover {
   color: var(--primary);
   font-weight: 800;
 }
+
+/* ---- Phone app (Capacitor) ------------------------------------------- */
+/* Keep content clear of the notch, Dynamic Island and home indicator. */
+.native-app .app-shell,
+.native-app .booking-shell {
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-bottom: max(32px, env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+
+.native-app body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Lift-on-hover sticks after a tap on touch screens. */
+.native-app button:hover {
+  transform: none;
+}
+
+/* iOS zooms into any field under 16px when it is tapped. */
+@media (max-width: 760px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+.auth-agent-link {
+  margin-top: 18px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.privacy-page ul {
+  padding-left: 20px;
+  line-height: 1.6;
+}
+
+/* ---- Buyer searches (Settings) --------------------------------------- */
+.buyer-searches {
+  display: grid;
+  gap: 12px;
+}
+
+.buyer-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.buyer-search-row p {
+  margin: 4px 0 0;
+}
+
+.buyer-search-row.paused {
+  opacity: 0.6;
+}
+
+.buyer-search-row-actions,
+.buyer-search-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.buyer-search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.buyer-search-form .field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.area-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 4px;
+}
+
+.area-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.area-chip.invalid {
+  background: var(--danger-bg);
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+.type-options {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+.type-options legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
