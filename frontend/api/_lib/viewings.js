@@ -121,3 +121,53 @@ export async function sendBookingEmails({ slot, bookingId, buyer, base, inCalend
     }),
   ]);
 }
+
+// Take a booked viewing back out of the household calendar.
+export async function clearCalendarViewing(propertyId, slot) {
+  if (!propertyId) return;
+  const { error } = await supabaseAdmin
+    .from("property_notes")
+    .update({ viewing_datetime: null, updated_at: new Date().toISOString() })
+    .eq("property_id", propertyId)
+    .eq("viewing_datetime", slot.starts_at);
+  if (error) console.error("Could not clear calendar viewing:", error);
+}
+
+// The agent withdraws a time: cancel it and every booking on it, and tell
+// each buyer. Used by "Cancel time" and by agent account deletion.
+// Returns how many bookings were cancelled.
+export async function cancelSlotAndNotify(slot) {
+  const now = new Date().toISOString();
+
+  await supabaseAdmin.from("viewing_slots").update({ cancelled_at: now }).eq("id", slot.id);
+
+  const { data: cancelled } = await supabaseAdmin
+    .from("viewing_bookings")
+    .update({ status: "cancelled", cancelled_by: "agent", cancelled_at: now })
+    .eq("slot_id", slot.id)
+    .eq("status", "confirmed")
+    .select("*");
+
+  const address = slot.agent_listings.address;
+  const when = slotLabel(slot);
+  const agent = slot.agents;
+
+  await Promise.all(
+    (cancelled || []).map(async (booking) => {
+      await clearCalendarViewing(booking.property_id, slot);
+      await sendEmail({
+        to: booking.buyer_email,
+        replyTo: agent.email,
+        subject: `Viewing cancelled: ${address}, ${when}`,
+        html: emailLayout(
+          "Your viewing has been cancelled",
+          `<p style="margin:0;">${escapeHtml(agentLabel(agent))} has cancelled the viewing of
+          <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. You can pick another
+          time in PropertySearch, or reply to this email to contact the agent.</p>`
+        ),
+      });
+    })
+  );
+
+  return cancelled?.length || 0;
+}

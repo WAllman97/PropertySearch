@@ -1,4 +1,5 @@
 import BookingSettings from "../components/BookingSettings";
+import BuyerSearches from "../components/BuyerSearches";
 import BuyerProfileSettings from "../components/BuyerProfileSettings";
 import NotificationSettings from "../components/NotificationSettings";
 
@@ -16,9 +17,18 @@ function SettingsView({ user }) {
 
   return (
     <>
-      {/* Saved Searches is hidden: the scraper reads backend/config.yaml, not
-          the search_criteria table, so edits there had no effect. Bring it
-          back once searches are per-user. */}
+      <section className="card">
+        <div className="section-header">
+          <h2>What you're looking for</h2>
+          <p>
+            Agents' new listings that fit one of these searches are sent
+            straight to you.
+          </p>
+        </div>
+
+        <BuyerSearches user={user} />
+      </section>
+
       <section className="card">
         <div className="section-header">
           <h2>Agent Booking Page</h2>

@@ -257,3 +257,26 @@
   color: var(--muted);
   font-size: 12px;
 }
+
+/* Account deletion */
+.delete-account {
+  margin-top: 28px;
+  border-color: rgba(176, 58, 46, 0.25);
+}
+
+.delete-account input {
+  max-width: 220px;
+  margin: 4px 0 12px;
+}
+
+.delete-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.app-footer {
+  margin-top: 32px;
+  text-align: center;
+  font-size: 13px;
+}

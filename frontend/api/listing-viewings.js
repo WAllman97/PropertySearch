@@ -11,6 +11,7 @@ import { supabaseAdmin } from "./_lib/household.js";
 import { appBaseUrl } from "./_lib/booking.js";
 import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
 import { BOOKING_ERRORS, loadSlot, sendBookingEmails, slotLabel } from "./_lib/viewings.js";
+import { withCors } from "./_lib/cors.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -217,7 +218,9 @@ async function handleCancel(req, res) {
   return res.status(200).json({ success: true });
 }
 
-export default async function handler(req, res) {
+export default withCors(handler);
+
+async function handler(req, res) {
   if (req.method === "GET") {
     if (req.query.cancel) return handleGetBooking(req, res);
     return handleGetListing(req, res);

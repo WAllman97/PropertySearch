@@ -13,10 +13,13 @@ import { listingKey } from "./_lib/listing.js";
 import {
   BOOKING_ERRORS,
   agentLabel,
+  cancelSlotAndNotify,
+  clearCalendarViewing,
   loadSlot,
   sendBookingEmails,
   slotLabel,
 } from "./_lib/viewings.js";
+import { withCors } from "./_lib/cors.js";
 
 const MAX_BOOKINGS_PER_DAY = 20;
 
@@ -49,16 +52,6 @@ async function setCalendarViewing(propertyId, slot, agent) {
     { onConflict: "property_id" }
   );
   if (error) console.error("Could not add viewing to calendar:", error);
-}
-
-async function clearCalendarViewing(propertyId, slot) {
-  if (!propertyId) return;
-  const { error } = await supabaseAdmin
-    .from("property_notes")
-    .update({ viewing_datetime: null, updated_at: new Date().toISOString() })
-    .eq("property_id", propertyId)
-    .eq("viewing_datetime", slot.starts_at);
-  if (error) console.error("Could not clear calendar viewing:", error);
 }
 
 async function handleBook(req, res) {
@@ -216,43 +209,13 @@ async function handleCancelSlot(req, res) {
     return res.status(200).json({ success: true });
   }
 
-  await supabaseAdmin
-    .from("viewing_slots")
-    .update({ cancelled_at: new Date().toISOString() })
-    .eq("id", slot.id);
-
-  const { data: cancelled } = await supabaseAdmin
-    .from("viewing_bookings")
-    .update({ status: "cancelled", cancelled_by: "agent", cancelled_at: new Date().toISOString() })
-    .eq("slot_id", slot.id)
-    .eq("status", "confirmed")
-    .select("*");
-
-  const address = slot.agent_listings.address;
-  const when = slotLabel(slot);
-  const agent = slot.agents;
-
-  await Promise.all(
-    (cancelled || []).map(async (booking) => {
-      await clearCalendarViewing(booking.property_id, slot);
-      await sendEmail({
-        to: booking.buyer_email,
-        replyTo: agent.email,
-        subject: `Viewing cancelled: ${address}, ${when}`,
-        html: emailLayout(
-          "Your viewing has been cancelled",
-          `<p style="margin:0;">${escapeHtml(agentLabel(agent))} has cancelled the viewing of
-          <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. You can pick another
-          time in PropertySearch, or reply to this email to contact the agent.</p>`
-        ),
-      });
-    })
-  );
-
-  return res.status(200).json({ success: true, cancelledBookings: cancelled?.length || 0 });
+  const cancelledBookings = await cancelSlotAndNotify(slot);
+  return res.status(200).json({ success: true, cancelledBookings });
 }
 
-export default async function handler(req, res) {
+export default withCors(handler);
+
+async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

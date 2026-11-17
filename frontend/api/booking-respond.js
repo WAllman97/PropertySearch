@@ -10,6 +10,7 @@ import { requireHouseholdUser, supabaseAdmin } from "./_lib/household.js";
 import { appBaseUrl } from "./_lib/booking.js";
 import { buildIcs, emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
 import { formatLondon } from "./_lib/time.js";
+import { withCors } from "./_lib/cors.js";
 
 function detectSource(url) {
   const host = (() => {
@@ -82,7 +83,9 @@ function agentAcceptedEmail({ request, page, when }) {
   return emailLayout(isCall ? "Call confirmed" : "Viewing confirmed", lines.join(""));
 }
 
-export default async function handler(req, res) {
+export default withCors(handler);
+
+async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

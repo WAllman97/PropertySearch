@@ -1,4 +1,5 @@
 import { requireHouseholdUser, supabaseAdmin, underRateLimit } from "./_lib/household.js";
+import { withCors } from "./_lib/cors.js";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.FROM_EMAIL || "PropertySearch <onboarding@resend.dev>";
@@ -92,7 +93,9 @@ function buildShareHtml(property, message, senderEmail) {
   </body></html>`;
 }
 
-export default async function handler(req, res) {
+export default withCors(handler);
+
+async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

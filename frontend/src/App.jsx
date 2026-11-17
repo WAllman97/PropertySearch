@@ -12,6 +12,7 @@ import CalendarView from "./views/CalendarView";
 import BookingPage from "./views/BookingPage";
 import AgentPortal from "./views/AgentPortal";
 import PublicViewingPage from "./views/PublicViewingPage";
+import PrivacyPage from "./views/PrivacyPage";
 import "./App.css";
 
 const VIEWS = ["properties", "history", "calendar", "dashboard", "settings"];
@@ -39,6 +40,10 @@ function App() {
   const viewingsMatch = window.location.pathname.match(/^\/viewings\/([0-9a-f-]{36})\/?$/i);
   if (viewingsMatch) {
     return <PublicViewingPage listingId={viewingsMatch[1]} />;
+  }
+
+  if (/^\/privacy\/?$/.test(window.location.pathname)) {
+    return <PrivacyPage />;
   }
 
   // Estate agent area: own sign-up/login, listings and viewing times.

@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { apiUrl } from "./platform";
 
 export const SESSION_EXPIRED_MESSAGE = "Your login has expired. Please log in again.";
 
@@ -17,7 +18,7 @@ export async function postAuthed(path, body) {
     throw new Error(SESSION_EXPIRED_MESSAGE);
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

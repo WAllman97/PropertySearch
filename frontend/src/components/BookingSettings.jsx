@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { siteUrl } from "../lib/platform";
 
 const WEEKDAYS = [
   [1, "Mon"],
@@ -176,7 +177,7 @@ function BookingSettings({ user }) {
     await load();
   }
 
-  const link = page ? `${window.location.origin}/book/${page.slug}` : "";
+  const link = page ? `${siteUrl}/book/${page.slug}` : "";
 
   async function copyLink() {
     try {
