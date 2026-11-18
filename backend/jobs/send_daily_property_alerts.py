@@ -9,6 +9,7 @@ BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BACKEND_DIR)
 
 from core.emailer import send_daily_email
+from core.households import member_ids, original_household_id
 from core.price_drops import get_price_drops
 
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
@@ -63,11 +64,17 @@ def recipients_for(settings):
 
 
 def run_property_alerts():
+    # The scraper fills the original household's list only (migration 013),
+    # so this email is for its members only.
+    household_id = original_household_id(supabase)
+    members = member_ids(supabase, household_id)
+
     settings_result = (
         supabase
         .table("notification_settings")
         .select("*")
         .eq("daily_email_enabled", True)
+        .in_("user_id", members or ["00000000-0000-0000-0000-000000000000"])
         .execute()
     )
 
@@ -103,6 +110,7 @@ def run_property_alerts():
             supabase
             .table("properties")
             .select("*")
+            .eq("household_id", household_id)
             .gte("created_at", since)
             # Skip ones already triaged in the app (favourited, ignored, ...).
             .or_("status.is.null,status.eq.new")

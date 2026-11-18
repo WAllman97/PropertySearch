@@ -9,6 +9,7 @@ BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BACKEND_DIR)
 
 from core.emailer import format_viewing_datetime, send_viewing_reminder
+from core.households import member_emails, original_household_id
 from core.push import send_to_household
 
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
@@ -34,7 +35,7 @@ def run_viewing_reminders():
         .select(
             "id, viewing_datetime, estate_agent, estate_agent_email, "
             "estate_agent_phone, reminder_sent_at, "
-            "properties(address, price, bedrooms, listing_url, image_url)"
+            "properties(household_id, address, price, bedrooms, listing_url, image_url)"
         )
         # gte/lte on viewing_datetime also excludes NULL viewing_datetime rows.
         .gte("viewing_datetime", now.isoformat())
@@ -55,13 +56,23 @@ def run_viewing_reminders():
         f"without a reminder."
     )
 
+    original_id = original_household_id(supabase)
+
     for viewing in viewings:
         property_data = viewing.get("properties") or {}
         address = property_data.get("address", "unknown property")
         when = viewing.get("viewing_datetime")
+        household_id = property_data.get("household_id")
 
         try:
-            send_viewing_reminder(viewing)
+            # The original household keeps its config/recipients.yaml list;
+            # every other household is emailed at its members' logins.
+            recipients = None
+            if household_id != original_id:
+                recipients = member_emails(supabase, household_id)
+                if not recipients:
+                    raise RuntimeError("no member emails for this household")
+            send_viewing_reminder(viewing, recipients=recipients)
 
             supabase.table("property_notes").update(
                 {"reminder_sent_at": now.isoformat()}
@@ -79,6 +90,7 @@ def run_viewing_reminders():
         try:
             pushed = send_to_household(
                 supabase,
+                household_id,
                 title=f"Viewing: {address}",
                 body=f"{format_viewing_datetime(when)}. Tap for the details.",
                 url="/?view=calendar",

@@ -1725,3 +1725,28 @@ button.link-button:hover {
   margin: 0;
   color: var(--muted);
 }
+
+/* Settings → Household */
+.household-members {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+}
+
+.household-members li {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.household-invite {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.household-invite input {
+  flex: 1 1 240px;
+  min-width: 0;
+  font-size: 14px;
+}

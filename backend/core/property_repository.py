@@ -1,6 +1,7 @@
 from core.supabase_client import supabase
 from core.commute_calculator import calculate_commutes_for_property_id
 from core.listing_tracker import fact_payload, record_price, now_iso
+from core.households import original_household_id
 
 
 SKIP_STATUSES = ["ignored", "archived", "lost"]
@@ -14,6 +15,7 @@ def get_existing_property(listing_url: str):
         supabase
         .table("properties")
         .select("id,status,price,initial_price")
+        .eq("household_id", original_household_id(supabase))
         .eq("listing_url", listing_url)
         .execute()
     )
@@ -31,7 +33,9 @@ def save_property_to_supabase(record: dict):
 
     price = record.get("price_amount") or clean_price(record.get("price"))
 
+    # The scraper only fills the original household's list (migration 013).
     payload = {
+        "household_id": original_household_id(supabase),
         "source": record.get("source", "rightmove"),
         "listing_id": record.get("id"),
         "title": record.get("address"),
@@ -69,7 +73,7 @@ def save_property_to_supabase(record: dict):
     result = (
         supabase
         .table("properties")
-        .upsert(payload, on_conflict="listing_url")
+        .upsert(payload, on_conflict="household_id,listing_url")
         .select("*")
         .execute()
     )

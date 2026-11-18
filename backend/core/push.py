@@ -107,9 +107,16 @@ def send_to_tokens(supabase, tokens, title, body, url="/"):
     return sent
 
 
-def send_to_household(supabase, title, body, url="/"):
-    """Every phone belonging to a household member."""
-    members = supabase.table("household_members").select("user_id").execute().data or []
+def send_to_household(supabase, household_id, title, body, url="/"):
+    """Every phone belonging to a member of this household."""
+    members = (
+        supabase.table("household_members")
+        .select("user_id")
+        .eq("household_id", household_id)
+        .execute()
+        .data
+        or []
+    )
     user_ids = [m["user_id"] for m in members]
     if not user_ids:
         return 0

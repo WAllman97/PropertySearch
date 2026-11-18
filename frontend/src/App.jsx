@@ -30,6 +30,12 @@ function getBookingSlug() {
   return match ? match[1] : null;
 }
 
+// Partner invite links: /join/<code> (Settings → Household).
+function getInviteCode() {
+  const match = window.location.pathname.match(/^\/join\/([0-9a-f]{24})\/?$/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
 // Email links can open a tab directly, e.g. /?view=calendar
 function getInitialView() {
   const view = new URLSearchParams(window.location.search).get("view");
@@ -66,6 +72,7 @@ function MainApp() {
   const [user, setUser] = useState(null);
   const [settingPassword, setSettingPassword] = useState(arrivedFromPasswordReset);
   const [passwordChanged, setPasswordChanged] = useState(false);
+  const [invite] = useState(getInviteCode);
 
   useEffect(() => {
     async function getSession() {
@@ -194,9 +201,15 @@ function MainApp() {
             }}
           />
         ) : !user ? (
-          <AuthForm />
+          <AuthForm invite={invite} />
         ) : (
           <>
+            {invite && getInviteCode() && (
+              <p className="auth-banner" role="status">
+                You're already signed in, so this invite link doesn't apply. To join that
+                household instead, log out and sign up with a different email.
+              </p>
+            )}
             {activeView === "properties" && <PropertiesView />}
             {activeView === "dashboard" && <DashboardView />}
             {activeView === "calendar" && <CalendarView />}

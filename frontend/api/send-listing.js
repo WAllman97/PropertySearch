@@ -27,24 +27,26 @@ function priceText(price) {
 
 // The household's row for this listing, matched by portal id so different
 // URL forms of the same listing count as one.
-async function findProperty(listing) {
+async function findProperty(listing, householdId) {
   const key = listingKey(listing.listing_url);
   const portalId = key.split(":")[1];
   const { data } = await supabaseAdmin
     .from("properties")
     .select("id, status, listing_url")
+    .eq("household_id", householdId)
     .ilike("listing_url", `%${portalId}%`);
   return (data || []).find((p) => listingKey(p.listing_url) === key) || null;
 }
 
-async function addToHouseholdList(listing) {
-  const existing = await findProperty(listing);
+async function addToHouseholdList(listing, householdId) {
+  const existing = await findProperty(listing, householdId);
   if (existing) return { property: existing, dismissed: DISMISSED.includes(existing.status) };
 
   const [source, portalId] = listingKey(listing.listing_url).split(":");
   const { data, error } = await supabaseAdmin
     .from("properties")
     .insert({
+      household_id: householdId,
       source,
       listing_id: portalId,
       title: listing.address,
@@ -176,18 +178,20 @@ async function handler(req, res) {
 
   const { data: members } = await supabaseAdmin
     .from("household_members")
-    .select("user_id")
+    .select("user_id, household_id")
     .in("user_id", newIds);
-  const householdIds = new Set((members || []).map((m) => m.user_id));
+  const householdOf = new Map((members || []).map((m) => [m.user_id, m.household_id]));
 
-  // The household shares one property list, so add it once.
-  let household = { property: null, dismissed: false };
-  if (householdIds.size) household = await addToHouseholdList(listing);
+  // Each household shares one property list, so add it once per household.
+  const households = new Map();
+  for (const householdId of new Set(householdOf.values())) {
+    households.set(householdId, await addToHouseholdList(listing, householdId));
+  }
 
   const base = appBaseUrl(req);
   let emailed = 0;
   // They marked this property as not for them: respect that, quietly.
-  const recipients = newIds.filter((id) => !(householdIds.has(id) && household.dismissed));
+  const recipients = newIds.filter((id) => !households.get(householdOf.get(id))?.dismissed);
 
   const push = sendToUsers(recipients, {
     title: `New match: ${listing.address}`,
@@ -207,7 +211,7 @@ async function handler(req, res) {
 
   await Promise.all(
     recipients.map(async (id) => {
-      const inHousehold = householdIds.has(id);
+      const inList = Boolean(households.get(householdOf.get(id))?.property);
 
       const { data } = await supabaseAdmin.auth.admin.getUserById(id);
       const email = data?.user?.email;
@@ -217,7 +221,7 @@ async function handler(req, res) {
         to: email,
         replyTo: listing.agents.email,
         subject: `New match: ${listing.address}${listing.price ? `, ${priceText(listing.price)}` : ""}`,
-        html: listingEmail(listing, listing.agents, base, inHousehold && Boolean(household.property)),
+        html: listingEmail(listing, listing.agents, base, inList),
       });
       emailed += 1;
     })

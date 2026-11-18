@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import requests
 
 from core.supabase_client import supabase
+from core.households import original_household_id
 from scrapers import rightmove
 
 INACTIVE_STATUSES = ("ignored", "archived", "lost")
@@ -271,6 +272,9 @@ def active_rightmove_properties(limit=500):
     result = (
         supabase.table("properties")
         .select("id,title,address,listing_url,price,initial_price,status,listing_status,listing_checked_at,source")
+        # Page re-reads are part of the scraper, which works for the original
+        # household only (migration 013).
+        .eq("household_id", original_household_id(supabase))
         .eq("source", "rightmove")
         .or_("status.is.null,status.not.in.(" + ",".join(INACTIVE_STATUSES) + ")")
         .order("listing_checked_at", desc=False, nullsfirst=True)

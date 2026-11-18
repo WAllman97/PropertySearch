@@ -7,19 +7,20 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-// Verifies the caller's Supabase session AND that they are on the household
-// allow-list (household_members, see backend/migrations/002). A valid login
-// alone isn't enough: these routes spend money (Google Routes) and send email
-// from our domain, so a stranger who signs up must not be able to call them.
+// Verifies the caller's Supabase session AND that they belong to a buyer
+// household (household_members, migrations 002 and 013). Estate agents have a
+// login but no household, so they're refused here.
 //
-// Returns the user, or sends the error response and returns null.
+// Returns the user with user.householdId set, or sends the error response and
+// returns null. Service-role queries bypass RLS, so every query a route makes
+// on household data must filter by user.householdId itself.
 export async function requireHouseholdUser(req, res) {
   const user = await requireUser(req, res);
   if (!user) return null;
 
   const { data: member, error: memberError } = await supabaseAdmin
     .from("household_members")
-    .select("user_id")
+    .select("household_id")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -34,7 +35,18 @@ export async function requireHouseholdUser(req, res) {
     return null;
   }
 
+  user.householdId = member.household_id;
   return user;
+}
+
+// User ids of everyone in a household.
+export async function householdMemberIds(householdId) {
+  const { data, error } = await supabaseAdmin
+    .from("household_members")
+    .select("user_id")
+    .eq("household_id", householdId);
+  if (error) throw error;
+  return (data || []).map((m) => m.user_id);
 }
 
 // Any signed-in account (household member or estate agent). Callers must

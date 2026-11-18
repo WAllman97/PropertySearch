@@ -1,21 +1,69 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { siteUrl } from "../lib/platform";
+import { apiUrl, siteUrl } from "../lib/platform";
 
-// Sign-up is deliberately not offered here: any signed-in account can send
-// share emails from our domain and spend Google Maps quota. New users should
-// be invited from the Supabase dashboard (Authentication -> Users -> Invite).
-function AuthForm() {
-  const [mode, setMode] = useState("login"); // "login" | "forgot"
+// Log in, reset a password, or sign up. Sign-up goes through
+// /api/buyer-signup, which creates a new household, or joins the household
+// whose invite link (/join/<code>) brought them here.
+function AuthForm({ invite = null }) {
+  const [mode, setMode] = useState(invite ? "signup" : "login"); // "login" | "forgot" | "signup"
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [website, setWebsite] = useState(""); // honeypot
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  // { householdName } once the invite is checked, or { error }.
+  const [inviteInfo, setInviteInfo] = useState(null);
+
+  useEffect(() => {
+    if (!invite) return;
+    fetch(apiUrl(`/api/buyer-signup?invite=${encodeURIComponent(invite)}`))
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        setInviteInfo(response.ok ? body : { error: body.error || "This invite link isn't valid." });
+      })
+      .catch(() => setInviteInfo({ error: "Couldn't check the invite link. Please try again." }));
+  }, [invite]);
+
+  const joining = Boolean(invite && inviteInfo && !inviteInfo.error);
 
   function switchMode(next) {
     setMode(next);
     setMessage("");
     setPassword("");
+  }
+
+  async function handleSignup(event) {
+    event.preventDefault();
+
+    setLoading(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(apiUrl("/api/buyer-signup"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          website,
+          invite: joining ? invite : undefined,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Could not create your account");
+
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+
+      // Drop /join/<code> so a refresh doesn't offer to sign up again.
+      if (invite) window.history.replaceState(null, "", "/");
+    } catch (error) {
+      setMessage(error.message);
+      setLoading(false);
+    }
   }
 
   async function handleLogin(event) {
@@ -103,6 +151,87 @@ function AuthForm() {
     );
   }
 
+  if (mode === "signup") {
+    return (
+      <div className="auth-card">
+        <h2>{joining ? `Join ${inviteInfo.householdName}` : "Create an account"}</h2>
+        <p className="muted">
+          {joining
+            ? "You'll share their property list, viewings calendar and notes."
+            : "Save homes from any portal, compare commutes, book viewings and keep notes in one place. Invite your partner once you're in."}
+        </p>
+        {invite && inviteInfo?.error && (
+          <p className="booking-error">
+            {inviteInfo.error} You can still sign up with your own list below.
+          </p>
+        )}
+
+        <form onSubmit={handleSignup}>
+          <div className="form-group">
+            <label htmlFor="signup-name">Your name</label>
+            <input
+              id="signup-name"
+              autoComplete="name"
+              maxLength={100}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="signup-email">Email</label>
+            <input
+              id="signup-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="signup-password">Password</label>
+            <input
+              id="signup-password"
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              maxLength={72}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </div>
+
+          <input
+            className="booking-honeypot"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            value={website}
+            onChange={(event) => setWebsite(event.target.value)}
+          />
+
+          <button type="submit" className="primary-button" disabled={loading}>
+            {loading ? "Creating your account..." : joining ? "Join" : "Create account"}
+          </button>
+        </form>
+
+        {message && <p className="auth-message">{message}</p>}
+
+        <p className="muted auth-agent-link">
+          By signing up you agree to our <a href="/privacy">privacy policy</a>.
+        </p>
+
+        <button type="button" className="link-button" onClick={() => switchMode("login")}>
+          Already have an account? Log in
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="auth-card">
       <h2>Log In</h2>
@@ -141,6 +270,10 @@ function AuthForm() {
 
       <button type="button" className="link-button" onClick={() => switchMode("forgot")}>
         Forgot password?
+      </button>
+
+      <button type="button" className="link-button" onClick={() => switchMode("signup")}>
+        New here? Create an account
       </button>
 
       {/* In the phone app there's no address bar, so agents need a way in. */}

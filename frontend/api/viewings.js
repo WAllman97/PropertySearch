@@ -71,6 +71,7 @@ async function handleBook(req, res) {
       .from("properties")
       .select("id, address, listing_url")
       .eq("id", propertyId)
+      .eq("household_id", user.householdId)
       .maybeSingle(),
   ]);
 

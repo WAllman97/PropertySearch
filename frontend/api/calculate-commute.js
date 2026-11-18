@@ -184,7 +184,8 @@ async function handler(req, res) {
       .from("properties")
       .select("*")
       .eq("id", propertyId)
-      .single();
+      .eq("household_id", user.householdId)
+      .maybeSingle();
 
     if (propertyError || !property) {
       return res.status(404).json({ error: "Property not found" });
@@ -193,8 +194,8 @@ async function handler(req, res) {
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("buyer_profiles")
       .select("*")
-      .eq("user_id", user.id)
-      .single();
+      .eq("household_id", user.householdId)
+      .maybeSingle();
 
     if (profileError || !profile) {
       return res.status(404).json({ error: "Buyer profile not found" });
@@ -268,6 +269,7 @@ async function handler(req, res) {
       .from("properties")
       .update(updatePayload)
       .eq("id", propertyId)
+      .eq("household_id", user.householdId)
       .select("*")
       .single();
 

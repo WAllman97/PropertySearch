@@ -11,6 +11,9 @@ function BuyerProfileSettings({ user }) {
     commute_mode: "TRANSIT",
   });
 
+  // The household shares one profile (migration 013); remember its id so a
+  // partner saving it updates the same row rather than adding another.
+  const [profileId, setProfileId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [refreshingCommutes, setRefreshingCommutes] = useState(false);
@@ -23,18 +26,19 @@ function BuyerProfileSettings({ user }) {
   }, [user]);
 
   async function loadBuyerProfile() {
+    // Row-level security returns only this household's profile.
     const { data, error } = await supabase
       .from("buyer_profiles")
       .select("*")
-      .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== "PGRST116") {
+    if (error) {
       console.error(error);
       return;
     }
 
     if (data) {
+      setProfileId(data.id);
       setProfile({
         user_work_address: data.user_work_address || "",
         partner_work_address: data.partner_work_address || "",
@@ -49,16 +53,16 @@ function BuyerProfileSettings({ user }) {
     setSaving(true);
     setSaved(false);
 
-    const { error } = await supabase.from("buyer_profiles").upsert(
-      {
-        user_id: user.id,
-        ...profile,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "user_id",
-      }
-    );
+    const row = { ...profile, updated_at: new Date().toISOString() };
+    const { data, error } = profileId
+      ? await supabase.from("buyer_profiles").update(row).eq("id", profileId).select("id").single()
+      : await supabase
+          .from("buyer_profiles")
+          .insert({ ...row, user_id: user.id })
+          .select("id")
+          .single();
+
+    if (data) setProfileId(data.id);
 
     if (error) {
       console.error(error);

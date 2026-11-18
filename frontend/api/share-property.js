@@ -134,7 +134,8 @@ async function handler(req, res) {
       .from("properties")
       .select("*")
       .eq("id", propertyId)
-      .single();
+      .eq("household_id", user.householdId)
+      .maybeSingle();
 
     if (propertyError || !property) {
       return res.status(404).json({ error: "Property not found" });
