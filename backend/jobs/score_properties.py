@@ -11,6 +11,7 @@ import sys
 
 from core import ai_scorer
 from core.supabase_client import supabase
+from core.households import original_household_id
 
 
 SKIP_STATUSES = ["ignored", "archived", "lost"]
@@ -20,6 +21,8 @@ def find_unscored(limit):
     result = (
         supabase.table("properties")
         .select("*")
+        # AI scoring is for the original household only (migration 013).
+        .eq("household_id", original_household_id(supabase))
         .is_("ai_scored_at", "null")
         .order("date_found", desc=True)
         .limit(limit * 3)

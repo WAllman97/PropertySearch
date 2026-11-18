@@ -196,42 +196,38 @@ class AmbiguousBuyerProfile(RuntimeError):
 _buyer_profile_cache = {}
 
 
-def get_default_buyer_profile():
-    """The buyer profile whose work addresses commutes are calculated to.
+def get_household_buyer_profile(household_id):
+    """The household's buyer profile: its work (and school) addresses.
 
-    Commute columns live on the shared properties row, so there must be
-    exactly one answer. Previously this took whichever row came back first,
-    so a second account saving a profile could silently switch every
-    property's commutes to their offices. Now: use BUYER_USER_ID when set,
-    otherwise the only profile, and refuse to guess when there are several.
+    One per household (migration 013), because the commute times it produces
+    live on the household's own property rows. Cached for the life of the
+    process (one scraper run) to avoid a query per property."""
+    if household_id in _buyer_profile_cache:
+        return _buyer_profile_cache[household_id]
 
-    Cached for the life of the process (one scraper run) to avoid a
-    buyer_profiles query per property.
-    """
-    if "profile" in _buyer_profile_cache:
-        return _buyer_profile_cache["profile"]
+    rows = (
+        supabase.table("buyer_profiles")
+        .select("*")
+        .eq("household_id", household_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    profile = rows[0] if rows else None
+    if not profile:
+        print(f"No buyer profile for household {household_id}.")
 
-    pinned_user_id = (os.getenv("BUYER_USER_ID") or "").strip()
-    query = supabase.table("buyer_profiles").select("*")
-
-    if pinned_user_id:
-        query = query.eq("user_id", pinned_user_id)
-
-    rows = query.limit(2).execute().data or []
-
-    if not rows:
-        print("No buyer profile found" + (f" for BUYER_USER_ID={pinned_user_id}." if pinned_user_id else "."))
-        profile = None
-    elif len(rows) > 1:
-        raise AmbiguousBuyerProfile(
-            "More than one buyer profile exists; set the BUYER_USER_ID env var "
-            "to the user_id whose work addresses commutes should use."
-        )
-    else:
-        profile = rows[0]
-
-    _buyer_profile_cache["profile"] = profile
+    _buyer_profile_cache[household_id] = profile
     return profile
+
+
+def get_default_buyer_profile():
+    """The original household's profile (the one the scraper and AI scoring
+    work for). Replaces the old BUYER_USER_ID pin, which is no longer needed."""
+    from core.households import original_household_id
+
+    return get_household_buyer_profile(original_household_id(supabase))
 
 
 def get_property_address(property_record):
@@ -277,7 +273,10 @@ def calculate_commutes_for_property(property_record, force=False):
         print("No property record provided.")
         return None
 
-    profile = get_default_buyer_profile()
+    household_id = property_record.get("household_id")
+    profile = (
+        get_household_buyer_profile(household_id) if household_id else get_default_buyer_profile()
+    )
 
     if not profile:
         return None

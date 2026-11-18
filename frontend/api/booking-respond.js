@@ -27,12 +27,13 @@ function detectSource(url) {
 }
 
 // Link the agent's property to an existing listing, or add it to the app.
-async function linkProperty(request) {
+async function linkProperty(request, householdId) {
   if (!request.property_url) return null;
 
   const { data: existing } = await supabaseAdmin
     .from("properties")
     .select("id")
+    .eq("household_id", householdId)
     .eq("listing_url", request.property_url)
     .maybeSingle();
 
@@ -43,6 +44,7 @@ async function linkProperty(request) {
   const { data: created, error } = await supabaseAdmin
     .from("properties")
     .insert({
+      household_id: householdId,
       source: detectSource(request.property_url),
       listing_id: `agent_${request.id}`,
       title: address,
@@ -158,7 +160,7 @@ async function handler(req, res) {
       return res.status(200).json({ success: true, status: "declined" });
     }
 
-    const propertyId = await linkProperty(request);
+    const propertyId = await linkProperty(request, user.householdId);
 
     const { data: updated } = await supabaseAdmin
       .from("booking_requests")

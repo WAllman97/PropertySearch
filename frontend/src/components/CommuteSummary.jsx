@@ -57,7 +57,7 @@ function CommuteSummary({ property }) {
     const { data, error } = await supabase
       .from("buyer_profiles")
       .select("user_work_address, partner_work_address, commute_mode")
-      .eq("user_id", user.id)
+      // The household's shared profile; row-level security picks it.
       .maybeSingle();
 
     if (error) {

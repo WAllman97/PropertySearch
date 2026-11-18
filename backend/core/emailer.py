@@ -632,7 +632,7 @@ def build_viewing_reminder_html(viewing):
     """
 
 
-def send_viewing_reminder(viewing):
+def send_viewing_reminder(viewing, recipients=None):
     """Send a single viewing-reminder email. Returns the Resend response."""
     property_data = viewing.get("properties") or {}
     address = safe(property_data.get("address"), "your saved property")
@@ -644,7 +644,7 @@ def send_viewing_reminder(viewing):
     response = send_resend_email(
         subject=subject,
         html_body=html_body,
-        recipients=EMAIL_RECIPIENTS,
+        recipients=recipients or EMAIL_RECIPIENTS,
     )
 
     print(f"Viewing reminder sent for: {address} ({when})")

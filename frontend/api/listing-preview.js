@@ -50,11 +50,12 @@ async function fromAgentListing(key) {
 
 // Is it already in the household's list? Matched by portal id, so other URL
 // forms of the same listing count.
-async function existingProperty(key) {
+async function existingProperty(key, householdId) {
   const id = key.split(":")[1];
   const { data } = await supabaseAdmin
     .from("properties")
     .select("id, status, listing_url")
+    .eq("household_id", householdId)
     .ilike("listing_url", `%${id}%`);
   const hit = (data || []).find((p) => listingKey(p.listing_url) === key);
   return hit ? { id: hit.id, status: hit.status } : null;
@@ -82,7 +83,7 @@ async function handler(req, res) {
     portal,
     listingId,
     listingUrl: canonicalListingUrl(key),
-    existing: await existingProperty(key),
+    existing: await existingProperty(key, user.householdId),
   };
 
   const agent = await fromAgentListing(key);

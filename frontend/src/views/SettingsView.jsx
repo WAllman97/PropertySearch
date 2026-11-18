@@ -1,4 +1,7 @@
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import BookingSettings from "../components/BookingSettings";
+import { DeleteBuyerAccount, HouseholdMembers } from "../components/HouseholdSettings";
 import BuyerSearches from "../components/BuyerSearches";
 import BuyerProfileSettings from "../components/BuyerProfileSettings";
 import NotificationSettings from "../components/NotificationSettings";
@@ -6,6 +9,18 @@ import PushSettings from "../components/PushSettings";
 import { isNativeApp } from "../lib/platform";
 
 function SettingsView({ user }) {
+  const [household, setHousehold] = useState(null);
+
+  const loadHousehold = useCallback(async () => {
+    const { data, error } = await supabase.rpc("my_household");
+    if (error) console.error("Could not load household:", error);
+    else setHousehold(data);
+  }, []);
+
+  useEffect(() => {
+    if (user) loadHousehold();
+  }, [user, loadHousehold]);
+
   if (!user) {
     return (
       <section className="card">
@@ -30,6 +45,17 @@ function SettingsView({ user }) {
 
         <BuyerSearches user={user} />
       </section>
+
+      {household && (
+        <section className="card">
+          <div className="section-header">
+            <h2>Household</h2>
+            <p>Everyone here shares one property list, calendar and notes.</p>
+          </div>
+
+          <HouseholdMembers household={household} onChange={loadHousehold} />
+        </section>
+      )}
 
       {isNativeApp && (
         <section className="card">
@@ -66,17 +92,31 @@ function SettingsView({ user }) {
         <BuyerProfileSettings user={user} />
       </section>
 
-      <section className="card">
-        <div className="section-header">
-          <h2>Email Notifications</h2>
-          <p>
-            Choose how often you receive property alerts and add extra
-            recipients, such as your partner.
-          </p>
-        </div>
+      {/* The daily alert email comes from the scraper, which only works
+          for the original household (migration 013). */}
+      {household?.is_original && (
+        <section className="card">
+          <div className="section-header">
+            <h2>Email Notifications</h2>
+            <p>
+              Choose how often you receive property alerts and add extra
+              recipients, such as your partner.
+            </p>
+          </div>
 
-        <NotificationSettings user={user} />
-      </section>
+          <NotificationSettings user={user} />
+        </section>
+      )}
+
+      {household && (
+        <section className="card">
+          <div className="section-header">
+            <h2>Delete Account</h2>
+          </div>
+
+          <DeleteBuyerAccount household={household} />
+        </section>
+      )}
     </>
   );
 }

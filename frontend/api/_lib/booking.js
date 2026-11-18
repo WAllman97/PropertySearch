@@ -23,6 +23,12 @@ export async function loadActivePage(slug) {
 export async function getFreeSlots(page, now = new Date()) {
   const horizon = new Date(now.getTime() + (page.days_ahead + 1) * 86400000);
 
+  const { data: member } = await supabaseAdmin
+    .from("household_members")
+    .select("household_id")
+    .eq("user_id", page.user_id)
+    .maybeSingle();
+
   const [{ data: windows }, { data: requests }, { data: viewings }] = await Promise.all([
     supabaseAdmin
       .from("availability_windows")
@@ -36,13 +42,17 @@ export async function getFreeSlots(page, now = new Date()) {
       .gte("ends_at", now.toISOString())
       .lte("starts_at", horizon.toISOString()),
     // property_notes is shared by the household (no user_id), so every
-    // scheduled viewing counts as busy.
-    supabaseAdmin
-      .from("property_notes")
-      .select("viewing_datetime")
-      .not("viewing_datetime", "is", null)
-      .gte("viewing_datetime", new Date(now.getTime() - 3600000).toISOString())
-      .lte("viewing_datetime", horizon.toISOString()),
+    // viewing in the page owner's household counts as busy. Only theirs:
+    // other households' viewings must neither block nor leak.
+    member
+      ? supabaseAdmin
+          .from("property_notes")
+          .select("viewing_datetime, properties!inner(household_id)")
+          .eq("properties.household_id", member.household_id)
+          .not("viewing_datetime", "is", null)
+          .gte("viewing_datetime", new Date(now.getTime() - 3600000).toISOString())
+          .lte("viewing_datetime", horizon.toISOString())
+      : Promise.resolve({ data: [] }),
   ]);
 
   const busy = [

@@ -141,8 +141,20 @@ One-time setup once the developer account is approved:
 The same key works for Xcode builds and TestFlight/App Store builds: the
 server tries Apple's live server first and falls back to the test one.
 
+## Buyer accounts
+
+Anyone can sign up from the login screen (`api/buyer-signup.js`). Each new
+buyer gets their own household (migrations 013, 014) with a separate property
+list, calendar, notes and commute addresses. Settings → Household has an
+invite link (`/join/<code>`) that lets a partner join instead (up to 4
+people), and Settings → Delete Account removes the login, plus the household
+and its data when the last person leaves (Apple requirement). In the app the
+invite link points at the live site, where the partner signs up, then logs
+in on their phone.
+
+New households get the app only: the scraper, its daily email, AI scoring
+and price-drop alerts stay with the original household.
+
 ## Still to do (next steps in the plan)
 
-- Multi-user sign-up for buyers (currently invite-only, one household).
-- Buyer account deletion in-app (agents have it; buyers are invite-only, so
-  Apple doesn't require it yet).
+- Nothing blocking TestFlight in the code; see the setup steps above.
