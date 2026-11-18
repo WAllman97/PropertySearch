@@ -9,6 +9,7 @@ import { supabaseAdmin, underRateLimit } from "./_lib/household.js";
 import { appBaseUrl, getFreeSlots, loadActivePage } from "./_lib/booking.js";
 import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
 import { formatLondon } from "./_lib/time.js";
+import { sendToUsers } from "./_lib/push.js";
 import { withCors } from "./_lib/cors.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -135,14 +136,27 @@ async function handlePost(req, res) {
     return res.status(500).json({ error: "Could not save your request" });
   }
 
+  const what = kind === "viewing" ? "a viewing" : "a call";
+  const when = formatLondon(slot.start);
+
+  // Push to the buyer's phones alongside the email. Best effort: a failed
+  // push must not turn a saved booking into an error for the agent.
+  const push = sendToUsers([page.user_id], {
+    title: `${kind === "viewing" ? "Viewing" : "Call"} request from ${fields.agentName}`,
+    body: [
+      fields.agency,
+      fields.propertyAddress,
+      `${when}. Tap to accept or decline.`,
+    ].filter(Boolean).join(" · "),
+    url: "/?view=calendar",
+  }).catch((error) => console.error("booking push failed:", error));
+
   // Tell the buyer (only the buyer: this public form must never be able to
   // send email to an address the visitor typed in).
   const { data: buyer } = await supabaseAdmin.auth.admin.getUserById(page.user_id);
   const buyerEmail = buyer?.user?.email;
 
   if (buyerEmail) {
-    const what = kind === "viewing" ? "a viewing" : "a call";
-    const when = formatLondon(slot.start);
     const details = [
       `<p style="margin:0 0 12px;"><strong>${escapeHtml(fields.agentName)}</strong>${
         fields.agency ? ` from ${escapeHtml(fields.agency)}` : ""
@@ -159,6 +173,8 @@ async function handlePost(req, res) {
       html: emailLayout(`New ${kind} request`, details),
     });
   }
+
+  await push;
 
   return res.status(200).json({ success: true, id: created.id });
 }
