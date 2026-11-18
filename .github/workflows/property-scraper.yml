@@ -58,4 +58,9 @@ jobs:
           # AI triage scoring (core/ai_scorer.py). If unset, scoring is
           # skipped and the scraper runs as before.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Price-drop notifications to the iPhone app (core/push.py). If
+          # unset, they're skipped and the scraper runs as before.
+          APNS_KEY: ${{ secrets.APNS_KEY }}
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+          APNS_TEAM_ID: ${{ secrets.APNS_TEAM_ID }}
         run: python main.py

@@ -97,12 +97,19 @@ After any code change: `npm run app:sync`, then Run again in Xcode.
 
 What's built: the app asks once after login (and has an on/off switch in
 Settings → Phone Notifications), stores the phone's token in `device_tokens`
-(migration 012), and forgets it on log-out. Two notifications are sent:
+(migration 012), and forgets it on log-out. Notifications sent:
 
 - **New match** when an agent sends a listing (`api/send-listing.js`); tapping
   opens the viewing times page.
 - **Viewing reminder** the day before (`backend/jobs/send_viewing_reminders.py`);
   tapping opens the Calendar.
+- **Price drop** after the 07:00 scraper run, for cuts it saw that morning
+  (`backend/core/price_drops.py`, called from `main.py`). One per property,
+  or a single summary if there are more than three. Ignored, archived and
+  lost properties are left out.
+- **Booking request** when an agent asks for a call or viewing through your
+  booking page (`api/booking.js`); tapping opens the Calendar to accept or
+  decline.
 
 Senders: `frontend/api/_lib/push.js` (Vercel) and `backend/core/push.py`
 (GitHub Actions). They talk to Apple directly (no Firebase). Until the key

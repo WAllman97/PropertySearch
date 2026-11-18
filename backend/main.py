@@ -9,6 +9,8 @@ from scrapers.rightmove import LISTING_FACT_KEYS
 
 from core.filters import passes_filters
 from core import ai_scorer
+from core import price_drops
+from core.supabase_client import supabase
 
 from scrapers import rightmove
 from scrapers import zoopla
@@ -57,6 +59,10 @@ def is_missing(value, missing_values):
 
     return str(value).strip().lower() in missing_values
 
+
+# Price cuts seen from here on are this run's; pushed to phones at the end
+# of the price-tracking steps below.
+run_started = listing_tracker.now_iso()
 
 # Run-health counters so a silently broken scraper is visible in the logs
 # instead of looking like a genuinely quiet day.
@@ -200,6 +206,15 @@ except Exception as e:
     warn(f"Sold-price comparisons failed: {e}")
 
 
+# ---- Price-drop notifications (iPhone app) ----
+# Every cut seen this run, by the search scrape or the listing refresh.
+# Skipped quietly until the APNs key is configured.
+try:
+    health["price_drop_pushes"] = price_drops.push_price_drops(supabase, run_started)
+except Exception as e:
+    health["price_drop_pushes"] = {"error": str(e)}
+    warn(f"Price-drop notifications failed: {e}")
+
 # ---- AI triage scoring ----
 # Runs after scraping so commute times are already saved. Capped per run so
 # the first run after enabling it (every listing unscored) can't run long or
@@ -251,6 +266,7 @@ print(f"Missing address:  {health['missing_address']}")
 print(f"AI scored:        {health['ai_scored']} (failed {health['ai_failed']})")
 print(f"Listing refresh:  {health.get('listing_refresh')}")
 print(f"Sold-price comps: {health.get('sales_comps')}")
+print(f"Price-drop pushes: {health.get('price_drop_pushes')}")
 print("Found by source:")
 for source, count in found_by_source.items():
     marker = "  <-- ZERO" if count == 0 else ""
