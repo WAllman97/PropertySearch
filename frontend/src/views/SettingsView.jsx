@@ -2,6 +2,8 @@ import BookingSettings from "../components/BookingSettings";
 import BuyerSearches from "../components/BuyerSearches";
 import BuyerProfileSettings from "../components/BuyerProfileSettings";
 import NotificationSettings from "../components/NotificationSettings";
+import PushSettings from "../components/PushSettings";
+import { isNativeApp } from "../lib/platform";
 
 function SettingsView({ user }) {
   if (!user) {
@@ -28,6 +30,16 @@ function SettingsView({ user }) {
 
         <BuyerSearches user={user} />
       </section>
+
+      {isNativeApp && (
+        <section className="card">
+          <div className="section-header">
+            <h2>Phone Notifications</h2>
+          </div>
+
+          <PushSettings />
+        </section>
+      )}
 
       <section className="card">
         <div className="section-header">

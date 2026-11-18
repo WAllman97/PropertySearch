@@ -5,5 +5,14 @@
   "ios": {
     "contentInset": "never",
     "backgroundColor": "#f8f6f2"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": [
+        "banner",
+        "sound",
+        "list"
+      ]
+    }
   }
 }

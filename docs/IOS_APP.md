@@ -93,11 +93,49 @@ After any code change: `npm run app:sync`, then Run again in Xcode.
 5. For agents and friends: create an external group and share the public
    link (needs a short beta review, usually under a day).
 
+## Push notifications
+
+What's built: the app asks once after login (and has an on/off switch in
+Settings → Phone Notifications), stores the phone's token in `device_tokens`
+(migration 012), and forgets it on log-out. Two notifications are sent:
+
+- **New match** when an agent sends a listing (`api/send-listing.js`); tapping
+  opens the viewing times page.
+- **Viewing reminder** the day before (`backend/jobs/send_viewing_reminders.py`);
+  tapping opens the Calendar.
+
+Senders: `frontend/api/_lib/push.js` (Vercel) and `backend/core/push.py`
+(GitHub Actions). They talk to Apple directly (no Firebase). Until the key
+below is set they skip sending and log `[push skipped: APNs not configured]`.
+
+One-time setup once the developer account is approved:
+
+1. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → **+**.
+   Name it e.g. "PropertySearch push", tick **Apple Push Notifications service
+   (APNs)**, Continue → Register → **Download**. The `.p8` file downloads only
+   once: keep a copy somewhere safe (password manager or cloud drive).
+2. Note the **Key ID** (10 characters, on the key page) and your **Team ID**
+   (top right of the developer site, or Membership details).
+3. Add three settings in **Vercel** (Project → Settings → Environment
+   Variables) and in **GitHub** (repo → Settings → Secrets and variables →
+   Actions):
+   - `APNS_KEY`: the whole contents of the `.p8` file, including the
+     `-----BEGIN PRIVATE KEY-----` lines
+   - `APNS_KEY_ID`
+   - `APNS_TEAM_ID`
+
+   Redeploy on Vercel afterwards.
+4. In Xcode → App → Signing & Capabilities, check **Push Notifications** is
+   listed (the entitlement is already in `App/App.entitlements`; if it's
+   missing, click **+ Capability** → Push Notifications).
+5. Run on your iPhone (push doesn't work in the simulator), tap **Turn on**,
+   then send yourself a listing from the agent page to test.
+
+The same key works for Xcode builds and TestFlight/App Store builds: the
+server tries Apple's live server first and falls back to the test one.
+
 ## Still to do (next steps in the plan)
 
-- Push notifications (bookings, price drops, reminders): needs an APNs key
-  from the Apple Developer account, `@capacitor/push-notifications`, and a
-  device-token table + sender on the server.
 - Multi-user sign-up for buyers (currently invite-only, one household).
 - Buyer account deletion in-app (agents have it; buyers are invite-only, so
   Apple doesn't require it yet).

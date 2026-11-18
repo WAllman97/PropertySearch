@@ -8,7 +8,8 @@ from supabase import create_client
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BACKEND_DIR)
 
-from core.emailer import send_viewing_reminder
+from core.emailer import format_viewing_datetime, send_viewing_reminder
+from core.push import send_to_household
 
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
@@ -71,6 +72,21 @@ def run_viewing_reminders():
         except Exception as error:
             # Leave reminder_sent_at unset so the next run retries.
             print(f"Failed to send reminder for {address} @ {when}: {error}")
+            continue
+
+        # Phone notification too. Best effort: the email already went and is
+        # marked, so a push failure never causes a second reminder.
+        try:
+            pushed = send_to_household(
+                supabase,
+                title=f"Viewing: {address}",
+                body=f"{format_viewing_datetime(when)}. Tap for the details.",
+                url="/?view=calendar",
+            )
+            if pushed:
+                print(f"Push sent to {pushed} phone(s).")
+        except Exception as error:
+            print(f"Push failed for {address} @ {when}: {error}")
 
 
 if __name__ == "__main__":
