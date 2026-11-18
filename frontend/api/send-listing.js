@@ -11,6 +11,7 @@ import { appBaseUrl } from "./_lib/booking.js";
 import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
 import { listingKey } from "./_lib/listing.js";
 import { agentLabel, detailRow } from "./_lib/viewings.js";
+import { sendToUsers } from "./_lib/push.js";
 import { withCors } from "./_lib/cors.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -185,12 +186,28 @@ async function handler(req, res) {
 
   const base = appBaseUrl(req);
   let emailed = 0;
+  // They marked this property as not for them: respect that, quietly.
+  const recipients = newIds.filter((id) => !(householdIds.has(id) && household.dismissed));
+
+  const push = sendToUsers(recipients, {
+    title: `New match: ${listing.address}`,
+    body: [
+      priceText(listing.price),
+      listing.bedrooms ? `${listing.bedrooms} bed` : "",
+      listing.property_type || "",
+      "Tap to see viewing times",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    url: `/viewings/${listing.id}`,
+  }).catch((error) => {
+    console.error("Listing push failed:", error);
+    return { sent: 0 };
+  });
 
   await Promise.all(
-    newIds.map(async (id) => {
+    recipients.map(async (id) => {
       const inHousehold = householdIds.has(id);
-      // They marked this property as not for them: respect that, quietly.
-      if (inHousehold && household.dismissed) return;
 
       const { data } = await supabaseAdmin.auth.admin.getUserById(id);
       const email = data?.user?.email;
@@ -206,10 +223,13 @@ async function handler(req, res) {
     })
   );
 
+  const { sent: pushed } = await push;
+
   return res.status(200).json({
     success: true,
     matched: matchedIds.length,
     sent: newIds.length,
     emailed,
+    pushed,
   });
 }

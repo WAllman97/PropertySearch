@@ -1688,3 +1688,40 @@ button.link-button:hover {
   background: var(--accent-soft);
   color: var(--text);
 }
+
+/* ---- Phone notifications (iPhone app only) ------------------------------ */
+.push-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.push-offer p {
+  margin: 0;
+  flex: 1 1 220px;
+  font-weight: 600;
+}
+
+.push-offer-actions,
+.push-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.push-settings {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.push-note {
+  margin: 0;
+  color: var(--muted);
+}

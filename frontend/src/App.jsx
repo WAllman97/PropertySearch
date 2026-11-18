@@ -13,6 +13,13 @@ import BookingPage from "./views/BookingPage";
 import AgentPortal from "./views/AgentPortal";
 import PublicViewingPage from "./views/PublicViewingPage";
 import PrivacyPage from "./views/PrivacyPage";
+import {
+  dismissPushOffer,
+  enablePush,
+  forgetThisPhone,
+  refreshPushRegistration,
+  shouldOfferPush,
+} from "./lib/push";
 import "./App.css";
 
 const VIEWS = ["properties", "history", "calendar", "dashboard", "settings"];
@@ -94,6 +101,24 @@ function MainApp() {
     })();
   }, [user]);
 
+  // iPhone app: keep this phone's notification token current, and offer
+  // notifications once. Both do nothing on the website.
+  const [offerPush, setOfferPush] = useState(false);
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    refreshPushRegistration();
+    shouldOfferPush().then(setOfferPush).catch(() => {});
+  }, [userId]);
+
+  async function logOut() {
+    await forgetThisPhone();
+    // Local scope: only this browser. The default ("global") also revoked
+    // the session on every other device, which left those tabs looking
+    // signed in while every API call failed.
+    supabase.auth.signOut({ scope: "local" });
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -106,10 +131,7 @@ function MainApp() {
           <button
             type="button"
             className="secondary-button"
-            // Local scope: only this browser. The default ("global") also
-            // revoked the session on every other device, which left those
-            // tabs looking signed in while every API call failed.
-            onClick={() => supabase.auth.signOut({ scope: "local" })}
+            onClick={logOut}
           >
             Log Out
           </button>
@@ -121,6 +143,38 @@ function MainApp() {
           activeView={activeView}
           setActiveView={setActiveView}
         />
+      )}
+
+      {user && !settingPassword && offerPush && (
+        <div className="push-offer" role="status">
+          <p>Get a notification when a new home matches your search, and the day before a viewing.</p>
+          <div className="push-offer-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={async () => {
+                setOfferPush(false);
+                try {
+                  await enablePush();
+                } catch (error) {
+                  console.error("Could not turn on notifications:", error);
+                }
+              }}
+            >
+              Turn on
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                dismissPushOffer();
+                setOfferPush(false);
+              }}
+            >
+              Not now
+            </button>
+          </div>
+        </div>
       )}
 
       {passwordChanged && (
