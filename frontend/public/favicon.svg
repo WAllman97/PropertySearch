@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- PropertySearch app icon. Square, no transparency: iOS rounds the corners itself.
+       Regenerate the PNGs with: npm run app:icons -->
+  <rect width="1024" height="1024" fill="#223a33"/>
+  <!-- Scaled and centred so nothing sits in the corners iOS rounds off. -->
+  <g transform="translate(30 30) scale(0.86)">
+    <!-- House -->
+    <path d="M512 214 L812 464 L742 464 L742 794 L282 794 L282 464 L212 464 Z"
+          fill="#f8f6f2" stroke="#f8f6f2" stroke-width="36" stroke-linejoin="round"/>
+    <!-- Door -->
+    <path d="M452 812 L452 650 Q452 600 512 600 Q572 600 572 650 L572 812 Z" fill="#223a33"/>
+    <!-- Magnifying glass over the corner -->
+    <circle cx="716" cy="716" r="128" fill="#2c4a41" stroke="#b08d57" stroke-width="46"/>
+    <line x1="830" y1="830" x2="900" y2="900" stroke="#b08d57" stroke-width="62" stroke-linecap="round"/>
+  </g>
+</svg>

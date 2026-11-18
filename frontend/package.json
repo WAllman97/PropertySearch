@@ -4,7 +4,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "app:sync": "vite build && cap sync ios",
-    "app:open": "cap open ios"
+    "app:open": "cap open ios",
+    "app:icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.2",
@@ -17,6 +18,7 @@
     "vite": "latest"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.6.2"
+    "@capacitor/cli": "^8.6.2",
+    "sharp": "^0.33.5"
   }
 }

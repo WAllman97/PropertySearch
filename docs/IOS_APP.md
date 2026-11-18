@@ -8,7 +8,11 @@ below happens on the Mac.
 ## What's already done (on Windows)
 
 - Capacitor 8 installed; `frontend/capacitor.config.json` sets the app name
-  (PropertySearch) and bundle ID (`com.propertysearch.app`).
+  (PropertySearch) and bundle ID (`com.wallman97.propertysearch`, also set in
+  the Xcode project).
+- App icon and launch screen are in the Xcode asset catalog, made from
+  `frontend/resources/icon.svg`. To change them, edit the SVG and run
+  `npm run app:icons` (also updates the website's favicon).
 - Inside the app, `/api/*` calls and any link we share or email point at the
   live site, `https://property-search-4jcc.vercel.app` (`src/lib/platform.js`).
   Override with `VITE_PUBLIC_SITE_URL` in `frontend/.env` if the domain changes.
@@ -64,12 +68,8 @@ After any code change: `npm run app:sync`, then Run again in Xcode.
 
 ## Before the first TestFlight upload
 
-- **Bundle ID is permanent** once uploaded. Change `appId` in
-  `frontend/capacitor.config.json` now if you want something else (e.g. your
-  own domain reversed, `uk.co.yourdomain.propertysearch`), then
-  `npx cap sync ios`. It must match the app you create in App Store Connect.
-- **App icon:** needs a 1024×1024 PNG with no transparency. Drop it in
-  Xcode under App → Assets → AppIcon.
+- **Bundle ID** `com.wallman97.propertysearch` is permanent once uploaded and
+  must match the app you create in App Store Connect.
 - **Privacy policy:** set `VITE_CONTACT_EMAIL=...` in Vercel (and
   `frontend/.env`), redeploy, and check `/privacy` reads right. Use the live
   `/privacy` URL in App Store Connect.
@@ -80,7 +80,10 @@ After any code change: `npm run app:sync`, then Run again in Xcode.
 ## TestFlight (demo on phones without App Store review)
 
 1. In [App Store Connect](https://appstoreconnect.apple.com) → Apps → **+**,
-   create the app with the same bundle ID.
+   create the app with bundle ID `com.wallman97.propertysearch`. If it isn't
+   in the list, register it first at developer.apple.com → Certificates,
+   Identifiers & Profiles → Identifiers (Xcode usually does this for you the
+   first time you run on your phone).
 2. In Xcode pick **Any iOS Device** as the target, then Product → **Archive**.
 3. In the Organizer window that opens: **Distribute App** → App Store Connect
    → Upload.
