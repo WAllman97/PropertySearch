@@ -260,3 +260,8 @@
   font-weight: 800;
   color: #b42318;
 }
+
+.admin-people {
+  font-size: 12px;
+  max-width: 280px;
+}

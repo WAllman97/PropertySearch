@@ -126,16 +126,18 @@ const weekLabel = (iso) =>
 const monthLabel = (iso) =>
   iso ? new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) : "";
 
-function AgentRow({ agent, onSaved }) {
-  const [plan, setPlan] = useState(agent.plan);
-  const [fee, setFee] = useState(agent.monthly_fee ?? "");
+// One branch (pricing is per branch): its people, activity added up across
+// them, and one plan and fee (migration 021).
+function BranchRow({ branch, onSaved }) {
+  const [plan, setPlan] = useState(branch.plan);
+  const [fee, setFee] = useState(branch.monthly_fee ?? "");
   const [busy, setBusy] = useState(false);
-  const changed = plan !== agent.plan || String(fee) !== String(agent.monthly_fee ?? "");
+  const changed = plan !== branch.plan || String(fee) !== String(branch.monthly_fee ?? "");
 
   async function save() {
     setBusy(true);
-    const { error } = await supabase.rpc("admin_set_agent_billing", {
-      p_agent: agent.user_id,
+    const { error } = await supabase.rpc("admin_set_branch_billing", {
+      p_branch: branch.branch_key,
       p_plan: plan,
       p_fee: fee === "" ? null : Math.round(Number(String(fee).replace(/[£,\s]/g, ""))),
     });
@@ -147,23 +149,49 @@ function AgentRow({ agent, onSaved }) {
     onSaved();
   }
 
-  const quiet = !agent.last_activity || new Date(agent.last_activity) < Date.now() - 30 * 864e5;
+  const people = branch.people_list || [];
+  const unused = branch.people === 0;
+  // Quiet: no activity for 30 days, once it's been signed up that long.
+  const monthAgo = Date.now() - 30 * 864e5;
+  const quiet =
+    !unused &&
+    new Date(branch.created_at) < monthAgo &&
+    (!branch.last_activity || new Date(branch.last_activity) < monthAgo);
   return (
-    <tr className={quiet ? "quiet" : ""}>
+    <tr className={unused ? "admin-row-off" : quiet ? "quiet" : ""}>
       <td>
-        <strong>{agent.agency}</strong>
-        {agent.branch ? ` · ${agent.branch}` : ""}
-        <br />
-        <span className="muted">
-          {agent.name} · <a href={`mailto:${agent.email}`}>{agent.email}</a>
-        </span>
+        <strong>{branch.agency}</strong>
+        {branch.branch ? ` · ${branch.branch}` : ""}
+        {branch.code && <div className="muted"><code>{branch.code}</code></div>}
+        {people.length > 0 && (
+          <div className="muted admin-people">
+            {people.map((person, i) => (
+              <span key={person.email}>
+                {i > 0 && ", "}
+                <a href={`mailto:${person.email}`}>{person.name}</a>
+              </span>
+            ))}
+          </div>
+        )}
       </td>
-      <td>{shortDate(agent.created_at)}</td>
-      <td className="num">{agent.listings}</td>
-      <td className="num">{agent.slots_30d}</td>
-      <td className="num">{agent.viewings_30d}</td>
-      <td className="num">{agent.sends_30d}</td>
-      <td>{quiet ? <span className="admin-flag">quiet 30d+</span> : shortDate(agent.last_activity)}</td>
+      <td className="num">
+        {branch.people}
+        {branch.seats ? ` / ${branch.seats}` : ""}
+      </td>
+      <td>{shortDate(branch.created_at)}</td>
+      <td className="num">{branch.listings}</td>
+      <td className="num">{branch.slots_30d}</td>
+      <td className="num">{branch.viewings_30d}</td>
+      <td className="num">{branch.sends_30d}</td>
+      <td>
+        {unused ? (
+          <span className="muted">nobody yet</span>
+        ) : quiet ? (
+          <span className="admin-flag">quiet 30d+</span>
+        ) : (
+          shortDate(branch.last_activity)
+        )}
+      </td>
       <td>
         <select value={plan} onChange={(e) => setPlan(e.target.value)} aria-label="Plan">
           {PLANS.map((p) => (
@@ -290,19 +318,22 @@ function Dashboard({ data, onReload }) {
           <div>
             <h2>Agent branches</h2>
             <p>
-              Billing is set by hand until payments are built: mark a branch paying with its
-              monthly fee to count it in revenue.
+              One row per branch, however many people it has. Billing is set by hand until
+              payments are built: mark a branch paying with its monthly fee to count it in
+              revenue. {agents.people ?? 0} agent{agents.people === 1 ? "" : "s"} across{" "}
+              {agents.total} branch{agents.total === 1 ? "" : "es"}.
             </p>
           </div>
         </div>
         {agents.list.length === 0 ? (
-          <p className="muted">No agents yet.</p>
+          <p className="muted">No branches yet.</p>
         ) : (
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>
                 <tr>
                   <th>Branch</th>
+                  <th className="num">People</th>
                   <th>Joined</th>
                   <th className="num">Listings</th>
                   <th className="num">Slots 30d</th>
@@ -315,8 +346,8 @@ function Dashboard({ data, onReload }) {
                 </tr>
               </thead>
               <tbody>
-                {agents.list.map((agent) => (
-                  <AgentRow key={agent.user_id} agent={agent} onSaved={load} />
+                {agents.list.map((branch) => (
+                  <BranchRow key={branch.branch_key} branch={branch} onSaved={load} />
                 ))}
               </tbody>
             </table>
