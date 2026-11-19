@@ -1,0 +1,208 @@
+// The "offer accepted" step (migration 015).
+//   POST /api/offers { action: "report", propertyId, amount }     buyer
+//   POST /api/offers { action: "withdraw", offerId }              buyer
+//   POST /api/offers { action: "respond", offerId, confirm }      agent
+//
+// A buyer's word alone isn't proof, so an offer only counts as verified when
+// the agent selling the home confirms it. If the home is one of an agent's
+// listings on PropertySearch, that agent is emailed and asked; otherwise the
+// offer stays "unverified".
+import { householdMemberIds, requireHouseholdUser, requireUser, supabaseAdmin, underRateLimit } from "./_lib/household.js";
+import { appBaseUrl } from "./_lib/booking.js";
+import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
+import { listingKey } from "./_lib/listing.js";
+import { detailRow } from "./_lib/viewings.js";
+import { sendToUsers } from "./_lib/push.js";
+import { withCors } from "./_lib/cors.js";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_REPORTS_PER_DAY = 10;
+
+function pounds(amount) {
+  return `£${Number(amount).toLocaleString("en-GB")}`;
+}
+
+export default withCors(handler);
+
+async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+  try {
+    const action = req.body?.action;
+    if (action === "report") return await handleReport(req, res);
+    if (action === "withdraw") return await handleWithdraw(req, res);
+    if (action === "respond") return await handleRespond(req, res);
+    return res.status(400).json({ error: "Unknown action" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+// The agent listing on PropertySearch for this home, if there is one.
+async function findAgentListing(listingUrl) {
+  const key = listingKey(listingUrl);
+  if (!key) return null;
+  const { data } = await supabaseAdmin
+    .from("agent_listings")
+    .select("id, address, agent_id, agents(name, email)")
+    .eq("listing_key", key)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  return data?.[0] || null;
+}
+
+async function handleReport(req, res) {
+  const user = await requireHouseholdUser(req, res);
+  if (!user) return;
+
+  const { propertyId } = req.body;
+  const amount = Math.round(Number(req.body.amount));
+  if (!UUID_RE.test(String(propertyId || ""))) {
+    return res.status(400).json({ error: "Missing property" });
+  }
+  if (!Number.isFinite(amount) || amount < 1000 || amount >= 100000000) {
+    return res.status(400).json({ error: "Enter the accepted offer in pounds, e.g. 625000" });
+  }
+
+  const { data: property } = await supabaseAdmin
+    .from("properties")
+    .select("id, address, listing_url")
+    .eq("id", propertyId)
+    .eq("household_id", user.householdId)
+    .maybeSingle();
+  if (!property) {
+    return res.status(404).json({ error: "Property not found" });
+  }
+
+  if (!(await underRateLimit(user.id, "offer_report", MAX_REPORTS_PER_DAY, 24 * 60))) {
+    return res.status(429).json({ error: "Too many offers reported today. Please try again tomorrow." });
+  }
+
+  const listing = await findAgentListing(property.listing_url);
+
+  const { data: offer, error } = await supabaseAdmin
+    .from("offers")
+    .insert({
+      household_id: user.householdId,
+      property_id: property.id,
+      agent_listing_id: listing?.id || null,
+      amount,
+      reported_by: user.id,
+      status: listing ? "awaiting_agent" : "unverified",
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "There's already an accepted offer on this home. Withdraw it first." });
+    }
+    console.error("offer insert failed:", error);
+    return res.status(500).json({ error: "Could not save the offer" });
+  }
+
+  await supabaseAdmin
+    .from("properties")
+    .update({ status: "offer_accepted" })
+    .eq("id", property.id)
+    .eq("household_id", user.householdId);
+
+  // Ask the agent to confirm. Reply goes straight to the buyer.
+  if (listing?.agents?.email) {
+    const buyerName = user.user_metadata?.name || user.email;
+    await sendEmail({
+      to: listing.agents.email,
+      replyTo: user.email,
+      subject: `Please confirm: offer accepted on ${listing.address}`,
+      html: emailLayout(
+        "A buyer says you've accepted their offer",
+        `<table style="border-collapse:collapse;font-size:14px;margin-bottom:16px;">
+          ${detailRow("Property", `<strong>${escapeHtml(listing.address)}</strong>`)}
+          ${detailRow("Buyer", escapeHtml(buyerName))}
+          ${detailRow("Offer", escapeHtml(pounds(amount)))}
+        </table>
+        <p style="margin:0 0 16px;">Is this right? It takes one tap, and confirmed offers keep your
+        buyers' records accurate.</p>
+        <p style="margin:0;"><a href="${escapeHtml(appBaseUrl(req))}/agent" style="background:#223a33;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">Confirm or correct</a></p>`
+      ),
+    }).catch((err) => console.error("offer email failed:", err));
+  }
+
+  return res.status(200).json({ success: true, offer });
+}
+
+async function handleWithdraw(req, res) {
+  const user = await requireHouseholdUser(req, res);
+  if (!user) return;
+
+  const { offerId } = req.body;
+  if (!UUID_RE.test(String(offerId || ""))) {
+    return res.status(400).json({ error: "Missing offer" });
+  }
+
+  const { data: offer } = await supabaseAdmin
+    .from("offers")
+    .update({ status: "withdrawn", withdrawn_at: new Date().toISOString() })
+    .eq("id", offerId)
+    .eq("household_id", user.householdId)
+    .neq("status", "withdrawn")
+    .select("property_id")
+    .maybeSingle();
+  if (!offer) {
+    return res.status(404).json({ error: "Offer not found" });
+  }
+
+  await supabaseAdmin
+    .from("properties")
+    .update({ status: "offer_made" })
+    .eq("id", offer.property_id)
+    .eq("household_id", user.householdId)
+    .eq("status", "offer_accepted");
+
+  return res.status(200).json({ success: true });
+}
+
+async function handleRespond(req, res) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const { offerId } = req.body;
+  if (!UUID_RE.test(String(offerId || "")) || typeof req.body.confirm !== "boolean") {
+    return res.status(400).json({ error: "Missing offer or answer" });
+  }
+
+  const { data: offer } = await supabaseAdmin
+    .from("offers")
+    .select("id, household_id, amount, status, agent_listings(agent_id, address)")
+    .eq("id", offerId)
+    .maybeSingle();
+
+  // Only the agent whose listing it is can answer. Agents may correct an
+  // earlier answer, but not one the buyer has withdrawn.
+  if (!offer || offer.agent_listings?.agent_id !== user.id || offer.status === "withdrawn") {
+    return res.status(404).json({ error: "Offer not found" });
+  }
+
+  const status = req.body.confirm ? "confirmed" : "disputed";
+  const { error } = await supabaseAdmin
+    .from("offers")
+    .update({ status, agent_responded_at: new Date().toISOString() })
+    .eq("id", offer.id);
+  if (error) {
+    console.error("offer respond failed:", error);
+    return res.status(500).json({ error: "Could not save your answer" });
+  }
+
+  const address = offer.agent_listings.address;
+  await sendToUsers(await householdMemberIds(offer.household_id), {
+    title: req.body.confirm ? `Offer confirmed: ${address}` : `Agent queried your offer: ${address}`,
+    body: req.body.confirm
+      ? `The agent confirmed your accepted offer of ${pounds(offer.amount)}.`
+      : `The agent says the accepted offer of ${pounds(offer.amount)} isn't right. Tap to check.`,
+    url: "/?view=history",
+  }).catch((err) => console.error("offer push failed:", err));
+
+  return res.status(200).json({ success: true, status });
+}
