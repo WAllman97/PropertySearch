@@ -128,7 +128,7 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
     setPlaceError("");
     setPlaces(null);
     try {
-      const response = await postAuthed("/api/geo", { action: "places", q: placeQuery });
+      const response = await postAuthed("/api/lookup", { action: "places", q: placeQuery });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Place search failed");
       if (!body.results.length) {

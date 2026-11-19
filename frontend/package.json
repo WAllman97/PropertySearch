@@ -1,7 +1,7 @@
 {
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/check-functions.mjs && vite build",
     "preview": "vite preview",
     "app:sync": "vite build && cap sync ios",
     "app:open": "cap open ios",

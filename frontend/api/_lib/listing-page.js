@@ -1,5 +1,5 @@
 // Read one portal listing page into the fields a property needs. Used by
-// /api/listing-preview when a buyer saves a link: one page, on request, like
+// /api/lookup when a buyer saves a link: one page, on request, like
 // a link preview. Never crawls search results.
 //
 // We only ever fetch a URL we build ourselves from the listing id, so a

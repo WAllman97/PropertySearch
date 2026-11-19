@@ -289,7 +289,7 @@ function formToRow(form) {
 
 async function locatePostcode(postcode) {
   try {
-    await postAuthed("/api/geo", { action: "postcode", postcode });
+    await postAuthed("/api/lookup", { action: "postcode", postcode });
   } catch {
     // Matching falls back to the postcode district.
   }

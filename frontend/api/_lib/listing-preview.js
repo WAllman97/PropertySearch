@@ -1,5 +1,5 @@
 // Save-a-link: details for one pasted Rightmove / OnTheMarket / Zoopla link.
-//   POST /api/listing-preview { url }
+//   POST /api/lookup { action: "listing", url }   (routed from ../lookup.js)
 //
 // Cheapest source first, so each listing is read from a portal at most once
 // for everyone (migration 011):
@@ -8,16 +8,13 @@
 //   3. read that one page now (like a link preview) and cache the result
 // Zoopla refuses automated reads, so those come back "blocked" and the
 // buyer types the few details in.
-import { requireHouseholdUser, supabaseAdmin, underRateLimit } from "./_lib/household.js";
-import { listingKey } from "./_lib/listing.js";
-import { canonicalListingUrl, fetchListingDetails, normalisePropertyType } from "./_lib/listing-page.js";
-import { withCors } from "./_lib/cors.js";
+import { requireHouseholdUser, supabaseAdmin, underRateLimit } from "./household.js";
+import { listingKey } from "./listing.js";
+import { canonicalListingUrl, fetchListingDetails, normalisePropertyType } from "./listing-page.js";
 
 const OK_TTL_HOURS = 72;
 const RETRY_TTL_HOURS = 12;
 const MAX_FETCHES_PER_HOUR = 30;
-
-export default withCors(handler);
 
 function hoursSince(iso) {
   return (Date.now() - new Date(iso).getTime()) / 3600000;
@@ -61,11 +58,7 @@ async function existingProperty(key, householdId) {
   return hit ? { id: hit.id, status: hit.status } : null;
 }
 
-async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
+export async function handleListingPreview(req, res) {
   const user = await requireHouseholdUser(req, res);
   if (!user) return;
 
