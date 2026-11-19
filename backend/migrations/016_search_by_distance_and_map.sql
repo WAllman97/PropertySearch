@@ -8,7 +8,7 @@
 --   * a polygon drawn on the map
 --
 -- Listings only carry a postcode. postcode_locations caches where each
--- postcode is (from postcodes.io, filled by the /api/geo route and
+-- postcode is (from postcodes.io, filled by /api/lookup and
 -- /api/send-listing). A full postcode is accurate to the street. If we only
 -- know the district (SW11) we use its centre and allow 1 km of slack, so a
 -- home just inside the area isn't missed.

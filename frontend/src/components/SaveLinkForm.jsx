@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 
 // Save-a-link: paste a Rightmove / OnTheMarket / Zoopla link, we fill in the
-// details (/api/listing-preview), the buyer checks them and saves. Replaces
+// details (/api/lookup), the buyer checks them and saves. Replaces
 // typing everything in by hand, and the daily portal scraping.
 
 const TYPES = [
@@ -44,7 +44,7 @@ function SaveLinkForm({ onSaved }) {
     setError("");
     setPreview(null);
     try {
-      const response = await postAuthed("/api/listing-preview", { url: link });
+      const response = await postAuthed("/api/lookup", { action: "listing", url: link });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Could not read that link");
       setPreview(body);
