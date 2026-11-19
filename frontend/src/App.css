@@ -1815,3 +1815,102 @@ button.link-button:hover {
   gap: 8px 16px;
   margin-top: 8px;
 }
+
+/* Buyer search: where to look (postcodes / place & distance / drawn area) */
+.where-options {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.where-options legend {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+  max-width: 480px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* Beats the settings-card button styles (dark fill, pill shape, hover lift). */
+.where-options .segmented button {
+  border: 0;
+  border-radius: 0;
+  background: white;
+  color: var(--primary);
+  padding: 9px 6px;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  transform: none;
+}
+
+.where-options .segmented button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.where-options .segmented button:hover {
+  background: #eef2f0;
+  transform: none;
+}
+
+.where-options .segmented button.active,
+.where-options .segmented button.active:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.where-polygon .buyer-search-actions {
+  align-items: center;
+}
+
+.place-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.place-row .radius-select {
+  flex: 0 0 auto;
+}
+
+.place-row .place-search {
+  flex: 1 1 200px;
+}
+
+.place-results {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-map {
+  height: 340px;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border, #d6dbd8);
+  overflow: hidden;
+  /* Leaflet panes use high z-indexes; keep them under app headers/modals. */
+  position: relative;
+  z-index: 0;
+}
+
+.search-map.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+}
+
+.search-map.leaflet-container {
+  cursor: crosshair;
+}
