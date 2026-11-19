@@ -1,0 +1,169 @@
+/* Buyer dashboard: "what needs my attention" */
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dash-section h3 {
+  margin: 0;
+}
+
+.dash-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dash-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dash-list li:last-child {
+  border-bottom: 0;
+}
+
+.dash-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-calm {
+  margin: 0;
+}
+
+/* Needs you: a dot marks "act" vs "for info"; the words say which too. */
+.dash-dot {
+  flex: 0 0 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.dash-need.act .dash-dot {
+  background: var(--accent);
+}
+
+.dash-need.act .dash-text {
+  font-weight: 700;
+}
+
+.dash-need button {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+}
+
+.dash-when {
+  flex: 0 0 auto;
+  min-width: 165px;
+  white-space: nowrap;
+  font-weight: 800;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-price {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dash-price s {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.dash-cut {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Pipeline: one row of stages, left to right. */
+.dash-pipeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.dash-pipeline button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: white;
+  color: var(--primary);
+}
+
+.dash-pipeline button strong {
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+
+.dash-pipeline button span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
+}
+
+.dash-pipeline button.empty strong {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.dash-footnote {
+  margin: 10px 0 0;
+}
+
+.dash-ready .position-badge {
+  margin-top: 0;
+}
+
+.dash-facts {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.dash-facts li {
+  margin: 2px 0;
+}
+
+@media (max-width: 560px) {
+  .dash-pipeline {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .dash-event {
+    flex-wrap: wrap;
+    gap: 2px 12px;
+  }
+
+  .dash-when {
+    flex: 1 0 100%;
+  }
+
+  .dash-drop {
+    align-items: flex-start;
+  }
+}

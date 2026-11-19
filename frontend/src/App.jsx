@@ -233,7 +233,14 @@ function MainApp() {
                 }}
               />
             )}
-            {activeView === "dashboard" && <DashboardView />}
+            {activeView === "dashboard" && (
+              <DashboardView
+                onNavigate={(view, section) => {
+                  if (section) setSettingsFocus(section);
+                  setActiveView(view);
+                }}
+              />
+            )}
             {activeView === "calendar" && <CalendarView />}
             {activeView === "history" && <HistoryView />}
             {activeView === "settings" && (
