@@ -49,7 +49,7 @@ const FAQS = [
   ],
   [
     "Can colleagues use it?",
-    "Yes. Tell us how many people need access and each signs up with your agency's code, with their own login. Need more later? They can request a place from the sign-up page.",
+    "Yes. Tell us how many people at your branch need access and each signs up with your branch's code, with their own login. Need more later? They can request a place from the sign-up page.",
   ],
 ];
 
@@ -58,7 +58,7 @@ function AgentsPage() {
     ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
         "PropertySearch sign-up code for agents"
       )}&body=${encodeURIComponent(
-        "Hello,\n\nI'd like a sign-up code for our agency.\n\nAgency:\nBranch:\nHow many people need access:\nYour name:\nPhone:\n"
+        "Hello,\n\nI'd like a sign-up code for our branch.\n\nAgency:\nBranch:\nHow many people need access:\nYour name:\nPhone:\n"
       )}`
     : null;
 
@@ -74,7 +74,7 @@ function AgentsPage() {
         </p>
         <div className="agents-cta">
           <a className="primary-button" href="/agent?mode=signup">
-            Sign up with your agency's code
+            Sign up with your branch's code
           </a>
           <a className="secondary-button" href="/agent">
             Log in
@@ -112,10 +112,10 @@ function AgentsPage() {
       </section>
 
       <section className="card" id="get-a-code">
-        <h2>Get your agency's code</h2>
+        <h2>Get your branch's code</h2>
         <p>
-          Sign-up is by invitation so buyers only ever see real agents' times. Each agency gets
-          its own code, and everyone in the branch can use it.
+          Sign-up is by invitation so buyers only ever see real agents' times. Each branch gets
+          its own code for the number of people who need access.
         </p>
         {mailto ? (
           <a className="primary-button" href={mailto}>

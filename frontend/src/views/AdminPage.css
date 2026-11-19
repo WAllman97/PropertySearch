@@ -197,7 +197,7 @@
 /* Agent sign-up codes */
 .admin-code-form {
   display: grid;
-  grid-template-columns: 2fr 1fr 2fr auto;
+  grid-template-columns: 2fr 1.5fr 1fr 1.5fr auto;
   gap: 10px;
   align-items: end;
   margin-bottom: 12px;

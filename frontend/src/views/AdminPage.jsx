@@ -332,7 +332,7 @@ function Dashboard({ data, onReload }) {
 function AgentCodes() {
   const [codes, setCodes] = useState(null);
   const [requests, setRequests] = useState([]);
-  const [form, setForm] = useState({ agency: "", maxUses: "", note: "" });
+  const [form, setForm] = useState({ agency: "", branch: "", maxUses: "", note: "" });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState("");
@@ -366,6 +366,7 @@ function AgentCodes() {
     const maxUses = Number(form.maxUses);
     const { data, error } = await supabase.rpc("admin_create_agent_code", {
       p_agency: form.agency.trim(),
+      p_branch: form.branch.trim(),
       p_max_uses: maxUses,
       p_note: form.note.trim(),
     });
@@ -374,7 +375,7 @@ function AgentCodes() {
       setMessage(error.message);
       return;
     }
-    setForm({ agency: "", maxUses: "", note: "" });
+    setForm({ agency: "", branch: "", maxUses: "", note: "" });
     setMessage(`Created ${data}. Copy its link below and send it to the agency.`);
     load();
   }
@@ -390,7 +391,7 @@ function AgentCodes() {
 
   async function editSeats(code) {
     const typed = window.prompt(
-      `How many people at ${code.agency} can sign up? (${code.uses} have so far)`,
+      `How many people at ${[code.agency, code.branch].filter(Boolean).join(", ")} can sign up? (${code.uses} have so far)`,
       code.max_uses ?? ""
     );
     if (typed === null) return;
@@ -426,7 +427,7 @@ function AgentCodes() {
     const subject = "Your PropertySearch place is ready";
     const body =
       `Hi ${request.name.split(" ")[0]},\n\n` +
-      `There's now a place for you at ${request.agency} on PropertySearch. ` +
+      `There's now a place for you at ${[request.agency, request.branch].filter(Boolean).join(", ")} on PropertySearch. ` +
       `Sign up here with your work email (${request.email}):\n\n${linkFor(request.code)}\n\nThanks`;
     return `mailto:${request.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
@@ -447,7 +448,7 @@ function AgentCodes() {
         <div>
           <h2>Agent sign-up codes</h2>
           <p>
-            One code per agency, with the number of people they told you. Send the link: it fills
+            One code per branch, with the number of people they told you. Send the link: it fills
             in the code and agency. Anyone past the limit can request a place, which you approve
             here. Public page for agents: <a href="/agents">/agents</a>.
           </p>
@@ -463,6 +464,16 @@ function AgentCodes() {
             value={form.agency}
             onChange={(e) => setForm({ ...form, agency: e.target.value })}
             placeholder="Brooks Estate Agents"
+          />
+        </label>
+        <label>
+          Branch
+          <input
+            required
+            maxLength={100}
+            value={form.branch}
+            onChange={(e) => setForm({ ...form, branch: e.target.value })}
+            placeholder="Wandsworth"
           />
         </label>
         <label>
@@ -483,7 +494,7 @@ function AgentCodes() {
             maxLength={200}
             value={form.note}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
-            placeholder="e.g. Wandsworth branch, via Ben"
+            placeholder="e.g. via Ben"
           />
         </label>
         <button type="submit" className="primary-button" disabled={busy}>
@@ -496,7 +507,7 @@ function AgentCodes() {
         <div className="admin-requests">
           <h3>Requests for a place ({requests.length})</h3>
           <p className="muted">
-            These agencies have used all their seats. Approve adds one seat; then email them the
+            These branches have used all their seats. Approve adds one seat; then email them the
             link.
           </p>
           <ul>
@@ -538,7 +549,7 @@ function AgentCodes() {
             <thead>
               <tr>
                 <th>Code</th>
-                <th>Agency</th>
+                <th>Branch</th>
                 <th className="num">Agents joined</th>
                 <th className="num">Seats used</th>
                 <th>Created</th>
@@ -554,6 +565,7 @@ function AgentCodes() {
                   </td>
                   <td>
                     {c.agency}
+                    {c.branch && <> · {c.branch}</>}
                     {c.note && <div className="muted">{c.note}</div>}
                   </td>
                   <td className="num">{c.agents_joined}</td>

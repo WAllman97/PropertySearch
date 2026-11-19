@@ -490,3 +490,10 @@
 .agent-requested h3 {
   margin: 0 0 6px;
 }
+
+/* Agency and branch set by the sign-up code: shown but not editable. */
+.agent-auth input[readonly] {
+  background: var(--surface-soft, #fbfaf7);
+  color: var(--muted);
+  cursor: default;
+}
