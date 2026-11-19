@@ -1,7 +1,6 @@
 """Finding asking-price cuts, shared by the daily alert email and the
 price-drop push the scraper sends straight after each run."""
 
-from core.households import original_household_id
 from core.push import send_to_household
 
 # Properties the household has written off: no alerts for their price cuts.
@@ -11,23 +10,26 @@ PRICE_DROP_STATUSES = ("ignored", "archived", "lost")
 MAX_SEPARATE_PUSHES = 3
 
 
-def get_price_drops(supabase, since):
+def get_price_drops(supabase, since, household_id=None):
     """Properties whose asking price fell since `since` (new, favourites and
     booked ones alike: a cut on a favourite is the most useful alert).
     Each row gets previous_price = the asking price before the latest change.
 
-    Original household only: prices are tracked by the scraper, which works
-    for that household alone (migration 013)."""
-    changed = (
+    One household's if household_id is given, otherwise every household's
+    (the listing refresh tracks all saved Rightmove homes). The service role
+    bypasses row-level security, so callers sending to people must group
+    by household_id."""
+    query = (
         supabase
         .table("properties")
         .select("*")
-        .eq("household_id", original_household_id(supabase))
         .gte("last_price_change_at", since)
         .or_("status.is.null,status.not.in.(" + ",".join(PRICE_DROP_STATUSES) + ")")
         .order("last_price_change_at", desc=True)
-        .execute()
-    ).data or []
+    )
+    if household_id:
+        query = query.eq("household_id", household_id)
+    changed = query.execute().data or []
 
     if not changed:
         return []
@@ -90,10 +92,15 @@ def price_drop_messages(drops):
 
 
 def push_price_drops(supabase, since):
-    """Notify the household's phones about cuts seen since `since` (the start
-    of this scraper run). Returns the number of notifications delivered."""
+    """Notify each household's phones about cuts on its own homes seen since
+    `since` (the start of this scraper run). Returns the number of
+    notifications delivered."""
+    by_household = {}
+    for drop in get_price_drops(supabase, since):
+        by_household.setdefault(drop["household_id"], []).append(drop)
+
     sent = 0
-    household_id = original_household_id(supabase)
-    for title, body in price_drop_messages(get_price_drops(supabase, since)):
-        sent += send_to_household(supabase, household_id, title, body, url="/?view=properties")
+    for household_id, drops in by_household.items():
+        for title, body in price_drop_messages(drops):
+            sent += send_to_household(supabase, household_id, title, body, url="/?view=properties")
     return sent

@@ -187,6 +187,7 @@ Settings → Phone Notifications), stores the phone's token in `device_tokens`
 - **Viewing reminder** the day before (`backend/jobs/send_viewing_reminders.py`);
   tapping opens the Calendar.
 - **Price drop** after the 07:00 scraper run, for cuts it saw that morning
+  on any household's saved Rightmove homes, sent to that household
   (`backend/core/price_drops.py`, called from `main.py`). One per property,
   or a single summary if there are more than three. Ignored, archived and
   lost properties are left out.
@@ -235,8 +236,16 @@ and its data when the last person leaves (Apple requirement). In the app the
 invite link points at the live site, where the partner signs up, then logs
 in on their phone.
 
-New households get the app only: the scraper, its daily email, AI scoring
-and price-drop alerts stay with the original household.
+Every household's saved Rightmove homes are re-checked daily (one page read
+per listing, however many households saved it), so all buyers get price
+changes, "removed" / sold STC status and price-drop notifications. The
+search scraper, its daily email, AI scoring and sold-price comparisons stay
+with the original household. Zoopla and OnTheMarket homes aren't re-checked.
+
+New households see a "Getting started" checklist at the top of Properties
+(`components/GettingStarted.jsx`): save a home, set a search, add commute
+places, buying position, invite a partner. It ticks itself off from saved
+data and can be hidden.
 
 ## Still to do (next steps in the plan)
 

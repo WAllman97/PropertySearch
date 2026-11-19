@@ -9,7 +9,7 @@ import NotificationSettings from "../components/NotificationSettings";
 import PushSettings from "../components/PushSettings";
 import { isNativeApp } from "../lib/platform";
 
-function SettingsView({ user }) {
+function SettingsView({ user, focusSection, onFocused }) {
   const [household, setHousehold] = useState(null);
 
   const loadHousehold = useCallback(async () => {
@@ -21,6 +21,22 @@ function SettingsView({ user }) {
   useEffect(() => {
     if (user) loadHousehold();
   }, [user, loadHousehold]);
+
+  // Arrived from a "Getting started" step: scroll to that card. Waits for
+  // the household card, which only renders once loaded.
+  useEffect(() => {
+    if (!focusSection || (focusSection === "household" && !household)) return undefined;
+    const timer = setTimeout(() => {
+      const card = document.getElementById(`settings-${focusSection}`);
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "start" });
+        card.classList.add("settings-focus");
+        setTimeout(() => card.classList.remove("settings-focus"), 2000);
+      }
+      onFocused?.();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [focusSection, household, onFocused]);
 
   if (!user) {
     return (
@@ -35,7 +51,7 @@ function SettingsView({ user }) {
 
   return (
     <>
-      <section className="card">
+      <section className="card" id="settings-searches">
         <div className="section-header">
           <h2>What you're looking for</h2>
           <p>
@@ -47,7 +63,7 @@ function SettingsView({ user }) {
         <BuyerSearches user={user} />
       </section>
 
-      <section className="card">
+      <section className="card" id="settings-position">
         <div className="section-header">
           <h2>Your Buying Position</h2>
           <p>
@@ -60,7 +76,7 @@ function SettingsView({ user }) {
       </section>
 
       {household && (
-        <section className="card">
+        <section className="card" id="settings-household">
           <div className="section-header">
             <h2>Household</h2>
             <p>Everyone here shares one property list, calendar and notes.</p>
@@ -93,7 +109,7 @@ function SettingsView({ user }) {
         <BookingSettings user={user} />
       </section>
 
-      <section className="card">
+      <section className="card" id="settings-commute">
         <div className="section-header">
           <h2>Buyer Profile & Commute</h2>
           <p>

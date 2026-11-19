@@ -185,7 +185,8 @@ for search in config["searches"]:
 
 # ---- Price tracking: re-check active listings not in today's results ----
 # Picks up price changes on listings that have dropped out of the search
-# results, plus removed / sold STC. Listings saved above were stamped
+# results, plus removed / sold STC, for every household's saved Rightmove
+# homes (one page read per listing). Listings saved above were stamped
 # listing_checked_at just now, so they're skipped.
 try:
     health["listing_refresh"] = listing_tracker.refresh_active_listings(

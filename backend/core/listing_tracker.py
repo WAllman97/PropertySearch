@@ -9,6 +9,10 @@ Two sources of truth:
     removed / sold STC status.
 
 Every change of asking price we observe is written to price_history.
+
+The refresh covers every household's saved Rightmove homes, not just the
+original household's: each listing page is read once a day however many
+households saved it, and the result is applied to all of their rows.
 """
 
 import json
@@ -20,7 +24,6 @@ from datetime import datetime, timezone
 import requests
 
 from core.supabase_client import supabase
-from core.households import original_household_id
 from scrapers import rightmove
 
 INACTIVE_STATUSES = ("ignored", "archived", "lost")
@@ -268,13 +271,11 @@ def apply_facts(property_row, facts, source):
 # Daily refresh of active listings
 # ---------------------------------------------------------------------------
 
-def active_rightmove_properties(limit=500):
+def active_rightmove_properties(limit=5000):
+    """Every household's live Rightmove homes, stalest first."""
     result = (
         supabase.table("properties")
-        .select("id,title,address,listing_url,price,initial_price,status,listing_status,listing_checked_at,source")
-        # Page re-reads are part of the scraper, which works for the original
-        # household only (migration 013).
-        .eq("household_id", original_household_id(supabase))
+        .select("id,household_id,title,address,listing_url,price,initial_price,status,listing_status,listing_checked_at,source")
         .eq("source", "rightmove")
         .or_("status.is.null,status.not.in.(" + ",".join(INACTIVE_STATUSES) + ")")
         .order("listing_checked_at", desc=False, nullsfirst=True)
@@ -292,42 +293,63 @@ def _hours_since(value):
     return (datetime.now(timezone.utc) - then).total_seconds() / 3600
 
 
+def group_by_listing(rows):
+    """{canonical listing URL: [rows]}, keeping the stalest-first order, so
+    several households' copies of one listing share a single page read."""
+    groups = {}
+    for row in rows:
+        try:
+            key = rightmove.canonical_property_url(row.get("listing_url") or "")
+        except Exception:
+            key = None
+        groups.setdefault(key or row["id"], []).append(row)
+    return groups
+
+
 def refresh_active_listings(max_age_hours=20, limit=150, delay=(1.0, 2.5)):
     """Re-read each active Rightmove listing's page (oldest-checked first)
-    to pick up price changes and removed / sold STC status. Listings checked
-    within max_age_hours (e.g. by today's search scrape) are skipped."""
-    stats = {"checked": 0, "price_changes": 0, "removed": 0, "failed": 0, "skipped_recent": 0}
+    to pick up price changes and removed / sold STC status, for every
+    household. `limit` counts listing pages read, not property rows. A
+    listing is skipped when every household's copy was checked within
+    max_age_hours (e.g. by today's search scrape)."""
+    stats = {
+        "checked": 0, "rows_updated": 0, "price_changes": 0, "removed": 0,
+        "failed": 0, "skipped_recent": 0,
+    }
 
-    for row in active_rightmove_properties():
+    for group in group_by_listing(active_rightmove_properties()).values():
         if stats["checked"] >= limit:
             break
 
-        age = _hours_since(row.get("listing_checked_at"))
-        if age is not None and age < max_age_hours:
+        ages = [_hours_since(row.get("listing_checked_at")) for row in group]
+        if all(age is not None and age < max_age_hours for age in ages):
             stats["skipped_recent"] += 1
             continue
 
+        first = group[0]
         try:
-            facts = fetch_rightmove_facts(row["listing_url"])
+            facts = fetch_rightmove_facts(first["listing_url"])
         except ListingBlocked as error:
             print(f"WARNING: {error}; stopping listing refresh.")
             stats["failed"] += 1
             break
         except Exception as error:
-            print(f"Listing refresh failed for {row.get('address')}: {error}")
+            print(f"Listing refresh failed for {first.get('address')}: {error}")
             stats["failed"] += 1
             continue
 
-        payload = apply_facts(row, facts, source="listing_page")
         stats["checked"] += 1
+        for row in group:
+            payload = apply_facts(row, facts, source="listing_page")
+            stats["rows_updated"] += 1
 
-        if "last_price_change_at" in payload:
-            stats["price_changes"] += 1
-            print(f"Price change: {row.get('address')} {row.get('price')} -> {payload.get('price')}")
+            if "last_price_change_at" in payload:
+                stats["price_changes"] += 1
+                print(f"Price change: {row.get('address')} {row.get('price')} -> {payload.get('price')}")
 
-        if payload.get("listing_status") == "removed":
-            stats["removed"] += 1
-            print(f"Removed from Rightmove: {row.get('address')}")
+            if payload.get("listing_status") == "removed":
+                stats["removed"] += 1
+                print(f"Removed from Rightmove: {row.get('address')}")
 
         time.sleep(random.uniform(*delay))
 
