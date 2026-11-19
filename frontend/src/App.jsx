@@ -13,6 +13,7 @@ import BookingPage from "./views/BookingPage";
 import AgentPortal from "./views/AgentPortal";
 import PublicViewingPage from "./views/PublicViewingPage";
 import PrivacyPage from "./views/PrivacyPage";
+import SupportPage from "./views/SupportPage";
 import {
   dismissPushOffer,
   enablePush,
@@ -57,6 +58,9 @@ function App() {
 
   if (/^\/privacy\/?$/.test(window.location.pathname)) {
     return <PrivacyPage />;
+  }
+  if (/^\/support\/?$/.test(window.location.pathname)) {
+    return <SupportPage />;
   }
 
   // Estate agent area: own sign-up/login, listings and viewing times.
