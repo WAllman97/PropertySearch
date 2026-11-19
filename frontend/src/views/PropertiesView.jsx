@@ -8,6 +8,7 @@ import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 import MarketToolbar from "../components/MarketToolbar";
 import SaveLinkForm from "../components/SaveLinkForm";
 import GettingStarted from "../components/GettingStarted";
+import PropertyTile from "../components/PropertyTile";
 import { applyMarketView } from "../utils/market";
 
 function getPropertyAgeDays(property) {
@@ -43,6 +44,8 @@ function PropertiesView({ onOpenSettings }) {
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [marketFilter, setMarketFilter] = useState("all");
   const [marketSort, setMarketSort] = useState("newest");
+  // The one tile flipped open to show its details.
+  const [openId, setOpenId] = useState(null);
 
   const [shareProperty, setShareProperty] = useState(null);
   const [shareEmail, setShareEmail] = useState(
@@ -332,29 +335,18 @@ function PropertiesView({ onOpenSettings }) {
         </div>
       )}
 
-      <div className="property-grid">
+      <div className="tile-grid">
         {applyMarketView(properties, marketFilter, marketSort).map((property) => {
           const propertyAgeDays = getPropertyAgeDays(property);
 
           return (
-            <div className="property-card" key={property.id}>
-              {property.image_url && (
-                <img
-                  src={property.image_url}
-                  alt={property.address}
-                  className="property-image"
-                />
-              )}
-
+            <PropertyTile
+              key={property.id}
+              property={property}
+              open={openId === property.id}
+              onToggle={() => setOpenId((current) => (current === property.id ? null : property.id))}
+            >
               <div className="property-content">
-                <h3>
-                  {property.price
-                    ? `£${Number(property.price).toLocaleString()}`
-                    : "Price unavailable"}
-                </h3>
-
-                <p>{property.address}</p>
-
                 <MarketSignals property={property} />
                 <ViewingSlots
                   property={property}
@@ -424,7 +416,7 @@ function PropertiesView({ onOpenSettings }) {
                   </button>
                 </div>
               </div>
-            </div>
+            </PropertyTile>
           );
         })}
       </div>
