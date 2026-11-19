@@ -14,6 +14,7 @@ import AgentPortal from "./views/AgentPortal";
 import PublicViewingPage from "./views/PublicViewingPage";
 import PrivacyPage from "./views/PrivacyPage";
 import SupportPage from "./views/SupportPage";
+import AgentsPage from "./views/AgentsPage";
 // Loaded only when someone opens /admin, not shipped to every visitor.
 const AdminPage = lazy(() => import("./views/AdminPage"));
 import {
@@ -70,6 +71,11 @@ function App() {
         <AdminPage />
       </Suspense>
     );
+  }
+
+  // Public page for estate agents explaining the product.
+  if (/^\/agents\/?$/.test(window.location.pathname)) {
+    return <AgentsPage />;
   }
 
   // Estate agent area: own sign-up/login, listings and viewing times.

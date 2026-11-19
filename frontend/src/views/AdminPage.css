@@ -193,3 +193,70 @@
   color: #6b7280;
   font-size: 0.85rem;
 }
+
+/* Agent sign-up codes */
+.admin-code-form {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.admin-code-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-code-actions {
+  white-space: nowrap;
+  display: flex;
+  gap: 12px;
+}
+
+.admin-row-off {
+  opacity: 0.55;
+}
+
+@media (max-width: 760px) {
+  .admin-code-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-requests {
+  border: 1px solid var(--accent, #b08d57);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 8px 0 16px;
+  background: #fdf8ee;
+}
+
+.admin-requests h3 {
+  margin: 0 0 4px;
+}
+
+.admin-requests ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.admin-requests li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.admin-pending {
+  font-size: 12px;
+  font-weight: 800;
+  color: #b42318;
+}

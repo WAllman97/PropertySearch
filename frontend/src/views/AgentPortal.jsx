@@ -40,8 +40,17 @@ function todayInputValue() {
 // ---------------------------------------------------------------------------
 // Sign up / log in
 
+// Sign-up links carry the agency's code: /agent?code=BROOKS-7F3A2
+function codeFromLink() {
+  const params = new URLSearchParams(window.location.search);
+  return (params.get("code") || "").trim().toUpperCase();
+}
+
 function AgentAuth() {
-  const [mode, setMode] = useState("signup");
+  const [linkCode] = useState(codeFromLink);
+  const [mode, setMode] = useState(() =>
+    linkCode || new URLSearchParams(window.location.search).get("mode") === "signup" ? "signup" : "login"
+  );
   const [form, setForm] = useState({
     name: "",
     agency: "",
@@ -49,11 +58,31 @@ function AgentAuth() {
     phone: "",
     email: "",
     password: "",
-    code: "",
+    code: linkCode,
     website: "",
   });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  // The agency a valid code belongs to (shown, and pre-fills Agency).
+  const [codeAgency, setCodeAgency] = useState("");
+  // Every seat on the code is taken: ask for a place instead of signing up.
+  const [full, setFull] = useState(false);
+  const [requested, setRequested] = useState(false);
+
+  useEffect(() => {
+    if (!linkCode) return;
+    (async () => {
+      const response = await fetch(apiUrl(`/api/agent-signup?code=${encodeURIComponent(linkCode)}`));
+      const body = await response.json().catch(() => ({}));
+      if (response.ok && body.agency) {
+        setCodeAgency(body.agency);
+        setFull(Boolean(body.full));
+        setForm((current) => ({ ...current, agency: current.agency || body.agency }));
+      } else {
+        setMessage(body.error || "That sign-up link isn't valid any more.");
+      }
+    })();
+  }, [linkCode]);
 
   const update = (key) => (event) => setForm({ ...form, [key]: event.target.value });
 
@@ -62,22 +91,47 @@ function AgentAuth() {
     if (error) throw error;
   }
 
+  async function requestSeat() {
+    const response = await fetch(apiUrl("/api/agent-signup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...form, password: undefined, action: "request_seat" }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || "Could not send your request");
+    if (body.available) {
+      // A seat came free (or was added): sign up as normal.
+      setFull(false);
+      setMessage("There's a place for you now. Choose a password and create your account.");
+      return;
+    }
+    setRequested(true);
+  }
+
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
     setMessage("");
 
     try {
-      if (mode === "signup") {
-        const response = await fetch(apiUrl("/api/agent-signup"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.error || "Could not create your account");
+      if (mode === "signup" && full) {
+        await requestSeat();
+      } else {
+        if (mode === "signup") {
+          const response = await fetch(apiUrl("/api/agent-signup"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(form),
+          });
+          const body = await response.json().catch(() => ({}));
+          if (response.status === 409 && body.full) {
+            setFull(true);
+            throw new Error(body.error);
+          }
+          if (!response.ok) throw new Error(body.error || "Could not create your account");
+        }
+        await logIn(form.email.trim(), form.password);
       }
-      await logIn(form.email.trim(), form.password);
     } catch (error) {
       setMessage(error.message);
     }
@@ -98,6 +152,18 @@ function AgentAuth() {
       </header>
 
       <section className="card agent-auth">
+        {mode === "signup" && codeAgency && !full && (
+          <p className="agent-joining">
+            Joining as <strong>{codeAgency}</strong>
+          </p>
+        )}
+        {mode === "signup" && full && !requested && (
+          <p className="agent-joining agent-full">
+            <strong>{codeAgency || "Your agency"}</strong> has used all its places on
+            PropertySearch. Add your details and request a place: once it's added, use the same
+            link to sign up.
+          </p>
+        )}
         <div className="booking-kind" role="tablist">
           <button
             type="button"
@@ -115,6 +181,16 @@ function AgentAuth() {
           </button>
         </div>
 
+        {mode === "signup" && requested ? (
+          <div className="agent-requested" role="status">
+            <h3>Request sent</h3>
+            <p>
+              We'll add a place for {codeAgency || "your agency"} and let you know at{" "}
+              <strong>{form.email}</strong>. Then open the same sign-up link again to create your
+              account.
+            </p>
+          </div>
+        ) : (
         <form className="booking-form" onSubmit={submit}>
           {mode === "signup" && (
             <div className="booking-form-grid">
@@ -148,6 +224,7 @@ function AgentAuth() {
                 onChange={update("email")}
               />
             </label>
+            {!(mode === "signup" && full) && (
             <label>
               Password *
               <input
@@ -159,10 +236,22 @@ function AgentAuth() {
                 onChange={update("password")}
               />
             </label>
+            )}
             {mode === "signup" && (
               <label>
-                Agency code (if you were given one)
-                <input maxLength={100} value={form.code} onChange={update("code")} />
+                Sign-up code *
+                <input
+                  required
+                  maxLength={40}
+                  autoCapitalize="characters"
+                  placeholder="e.g. BROOKS-7F3A2"
+                  value={form.code}
+                  onChange={update("code")}
+                />
+                <span className="field-hint">
+                  Your agency's code from PropertySearch. No code?{" "}
+                  <a href="/agents#get-a-code">Ask for one</a>.
+                </span>
               </label>
             )}
           </div>
@@ -179,10 +268,21 @@ function AgentAuth() {
           {message && <p className="booking-error">{message}</p>}
 
           <button type="submit" className="primary-button" disabled={busy}>
-            {busy ? "Please wait..." : mode === "signup" ? "Create account" : "Log in"}
+            {busy
+              ? "Please wait..."
+              : mode === "signup"
+                ? full
+                  ? "Request a place"
+                  : "Create account"
+                : "Log in"}
           </button>
         </form>
+        )}
       </section>
+
+      <p className="muted agent-auth-foot">
+        New to PropertySearch? <a href="/agents">See how it works for agents</a>.
+      </p>
     </div>
   );
 }
@@ -1061,6 +1161,107 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
   );
 }
 
+// First-run checklist for a new agent: list a home, publish times, send it
+// to matching buyers. Ticks itself off from what's saved; hidden once done
+// or when the agent hides it (remembered on this device).
+function AgentGettingStarted({ agentId, listings, slots, reach }) {
+  const key = `agentStartHidden:${agentId}`;
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const steps = [
+    {
+      id: "listing",
+      title: "Add your first listing",
+      text: "Paste its Rightmove, Zoopla or OnTheMarket link and the postcode. We show you how many buyers it matches.",
+      done: listings.length > 0,
+      target: "agent-add-listing",
+      action: "Add a listing",
+    },
+    {
+      id: "times",
+      title: "Publish viewing times",
+      text: "Add the slots you can show it. Buyers who've saved the home book straight in, and you get a calendar invite.",
+      done: slots.length > 0,
+      target: "agent-listings",
+      action: "Add times",
+    },
+    {
+      id: "send",
+      title: "Send it to matching buyers",
+      text: "One tap sends the listing to buyers whose search it fits. You see how many, never who, until they book.",
+      done: Object.values(reach).some((r) => (r?.sent || 0) > 0),
+      target: "agent-listings",
+      action: "Go to your listing",
+    },
+  ];
+  const doneCount = steps.filter((step) => step.done).length;
+  if (hidden || doneCount === steps.length) return null;
+
+  function hide() {
+    try {
+      localStorage.setItem(key, "1");
+    } catch {
+      // Private browsing: shows again next time.
+    }
+    setHidden(true);
+  }
+
+  function go(target) {
+    document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  return (
+    <section className="card getting-started" aria-labelledby="agent-start-title">
+      <div className="section-header">
+        <div>
+          <h2 id="agent-start-title">Get your first viewing booked</h2>
+          <p>
+            {doneCount} of {steps.length} done. About five minutes.
+          </p>
+        </div>
+        <button type="button" className="link-button" onClick={hide}>
+          Hide
+        </button>
+      </div>
+      <div className="getting-started-bar" aria-hidden="true">
+        <span style={{ width: `${(doneCount / steps.length) * 100}%` }} />
+      </div>
+      <ol className="getting-started-steps">
+        {steps.map((step) => (
+          <li key={step.id} className={step.done ? "done" : ""}>
+            <span className="step-tick" aria-hidden="true">
+              {step.done ? "✓" : ""}
+            </span>
+            <div className="step-text">
+              <strong>
+                {step.title}
+                {step.done && <span className="visually-hidden"> (done)</span>}
+              </strong>
+              {!step.done && <p>{step.text}</p>}
+            </div>
+            {!step.done && (
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={step.id !== "listing" && listings.length === 0}
+                onClick={() => go(step.target)}
+              >
+                {step.action}
+              </button>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function AgentDashboard({ agent }) {
   const [listings, setListings] = useState([]);
   const [slots, setSlots] = useState([]);
@@ -1134,13 +1335,18 @@ function AgentDashboard({ agent }) {
         </div>
       </header>
 
+      {!loading && (
+        <AgentGettingStarted agentId={agent.user_id} listings={listings} slots={slots} reach={reach} />
+      )}
+
       <OfferRequests offers={offers} positions={positions} onChanged={load} />
 
-      <section className="card">
+      <section className="card" id="agent-add-listing">
         <h3>Add a listing</h3>
         <ListingForm agentId={agent.user_id} onSaved={load} />
       </section>
 
+      <div id="agent-listings" />
       {loading ? (
         <p className="muted">Loading...</p>
       ) : (
