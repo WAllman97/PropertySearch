@@ -4,6 +4,7 @@ import { postAuthed } from "../lib/api";
 import { apiUrl, siteUrl } from "../lib/platform";
 import { listingKey } from "../../api/_lib/listing.js";
 import { londonToUtc } from "../../api/_lib/time.js";
+import { openProof, proofLabel } from "../components/PositionProof";
 import "./AgentPortal.css";
 
 // Estate agent area at /agent: sign up or log in, add listings, publish
@@ -696,6 +697,19 @@ function BuyerPosition({ position }) {
       {position.proceedable ? "✓ Proceedable · " : ""}
       {facts.join(" · ")}
       <span className="muted"> (buyer's own declaration, {updated})</span>
+      {position.proof_path && (
+        <>
+          {" "}
+          <button
+            type="button"
+            className="link-button proof-link"
+            onClick={() => openProof(position.proof_path)}
+            title="Uploaded by the buyer; not checked by PropertySearch"
+          >
+            📄 View {proofLabel(position)}
+          </button>
+        </>
+      )}
     </span>
   );
 }

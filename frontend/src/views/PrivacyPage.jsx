@@ -37,7 +37,8 @@ function PrivacyPage() {
           <li>
             <strong>Buying position (optional):</strong> budget, deposit, whether you're buying
             with cash or a mortgage, mortgage agreement details (amount, lender, expiry), whether
-            you have a home to sell, solicitor and moving timescale.
+            you have a home to sell, solicitor and moving timescale. You can also upload one
+            document as proof (a mortgage agreement or proof of funds), stored privately.
           </li>
           <li>
             <strong>Offers:</strong> if you tell us an offer was accepted, the property and amount.
@@ -76,7 +77,8 @@ function PrivacyPage() {
           <li>
             To show your buying position to agents whose homes you book a viewing for or report
             an accepted offer on, if you leave sharing switched on. It's marked as your own
-            declaration. You can switch sharing off in Settings at any time.
+            declaration, and those agents can open any proof document you've uploaded. You can
+            switch sharing off or remove the document in Settings at any time.
           </li>
           <li>
             To ask the selling agent to confirm an offer you report as accepted. They see the

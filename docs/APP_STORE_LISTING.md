@@ -88,7 +88,7 @@ Functionality** only.
 | Contact Info | Name | Buyer and agent names |
 | Contact Info | Email Address | Logins, booking and alert emails |
 | Contact Info | Phone Number | Agents' phone; buyer phone on viewing bookings |
-| Financial Info | Other Financial Info | Buying position: budget, deposit, mortgage details; accepted offer amounts |
+| Financial Info | Other Financial Info | Buying position: budget, deposit, mortgage details; optional proof document (mortgage agreement or proof of funds); accepted offer amounts |
 | User Content | Other User Content | Saved properties, notes, ratings, searches (incl. drawn areas), commute addresses |
 | Identifiers | User ID | Account ID |
 
