@@ -26,7 +26,7 @@ function badgesFor(property) {
   return badges;
 }
 
-function PropertyTile({ property, open, onToggle, children }) {
+function PropertyTile({ property, open, onToggle, tag, children }) {
   const tileRef = useRef(null);
   const badges = badgesFor(property);
   const facts = [
@@ -70,6 +70,7 @@ function PropertyTile({ property, open, onToggle, children }) {
           <strong>{pounds(property.price)}</strong>
           <span className="tile-address">{property.address}</span>
           {facts.length > 0 && <span className="tile-facts">{facts.join(" · ")}</span>}
+          {tag && <span className="tile-tag">{tag}</span>}
         </div>
         {open && (
           <span className="tile-close" aria-hidden="true">
