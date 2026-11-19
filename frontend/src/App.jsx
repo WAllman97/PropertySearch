@@ -141,18 +141,21 @@ function MainApp() {
     supabase.auth.signOut({ scope: "local" });
   }
 
+  const signedIn = Boolean(user && !settingPassword);
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell${signedIn ? " signed-in" : ""}`}>
       <header className="app-header">
         <div>
           <p className="eyebrow">PropertySearch</p>
           <h1>Home-buying command centre</h1>
         </div>
 
-        {user && !settingPassword && (
+        {/* On a phone this lives at the bottom of Settings instead. */}
+        {signedIn && (
           <button
             type="button"
-            className="secondary-button"
+            className="secondary-button header-logout"
             onClick={logOut}
           >
             Log Out
@@ -244,7 +247,12 @@ function MainApp() {
             {activeView === "calendar" && <CalendarView />}
             {activeView === "history" && <HistoryView />}
             {activeView === "settings" && (
-              <SettingsView user={user} focusSection={settingsFocus} onFocused={() => setSettingsFocus(null)} />
+              <SettingsView
+                user={user}
+                focusSection={settingsFocus}
+                onFocused={() => setSettingsFocus(null)}
+                onLogOut={logOut}
+              />
             )}
           </>
         )}

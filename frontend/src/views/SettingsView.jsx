@@ -9,8 +9,39 @@ import NotificationSettings from "../components/NotificationSettings";
 import PushSettings from "../components/PushSettings";
 import { isNativeApp } from "../lib/platform";
 
-function SettingsView({ user, focusSection, onFocused }) {
+const PHONE = "(max-width: 760px)";
+const isPhone = () => typeof window !== "undefined" && window.matchMedia?.(PHONE).matches;
+
+// One Settings card. On a phone each starts closed (title and one line), so
+// the page isn't six screens long; tap to open. On a computer they're open.
+// Contents stay mounted while closed, so half-typed forms aren't lost.
+function SettingsSection({ id, title, summary, open, onToggle, children }) {
+  return (
+    <section className={`card settings-section${open ? " open" : ""}`} id={id ? `settings-${id}` : undefined}>
+      <button type="button" className="settings-section-head" onClick={onToggle} aria-expanded={open}>
+        <span>
+          <h2>{title}</h2>
+          {summary && <p>{summary}</p>}
+        </span>
+        <span className="settings-chevron" aria-hidden="true">
+          ›
+        </span>
+      </button>
+      <div className="settings-section-body" hidden={!open}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function SettingsView({ user, focusSection, onFocused, onLogOut }) {
   const [household, setHousehold] = useState(null);
+  // Which sections are open: all on a computer, none on a phone.
+  const [openSections, setOpenSections] = useState(() => (isPhone() ? {} : null));
+
+  const isOpen = (key) => openSections === null || Boolean(openSections[key]);
+  const toggle = (key) =>
+    setOpenSections((current) => (current === null ? current : { ...current, [key]: !current[key] }));
 
   const loadHousehold = useCallback(async () => {
     const { data, error } = await supabase.rpc("my_household");
@@ -22,10 +53,12 @@ function SettingsView({ user, focusSection, onFocused }) {
     if (user) loadHousehold();
   }, [user, loadHousehold]);
 
-  // Arrived from a "Getting started" step: scroll to that card. Waits for
-  // the household card, which only renders once loaded.
+  // Arrived from a "Getting started" step or the Dashboard: open that card
+  // and scroll to it. Waits for the household card, which only renders once
+  // loaded.
   useEffect(() => {
     if (!focusSection || (focusSection === "household" && !household)) return undefined;
+    setOpenSections((current) => (current === null ? current : { ...current, [focusSection]: true }));
     const timer = setTimeout(() => {
       const card = document.getElementById(`settings-${focusSection}`);
       if (card) {
@@ -49,101 +82,81 @@ function SettingsView({ user, focusSection, onFocused }) {
     );
   }
 
+  const section = (key, title, summary, children) => (
+    <SettingsSection
+      key={key}
+      id={key}
+      title={title}
+      summary={summary}
+      open={isOpen(key)}
+      onToggle={() => toggle(key)}
+    >
+      {children}
+    </SettingsSection>
+  );
+
   return (
     <>
-      <section className="card" id="settings-searches">
-        <div className="section-header">
-          <h2>What you're looking for</h2>
-          <p>
-            Agents' new listings that fit one of these searches are sent
-            straight to you.
-          </p>
-        </div>
-
+      {section(
+        "searches",
+        "What you're looking for",
+        "Agents' new listings that fit one of these searches are sent straight to you.",
         <BuyerSearches user={user} />
-      </section>
+      )}
 
-      <section className="card" id="settings-position">
-        <div className="section-header">
-          <h2>Your Buying Position</h2>
-          <p>
-            Agents prioritise buyers who can move quickly. Shared with the
-            agents you book viewings or make offers with.
-          </p>
-        </div>
-
+      {section(
+        "position",
+        "Your Buying Position",
+        "Agents prioritise buyers who can move quickly. Shared with the agents you book viewings or make offers with.",
         <BuyerPositionSettings />
-      </section>
+      )}
 
-      {household && (
-        <section className="card" id="settings-household">
-          <div className="section-header">
-            <h2>Household</h2>
-            <p>Everyone here shares one property list, calendar and notes.</p>
-          </div>
-
+      {household &&
+        section(
+          "household",
+          "Household",
+          "Everyone here shares one property list, calendar and notes.",
           <HouseholdMembers household={household} onChange={loadHousehold} />
-        </section>
-      )}
+        )}
 
-      {isNativeApp && (
-        <section className="card">
-          <div className="section-header">
-            <h2>Phone Notifications</h2>
-          </div>
+      {isNativeApp && section("notifications", "Phone Notifications", null, <PushSettings />)}
 
-          <PushSettings />
-        </section>
-      )}
-
-      <section className="card">
-        <div className="section-header">
-          <h2>Agent Booking Page</h2>
-          <p>
-            Give agents this link instead of your number. They pick a free
-            slot for a call or viewing, you accept it, and it lands in your
-            calendar.
-          </p>
-        </div>
-
+      {section(
+        "booking",
+        "Agent Booking Page",
+        "Give agents this link instead of your number. They pick a free slot for a call or viewing, you accept it, and it lands in your calendar.",
         <BookingSettings user={user} />
-      </section>
+      )}
 
-      <section className="card" id="settings-commute">
-        <div className="section-header">
-          <h2>Buyer Profile & Commute</h2>
-          <p>
-            Add commute locations, choose your preferred travel method, and
-            refresh commute times.
-          </p>
-        </div>
-
+      {section(
+        "commute",
+        "Buyer Profile & Commute",
+        "Add commute locations, choose your preferred travel method, and refresh commute times.",
         <BuyerProfileSettings user={user} />
-      </section>
+      )}
 
       {/* The daily alert email comes from the scraper, which only works
           for the original household (migration 013). */}
-      {household?.is_original && (
-        <section className="card">
-          <div className="section-header">
-            <h2>Email Notifications</h2>
-            <p>
-              Choose how often you receive property alerts and add extra
-              recipients, such as your partner.
-            </p>
-          </div>
-
+      {household?.is_original &&
+        section(
+          "email",
+          "Email Notifications",
+          "Choose how often you receive property alerts and add extra recipients, such as your partner.",
           <NotificationSettings user={user} />
-        </section>
-      )}
+        )}
 
-      {household && (
-        <section className="card">
+      {household &&
+        section("delete", "Delete Account", null, <DeleteBuyerAccount household={household} />)}
+
+      {onLogOut && (
+        <section className="card settings-logout">
           <div className="section-header">
-            <h2>Delete Account</h2>
+            <h2>Log out</h2>
+            <p>{user.email}</p>
           </div>
-
-          <DeleteBuyerAccount household={household} />
+          <button type="button" className="secondary-button" onClick={onLogOut}>
+            Log out of this device
+          </button>
         </section>
       )}
     </>

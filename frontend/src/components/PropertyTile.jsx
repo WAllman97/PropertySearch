@@ -26,7 +26,7 @@ function badgesFor(property) {
   return badges;
 }
 
-function PropertyTile({ property, open, onToggle, tag, children }) {
+function PropertyTile({ property, open, onToggle, tag, onFavourite, children }) {
   const tileRef = useRef(null);
   const badges = badgesFor(property);
   const facts = [
@@ -78,6 +78,21 @@ function PropertyTile({ property, open, onToggle, tag, children }) {
           </span>
         )}
       </button>
+
+      {/* Outside the tile's own button: buttons can't nest. */}
+      {onFavourite && !open && (
+        <button
+          type="button"
+          className="tile-fav"
+          onClick={onFavourite}
+          aria-label={`Add ${property.address || "this home"} to your Watchlist`}
+          title="Add to Watchlist"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+            <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+          </svg>
+        </button>
+      )}
 
       {open && <div className="tile-back">{children}</div>}
     </article>
