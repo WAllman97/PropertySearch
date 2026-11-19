@@ -17,7 +17,9 @@ const STAGES = [
   { key: "offer", label: "Offer", statuses: ["offer_considered", "offer_made"], view: "history" },
   { key: "accepted", label: "Accepted", statuses: ["offer_accepted"], view: "history" },
 ];
-const GONE = { sold_stc: "sold STC", under_offer: "under offer", removed: "taken off the market" };
+// Sold or withdrawn: "Tidy up" archives these. Under offer is shown for
+// information only, since those sales often fall through.
+const GONE = { sold_stc: "sold STC", removed: "taken off the market" };
 const DAY = 864e5;
 
 const pounds = (n) => `£${Number(n).toLocaleString("en-GB")}`;
@@ -103,6 +105,9 @@ function Section({ title, children, action }) {
 
 function DashboardView({ onNavigate }) {
   const [data, setData] = useState(null);
+  // Last tidy-up, so it can be undone: [{ id, status }] as they were before.
+  const [undo, setUndo] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     loadEverything()
@@ -184,6 +189,7 @@ function DashboardView({ onNavigate }) {
       });
     }
   }
+  // Never tidy away a home you have an accepted offer on.
   const gone = active.filter((p) => GONE[p.listing_status] && p.status !== "offer_accepted");
   if (gone.length) {
     const names = gone.slice(0, 2).map(place).join(", ");
@@ -194,9 +200,63 @@ function DashboardView({ onNavigate }) {
         gone.length === 1
           ? `${names} is ${GONE[gone[0].listing_status]}`
           : `${gone.length} of your homes are no longer available: ${names}${gone.length > 2 ? ` and ${gone.length - 2} more` : ""}`,
-      action: "Tidy up",
-      onClick: go(gone.some((p) => p.status !== "new" && p.status) ? "history" : "properties"),
+      action: gone.length === 1 ? "Archive it" : "Archive them",
+      onClick: () => archiveGone(gone),
     });
+  }
+  const underOffer = active.filter((p) => p.listing_status === "under_offer" && p.status !== "offer_accepted");
+  if (underOffer.length) {
+    const names = underOffer.slice(0, 2).map(place).join(", ");
+    needs.push({
+      key: "under-offer",
+      tone: "info",
+      text: `${names}${underOffer.length > 2 ? ` and ${underOffer.length - 2} more` : ""} ${
+        underOffer.length === 1 ? "is" : "are"
+      } under offer. Sales often fall through, so it's worth keeping an eye on`,
+      action: "View",
+      onClick: go(underOffer.some((p) => p.status && p.status !== "new") ? "history" : "properties"),
+    });
+  }
+
+  async function archiveGone(homes) {
+    const list = homes.map((p) => `• ${place(p)} (${GONE[p.listing_status]})`).join("\n");
+    if (!window.confirm(`Archive ${homes.length === 1 ? "this home" : `these ${homes.length} homes`}?\n\n${list}\n\nYou can undo this straight after.`)) {
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase
+      .from("properties")
+      .update({ status: "archived" })
+      .in("id", homes.map((p) => p.id));
+    setBusy(false);
+    if (error) {
+      console.error("Archive failed:", error);
+      window.alert("Couldn't archive them. Please try again.");
+      return;
+    }
+    setUndo(homes.map((p) => ({ id: p.id, status: p.status ?? null })));
+    load();
+  }
+
+  async function undoArchive() {
+    setBusy(true);
+    // Put each home back to the status it had (grouped, one update per status).
+    const byStatus = {};
+    for (const h of undo) (byStatus[h.status ?? "__null"] ||= []).push(h.id);
+    let failed = false;
+    for (const [status, ids] of Object.entries(byStatus)) {
+      const { error } = await supabase
+        .from("properties")
+        .update({ status: status === "__null" ? null : status })
+        .in("id", ids);
+      if (error) failed = true;
+    }
+    setBusy(false);
+    if (failed) {
+      window.alert("Couldn't undo all of them. You can restore them from the Watchlist.");
+    }
+    setUndo(null);
+    load();
   }
 
   // Things to act on first, then things to know.
@@ -246,13 +306,21 @@ function DashboardView({ onNavigate }) {
   return (
     <div className="dashboard-page">
       <Section title="Needs you">
+        {undo && (
+          <p className="dash-undo" role="status">
+            Archived {undo.length} home{undo.length === 1 ? "" : "s"}.
+            <button type="button" className="link-button" disabled={busy} onClick={undoArchive}>
+              Undo
+            </button>
+          </p>
+        )}
         {needs.length ? (
           <ul className="dash-list">
             {needs.map((n) => (
               <li key={n.key} className={`dash-need ${n.tone}`}>
                 <span className="dash-dot" aria-hidden="true" />
                 <span className="dash-text">{n.text}</span>
-                <button type="button" className="secondary-button" onClick={n.onClick}>
+                <button type="button" className="secondary-button" disabled={busy} onClick={n.onClick}>
                   {n.action}
                 </button>
               </li>
