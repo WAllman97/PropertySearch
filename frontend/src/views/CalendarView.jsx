@@ -348,6 +348,18 @@ function CalendarView() {
         <span>Sun</span>
       </div>
 
+      {/* Phone only (CSS): the grid becomes an agenda of days with something
+          on, so say so when the month has nothing. */}
+      {!calendarDays.some(
+        (day) =>
+          day.isCurrentMonth &&
+          (getViewingsForDate(day.date).length || getCallsForDate(day.date).length)
+      ) && (
+        <p className="calendar-empty-month">
+          Nothing booked in {formatMonthTitle(currentMonth)}.
+        </p>
+      )}
+
       <div className="calendar-grid">
         {calendarDays.map((day) => {
           const dayViewings = getViewingsForDate(day.date);
@@ -359,10 +371,17 @@ function CalendarView() {
                 "calendar-day",
                 !day.isCurrentMonth ? "calendar-day-muted" : "",
                 day.isToday ? "calendar-day-today" : "",
+                dayViewings.length || dayCalls.length ? "has-events" : "",
               ].join(" ")}
               key={day.date.toISOString()}
             >
-              <div className="calendar-day-number">{day.date.getDate()}</div>
+              <div className="calendar-day-number">
+                <span className="calendar-day-name">
+                  {day.date.toLocaleDateString("en-GB", { weekday: "short" })}{" "}
+                </span>
+                {day.date.getDate()}
+                {day.isToday && <span className="calendar-day-name"> · Today</span>}
+              </div>
 
               <div className="calendar-events">
                 {dayViewings.map((viewing) => (

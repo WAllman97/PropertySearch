@@ -1080,6 +1080,30 @@ label {
   .calendar-day-muted {
     display: none;
   }
+
+  /* Agenda: only days with something on, plus today. */
+  .calendar-day:not(.has-events):not(.calendar-day-today) {
+    display: none;
+  }
+
+  .calendar-day .calendar-day-name {
+    display: inline;
+  }
+
+  .card .calendar-empty-month {
+    display: block;
+  }
+}
+
+.calendar-day-name,
+.calendar-empty-month {
+  display: none;
+}
+
+.calendar-empty-month {
+  color: var(--muted);
+  padding: 14px 4px;
+  margin: 0;
 }
 /* ============================================================================
    Shared button classes used across views (previously unstyled)
@@ -2200,4 +2224,337 @@ button.link-button:hover {
   color: var(--primary);
   max-width: 100%;
   line-height: 1.35;
+}
+
+/* ============================================================================
+   Phone layout: slim header and a bottom tab bar (NavigationTabs.jsx)
+============================================================================ */
+
+.nav-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.nav-icon {
+  display: inline-flex;
+}
+
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* On a computer, Log Out stays in the header; Settings has it too. */
+@media (min-width: 761px) {
+  .settings-logout {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-header {
+    margin-bottom: 14px;
+  }
+
+  .app-header .eyebrow {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  /* The big title is for the computer; the name is enough on a phone. */
+  .app-header h1,
+  .header-logout {
+    display: none;
+  }
+
+  /* Signed out (login screen) keeps the full title. */
+  .app-shell:not(.signed-in) .app-header h1 {
+    display: block;
+    font-size: 30px;
+    margin-top: 6px;
+  }
+
+  .app-shell.signed-in {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .nav-tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.96);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 18px rgba(31, 41, 55, 0.06);
+  }
+
+  .nav-tabs button,
+  .nav-tabs button:hover,
+  .nav-tabs button.active {
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 0 4px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 700;
+    min-width: 0;
+  }
+
+  .nav-tabs button.active {
+    color: var(--primary);
+  }
+
+  .nav-tabs button.active .nav-icon {
+    background: var(--primary-soft);
+    border-radius: 999px;
+  }
+
+  .nav-icon {
+    padding: 3px 14px;
+  }
+
+  .nav-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .nav-label {
+    white-space: nowrap;
+  }
+}
+
+/* ============================================================================
+   Settings sections (SettingsView.jsx): collapsible on a phone
+============================================================================ */
+
+.settings-section .settings-section-head {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  cursor: default;
+}
+
+.settings-section-head h2 {
+  margin: 0 0 6px;
+}
+
+.settings-section-head p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.settings-chevron {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .settings-section .settings-section-head {
+    cursor: pointer;
+    margin-bottom: 0;
+  }
+
+  .settings-section.open .settings-section-head {
+    margin-bottom: 16px;
+  }
+
+  .settings-section-head h2 {
+    font-size: 19px;
+    margin-bottom: 3px;
+  }
+
+  .settings-section-head p {
+    font-size: 13px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .settings-section.open .settings-section-head p {
+    -webkit-line-clamp: unset;
+    display: block;
+  }
+
+  .settings-chevron {
+    display: block;
+    font-size: 26px;
+    line-height: 1;
+    color: var(--muted);
+    transform: rotate(90deg);
+    transition: transform 0.2s ease;
+  }
+
+  .settings-section.open .settings-chevron {
+    transform: rotate(-90deg);
+  }
+
+  .settings-section-head:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-section,
+  .settings-logout {
+    margin-bottom: 10px;
+  }
+
+  .settings-logout h2 {
+    font-size: 19px;
+    margin-bottom: 3px;
+  }
+
+  .settings-logout .section-header p {
+    font-size: 13px;
+  }
+}
+
+/* ---- One-tap favourite on a tile ----------------------------------------- */
+.property-tile {
+  position: relative;
+}
+
+.property-tile .tile-fav {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--primary);
+  box-shadow: 0 2px 8px rgba(31, 41, 55, 0.18);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.property-tile .tile-fav:hover {
+  color: #b08d57;
+  transform: none;
+}
+
+/* Small note at the bottom of the screen (e.g. "Added to Watchlist · Undo"). */
+.toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 24px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+  box-shadow: var(--shadow-card);
+  white-space: nowrap;
+}
+
+.toast .link-button {
+  color: #f3e7c4;
+  font-weight: 800;
+}
+
+/* ---- Filters stay pinned to the top while scrolling the list ------------- */
+.card .market-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0 -8px 12px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 0 0 14px 14px;
+}
+
+.native-app .card .market-toolbar {
+  top: env(safe-area-inset-top);
+}
+
+@media (max-width: 760px) {
+  /* Above the bottom tab bar. */
+  .toast {
+    bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  /* Compact list header so homes start higher up the screen. */
+  .properties-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .properties-head h2 {
+    font-size: 20px;
+    margin-bottom: 2px;
+  }
+
+  .properties-head p {
+    font-size: 13px;
+  }
+
+  .properties-head .primary-button {
+    padding: 8px 14px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  /* One row of filters you can swipe, sort at the end. */
+  .card .market-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -12px 10px;
+    padding: 8px 12px;
+    box-shadow: 0 6px 10px -8px rgba(31, 41, 55, 0.25);
+  }
+
+  .card .market-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .card .market-toolbar .market-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .card .market-toolbar .market-sort {
+    flex: 0 0 auto;
+    width: auto;
+    margin-left: 4px;
+  }
+
+  .card .market-toolbar .market-sort select {
+    flex: 0 0 auto;
+  }
 }

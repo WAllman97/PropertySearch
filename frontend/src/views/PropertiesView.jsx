@@ -46,6 +46,8 @@ function PropertiesView({ onOpenSettings }) {
   const [marketSort, setMarketSort] = useState("newest");
   // The one tile flipped open to show its details.
   const [openId, setOpenId] = useState(null);
+  // "Added to Watchlist" note with Undo after a one-tap favourite.
+  const [favNote, setFavNote] = useState(null);
 
   const [shareProperty, setShareProperty] = useState(null);
   const [shareEmail, setShareEmail] = useState(
@@ -115,6 +117,43 @@ function PropertiesView({ onOpenSettings }) {
     );
   }
 
+  // One tap on a tile's star: straight to the Watchlist, no scoring pop-up
+  // (score it later from the Watchlist). Undo puts it back.
+  async function quickFavourite(property) {
+    const { error } = await supabase
+      .from("properties")
+      .update({ status: "favourite" })
+      .eq("id", property.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setProperties((current) => current.filter((p) => p.id !== property.id));
+    setFavNote(property);
+  }
+
+  async function undoFavourite() {
+    const property = favNote;
+    setFavNote(null);
+    if (!property) return;
+    const { error } = await supabase
+      .from("properties")
+      .update({ status: property.status || "new" })
+      .eq("id", property.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await loadProperties();
+  }
+
+  // The note fades after a few seconds.
+  useEffect(() => {
+    if (!favNote) return undefined;
+    const timer = setTimeout(() => setFavNote(null), 6000);
+    return () => clearTimeout(timer);
+  }, [favNote]);
+
   function openShareModal(property) {
     setShareProperty(property);
     setShareMessage("");
@@ -183,7 +222,7 @@ function PropertiesView({ onOpenSettings }) {
       onOpenSettings={onOpenSettings}
     />
     <section className="card">
-      <div className="section-header">
+      <div className="section-header properties-head">
         <div>
           <h2>Latest Property Matches</h2>
           <p>{properties.length} active properties found</p>
@@ -345,6 +384,7 @@ function PropertiesView({ onOpenSettings }) {
               property={property}
               open={openId === property.id}
               onToggle={() => setOpenId((current) => (current === property.id ? null : property.id))}
+              onFavourite={() => quickFavourite(property)}
             >
               <div className="property-content">
                 <MarketSignals property={property} />
@@ -421,6 +461,15 @@ function PropertiesView({ onOpenSettings }) {
         })}
       </div>
     </section>
+
+    {favNote && (
+      <div className="toast" role="status">
+        <span>⭐ Added to your Watchlist</span>
+        <button type="button" className="link-button" onClick={undoFavourite}>
+          Undo
+        </button>
+      </div>
+    )}
     </>
   );
 }
