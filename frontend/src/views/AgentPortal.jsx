@@ -640,7 +640,134 @@ function AddTimesForm({ listing, agentId, onAdded }) {
   );
 }
 
-function SlotRow({ slot, bookings, onChanged }) {
+// A buyer's own "ready to proceed" declaration (migration 015), if they
+// share it with agents they book with.
+const SELLING_TEXT = {
+  first_time: "first-time buyer",
+  nothing_to_sell: "nothing to sell",
+  sold_stc: "own home sold STC",
+  on_market: "own home on the market",
+  not_listed: "needs to sell, not listed",
+};
+const MOVE_TEXT = { asap: "moving ASAP", "3_months": "within 3 months", "6_months": "within 6 months" };
+
+function shortPounds(amount) {
+  if (!amount) return "";
+  if (amount >= 1000000) return `£${Number((amount / 1000000).toFixed(2))}m`;
+  return `£${Math.round(amount / 1000)}k`;
+}
+
+function BuyerPosition({ position }) {
+  if (!position) return <span className="buyer-position-tag muted">No buying position shared</span>;
+  let funding = "";
+  if (position.buying_with === "cash") funding = "cash buyer";
+  else if (position.mortgage_status === "offer")
+    funding = `mortgage offer${position.aip_amount ? ` ${shortPounds(position.aip_amount)}` : ""}`;
+  else if (position.mortgage_status === "aip")
+    funding = `AIP${position.aip_amount ? ` ${shortPounds(position.aip_amount)}` : ""}${
+      position.aip_lender ? ` (${position.aip_lender})` : ""
+    }`;
+  else if (position.buying_with === "mortgage") funding = "mortgage not arranged";
+
+  const facts = [
+    position.max_budget ? `budget ${shortPounds(position.max_budget)}` : "",
+    funding,
+    SELLING_TEXT[position.selling_status] || "",
+    position.solicitor_ready ? "solicitor ready" : "",
+    MOVE_TEXT[position.move_timeframe] || "",
+  ].filter(Boolean);
+  const updated = new Date(position.updated_at).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
+
+  return (
+    <span className={`buyer-position-tag ${position.proceedable ? "ready" : ""}`}>
+      {position.proceedable ? "✓ Proceedable · " : ""}
+      {facts.join(" · ")}
+      <span className="muted"> (buyer's own declaration, {updated})</span>
+    </span>
+  );
+}
+
+// Offers buyers say this agent accepted: confirm or correct them.
+function OfferRequests({ offers, positions, onChanged }) {
+  const [busy, setBusy] = useState(null);
+  if (!offers.length) return null;
+
+  async function respond(offer, confirm) {
+    setBusy(offer.offer_id);
+    const response = await postAuthed("/api/offers", {
+      action: "respond",
+      offerId: offer.offer_id,
+      confirm,
+    });
+    const body = await response.json().catch(() => ({}));
+    setBusy(null);
+    if (!response.ok) window.alert(body.error || "Something went wrong");
+    onChanged();
+  }
+
+  return (
+    <section className="card agent-offers">
+      <h3>Accepted offers</h3>
+      <p className="muted">
+        Buyers who say you've accepted their offer. Confirm it, or say if it's wrong.
+      </p>
+      <ul>
+        {offers.map((offer) => (
+          <li key={offer.offer_id} className={`agent-offer offer-${offer.status}`}>
+            <div>
+              <strong>{offer.address}</strong> · £{Number(offer.amount).toLocaleString("en-GB")}
+              <br />
+              {offer.buyer_name} · <a href={`mailto:${offer.buyer_email}`}>{offer.buyer_email}</a>
+              <br />
+              <BuyerPosition position={positions[offer.buyer_id]} />
+            </div>
+            <div className="agent-offer-actions">
+              {offer.status === "awaiting_agent" ? (
+                <>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={busy === offer.offer_id}
+                    onClick={() => respond(offer, true)}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy === offer.offer_id}
+                    onClick={() => respond(offer, false)}
+                  >
+                    Not right
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="muted">
+                    {offer.status === "confirmed" ? "✓ Confirmed" : "Marked not right"}
+                  </span>
+                  <button
+                    type="button"
+                    className="link-button"
+                    disabled={busy === offer.offer_id}
+                    onClick={() => respond(offer, offer.status !== "confirmed")}
+                  >
+                    {offer.status === "confirmed" ? "Mark not right" : "Confirm instead"}
+                  </button>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function SlotRow({ slot, bookings, positions, onChanged }) {
   const [busy, setBusy] = useState(false);
   const isOpenHouse = slot.capacity > 1;
 
@@ -702,6 +829,12 @@ function SlotRow({ slot, bookings, onChanged }) {
             )}
             {" · "}
             <a href={`mailto:${booking.buyer_email}`}>{booking.buyer_email}</a>
+            {booking.buyer_id && (
+              <>
+                <br />
+                <BuyerPosition position={positions[booking.buyer_id]} />
+              </>
+            )}
           </span>
           <button
             type="button"
@@ -799,7 +932,7 @@ function listingFacts(listing) {
     .join(" · ");
 }
 
-function ListingCard({ listing, slots, bookingsBySlot, agentId, reach, onChanged }) {
+function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach, onChanged }) {
   const [adding, setAdding] = useState(slots.length === 0);
   const [editing, setEditing] = useState(false);
 
@@ -877,6 +1010,7 @@ function ListingCard({ listing, slots, bookingsBySlot, agentId, reach, onChanged
                   key={slot.id}
                   slot={slot}
                   bookings={bookingsBySlot[slot.id] || []}
+                  positions={positions}
                   onChanged={onChanged}
                 />
               ))}
@@ -908,11 +1042,14 @@ function AgentDashboard({ agent }) {
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [reach, setReach] = useState({});
+  const [offers, setOffers] = useState([]);
+  const [positions, setPositions] = useState({});
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     const since = new Date(Date.now() - 2 * 3600000).toISOString();
-    const [listingsResult, slotsResult, bookingsResult, reachResult] = await Promise.all([
+    const [listingsResult, slotsResult, bookingsResult, reachResult, offersResult, positionsResult] =
+      await Promise.all([
       supabase.from("agent_listings").select("*").order("created_at", { ascending: false }),
       supabase
         .from("viewing_slots")
@@ -926,7 +1063,11 @@ function AgentDashboard({ agent }) {
         .eq("status", "confirmed")
         .order("created_at"),
       supabase.rpc("agent_listing_reach"),
+      supabase.rpc("agent_offers"),
+      supabase.rpc("agent_buyer_positions"),
     ]);
+    setOffers(offersResult.data || []);
+    setPositions(Object.fromEntries((positionsResult.data || []).map((p) => [p.buyer_id, p])));
     const reachMap = {};
     for (const r of reachResult.data || []) reachMap[r.listing_id] = r;
     setReach(reachMap);
@@ -969,6 +1110,8 @@ function AgentDashboard({ agent }) {
         </div>
       </header>
 
+      <OfferRequests offers={offers} positions={positions} onChanged={load} />
+
       <section className="card">
         <h3>Add a listing</h3>
         <ListingForm agentId={agent.user_id} onSaved={load} />
@@ -983,6 +1126,7 @@ function AgentDashboard({ agent }) {
             listing={listing}
             slots={slotsByListing[listing.id] || []}
             bookingsBySlot={bookingsBySlot}
+            positions={positions}
             agentId={agent.user_id}
             reach={reach[listing.id]}
             onChanged={load}

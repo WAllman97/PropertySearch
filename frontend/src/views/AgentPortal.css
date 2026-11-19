@@ -321,3 +321,41 @@
 .agent-reach p {
   margin: 0;
 }
+
+/* Buyer's declared position, on bookings and offers */
+.buyer-position-tag {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.buyer-position-tag.ready {
+  color: #223a33;
+  font-weight: 600;
+}
+
+.buyer-position-tag .muted {
+  font-weight: normal;
+}
+
+/* Accepted offers awaiting confirmation */
+.agent-offers ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.agent-offer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.agent-offer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

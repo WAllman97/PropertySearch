@@ -22,6 +22,7 @@ function ComparisonView() {
         "viewed",
         "offer_considered",
         "offer_made",
+        "offer_accepted",
       ])
       .order("created_at", { ascending: false });
 

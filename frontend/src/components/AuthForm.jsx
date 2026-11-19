@@ -268,13 +268,14 @@ function AuthForm({ invite = null }) {
 
       {message && <p className="auth-message">{message}</p>}
 
-      <button type="button" className="link-button" onClick={() => switchMode("forgot")}>
-        Forgot password?
-      </button>
-
-      <button type="button" className="link-button" onClick={() => switchMode("signup")}>
-        New here? Create an account
-      </button>
+      <div className="auth-links">
+        <button type="button" className="link-button" onClick={() => switchMode("forgot")}>
+          Forgot password?
+        </button>
+        <button type="button" className="link-button" onClick={() => switchMode("signup")}>
+          New here? Create an account
+        </button>
+      </div>
 
       {/* In the phone app there's no address bar, so agents need a way in. */}
       <p className="muted auth-agent-link">

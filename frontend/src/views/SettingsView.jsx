@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import BookingSettings from "../components/BookingSettings";
+import BuyerPositionSettings from "../components/BuyerPositionSettings";
 import { DeleteBuyerAccount, HouseholdMembers } from "../components/HouseholdSettings";
 import BuyerSearches from "../components/BuyerSearches";
 import BuyerProfileSettings from "../components/BuyerProfileSettings";
@@ -44,6 +45,18 @@ function SettingsView({ user }) {
         </div>
 
         <BuyerSearches user={user} />
+      </section>
+
+      <section className="card">
+        <div className="section-header">
+          <h2>Your Buying Position</h2>
+          <p>
+            Agents prioritise buyers who can move quickly. Shared with the
+            agents you book viewings or make offers with.
+          </p>
+        </div>
+
+        <BuyerPositionSettings />
       </section>
 
       {household && (

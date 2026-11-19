@@ -5,6 +5,7 @@ import PropertyScoreEditor from "../components/PropertyScoreEditor";
 import CommuteSummary from "../components/CommuteSummary";
 import MarketSignals from "../components/MarketSignals";
 import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
+import { OfferAcceptedButton, OfferStatus } from "../components/OfferStatus";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -54,6 +55,8 @@ function HistoryView() {
   const [notes, setNotes] = useState(emptyNotes);
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesMessage, setNotesMessage] = useState("");
+  // Live accepted offers by property id (withdrawn ones are hidden).
+  const [offers, setOffers] = useState({});
 
   useEffect(() => {
     loadWatchlist();
@@ -77,8 +80,15 @@ function HistoryView() {
         "viewed",
         "offer_considered",
         "offer_made",
+        "offer_accepted",
       ])
       .order("created_at", { ascending: false });
+
+    const { data: offerRows } = await supabase
+      .from("offers")
+      .select("id, property_id, amount, status")
+      .neq("status", "withdrawn");
+    setOffers(Object.fromEntries((offerRows || []).map((o) => [o.property_id, o])));
 
     if (error) {
       console.error("Error loading watchlist:", error);
@@ -215,6 +225,7 @@ function HistoryView() {
       viewed: "👀 Viewed",
       offer_considered: "💷 Offer Considered",
       offer_made: "🤝 Offer Made",
+      offer_accepted: "✅ Offer Accepted",
     };
 
     return labels[status] || status;
@@ -448,6 +459,7 @@ function HistoryView() {
                 <p>{property.address}</p>
 
                 <MarketSignals property={property} />
+                <OfferStatus offer={offers[property.id]} onChanged={loadWatchlist} />
                 <ViewingSlots
                   property={property}
                   slots={viewingsByProperty[property.id]}
@@ -537,6 +549,10 @@ function HistoryView() {
                   >
                     Offer made
                   </button>
+
+                  {!offers[property.id] && (
+                    <OfferAcceptedButton property={property} onChanged={loadWatchlist} />
+                  )}
 
                   <button onClick={() => updateStatus(property.id, "archived")}>
                     Archive
