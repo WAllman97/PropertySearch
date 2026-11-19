@@ -1,0 +1,195 @@
+/* Admin dashboard (/admin) */
+.admin-page .app-main {
+  max-width: 1180px;
+}
+
+.admin-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.admin-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: white;
+}
+
+.admin-tile-label {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.admin-tile-value {
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1.15;
+}
+
+.admin-tile.small .admin-tile-value {
+  font-size: 1.5rem;
+}
+
+.admin-tile-target,
+.admin-tile-note {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.admin-tile-note {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.admin-progress {
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #e6ebe8;
+  overflow: hidden;
+}
+
+.admin-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.admin-footnote {
+  margin: 12px 0 0;
+}
+
+.admin-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.admin-chart {
+  margin: 0;
+}
+
+.admin-chart figcaption {
+  margin-bottom: 10px;
+}
+
+.admin-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 140px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.admin-bar-slot {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Hit target is the whole column, not just the bar. */
+.admin-bar-slot:hover .admin-bar {
+  background: var(--primary-hover, #2f4d44);
+}
+
+.admin-bar {
+  width: 100%;
+  min-height: 0;
+  border-radius: 4px 4px 0 0;
+  background: var(--primary);
+}
+
+.admin-bar-tip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #1f2a26;
+  color: white;
+  font-size: 0.78rem;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.admin-bar-slot:hover .admin-bar-tip {
+  display: block;
+}
+
+.admin-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-strong);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-table th {
+  font-size: 0.78rem;
+  color: #6b7280;
+  font-weight: 700;
+}
+
+.admin-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-table select,
+.admin-fee {
+  padding: 4px 6px;
+  font-size: 0.85rem;
+}
+
+.admin-fee {
+  width: 80px;
+}
+
+.admin-flag {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.admin-bars {
+  position: relative;
+}
+
+.admin-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 0.85rem;
+}

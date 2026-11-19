@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { arrivedFromPasswordReset, supabase } from "./lib/supabaseClient";
 import AuthForm from "./components/AuthForm";
 import SetNewPasswordForm from "./components/SetNewPasswordForm";
@@ -14,6 +14,8 @@ import AgentPortal from "./views/AgentPortal";
 import PublicViewingPage from "./views/PublicViewingPage";
 import PrivacyPage from "./views/PrivacyPage";
 import SupportPage from "./views/SupportPage";
+// Loaded only when someone opens /admin, not shipped to every visitor.
+const AdminPage = lazy(() => import("./views/AdminPage"));
 import {
   dismissPushOffer,
   enablePush,
@@ -61,6 +63,13 @@ function App() {
   }
   if (/^\/support\/?$/.test(window.location.pathname)) {
     return <SupportPage />;
+  }
+  if (/^\/admin\/?$/.test(window.location.pathname)) {
+    return (
+      <Suspense fallback={null}>
+        <AdminPage />
+      </Suspense>
+    );
   }
 
   // Estate agent area: own sign-up/login, listings and viewing times.
