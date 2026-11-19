@@ -359,3 +359,134 @@
   gap: 8px;
   align-items: center;
 }
+
+/* ---- Sign-up: agency from the code link ---------------------------------- */
+.agent-joining {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--primary-soft, #dcefe4);
+  color: var(--primary);
+}
+
+.agent-auth-foot {
+  text-align: center;
+  margin-top: 14px;
+}
+
+/* ---- /agents page ---------------------------------------------------------- */
+.agents-page .agents-hero h1 {
+  font-size: clamp(30px, 5vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin: 6px 0 12px;
+}
+
+.agents-lead {
+  font-size: 17px;
+  color: var(--muted);
+  max-width: 640px;
+}
+
+.agents-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.agents-cta a {
+  text-decoration: none;
+}
+
+.agents-benefits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.agents-benefit {
+  padding: 20px;
+}
+
+.agents-benefit h3 {
+  margin: 8px 0 6px;
+}
+
+.agents-benefit p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.agents-benefit-icon {
+  font-size: 26px;
+}
+
+.agents-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.agents-steps li {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.agents-steps p {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+.agents-step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.agents-page section.card {
+  margin-bottom: 14px;
+}
+
+.agents-page #get-a-code a {
+  text-decoration: none;
+}
+
+.agents-faq {
+  margin: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.agents-faq dt {
+  font-weight: 800;
+}
+
+.agents-faq dd {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.agents-foot {
+  text-align: center;
+}
+
+.agent-joining.agent-full {
+  background: #fdf3e1;
+  color: #6b4e16;
+}
+
+.agent-requested h3 {
+  margin: 0 0 6px;
+}

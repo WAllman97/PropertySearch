@@ -283,6 +283,8 @@ function Dashboard({ data, onReload }) {
         <BarChart title="Offers reported per month" points={offers.by_month} labelFor={monthLabel} unit="offers" />
       </section>
 
+      <AgentCodes />
+
       <section className="card">
         <div className="section-header">
           <div>
@@ -322,6 +324,270 @@ function Dashboard({ data, onReload }) {
         )}
       </section>
     </>
+  );
+}
+
+// Per-agency sign-up codes (migration 019): make one per agency, send the
+// link, switch it off if it gets passed around.
+function AgentCodes() {
+  const [codes, setCodes] = useState(null);
+  const [requests, setRequests] = useState([]);
+  const [form, setForm] = useState({ agency: "", maxUses: "", note: "" });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [copied, setCopied] = useState("");
+
+  const load = useCallback(async () => {
+    const { data: pending } = await supabase.rpc("admin_seat_requests");
+    setRequests(pending || []);
+    const { data, error } = await supabase.rpc("admin_agent_codes");
+    if (error) {
+      setMessage(
+        /admin_agent_codes/.test(error.message)
+          ? "Sign-up codes need database migration 019."
+          : error.message
+      );
+      setCodes([]);
+      return;
+    }
+    setCodes(data || []);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const linkFor = (code) => `${window.location.origin}/agent?code=${encodeURIComponent(code)}`;
+
+  async function create(event) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    const maxUses = Number(form.maxUses);
+    const { data, error } = await supabase.rpc("admin_create_agent_code", {
+      p_agency: form.agency.trim(),
+      p_max_uses: maxUses,
+      p_note: form.note.trim(),
+    });
+    setBusy(false);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    setForm({ agency: "", maxUses: "", note: "" });
+    setMessage(`Created ${data}. Copy its link below and send it to the agency.`);
+    load();
+  }
+
+  async function setActive(code, active) {
+    const { error } = await supabase.rpc("admin_set_agent_code_active", {
+      p_code: code,
+      p_active: active,
+    });
+    if (error) setMessage(error.message);
+    load();
+  }
+
+  async function editSeats(code) {
+    const typed = window.prompt(
+      `How many people at ${code.agency} can sign up? (${code.uses} have so far)`,
+      code.max_uses ?? ""
+    );
+    if (typed === null) return;
+    const seats = Number(typed);
+    if (!Number.isInteger(seats) || seats < 1 || seats > 500) {
+      window.alert("Enter a whole number from 1 to 500.");
+      return;
+    }
+    const { error } = await supabase.rpc("admin_set_agent_code_seats", {
+      p_code: code.code,
+      p_seats: seats,
+    });
+    if (error) setMessage(error.message);
+    load();
+  }
+
+  async function decide(request, approve) {
+    const { error } = await supabase.rpc("admin_decide_seat_request", {
+      p_id: request.id,
+      p_approve: approve,
+    });
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (approve) {
+      setMessage(`Added a place for ${request.name}. Use "Email them" to send their sign-up link.`);
+    }
+    load();
+  }
+
+  function approvalEmail(request) {
+    const subject = "Your PropertySearch place is ready";
+    const body =
+      `Hi ${request.name.split(" ")[0]},\n\n` +
+      `There's now a place for you at ${request.agency} on PropertySearch. ` +
+      `Sign up here with your work email (${request.email}):\n\n${linkFor(request.code)}\n\nThanks`;
+    return `mailto:${request.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
+  async function copy(code) {
+    try {
+      await navigator.clipboard.writeText(linkFor(code));
+      setCopied(code);
+      setTimeout(() => setCopied(""), 2000);
+    } catch {
+      window.prompt("Copy this link:", linkFor(code));
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="section-header">
+        <div>
+          <h2>Agent sign-up codes</h2>
+          <p>
+            One code per agency, with the number of people they told you. Send the link: it fills
+            in the code and agency. Anyone past the limit can request a place, which you approve
+            here. Public page for agents: <a href="/agents">/agents</a>.
+          </p>
+        </div>
+      </div>
+
+      <form className="admin-code-form" onSubmit={create}>
+        <label>
+          Agency
+          <input
+            required
+            maxLength={100}
+            value={form.agency}
+            onChange={(e) => setForm({ ...form, agency: e.target.value })}
+            placeholder="Brooks Estate Agents"
+          />
+        </label>
+        <label>
+          Seats (people)
+          <input
+            required
+            type="number"
+            min={1}
+            max={500}
+            value={form.maxUses}
+            onChange={(e) => setForm({ ...form, maxUses: e.target.value })}
+            placeholder="e.g. 6"
+          />
+        </label>
+        <label>
+          Note (just for you)
+          <input
+            maxLength={200}
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            placeholder="e.g. Wandsworth branch, via Ben"
+          />
+        </label>
+        <button type="submit" className="primary-button" disabled={busy}>
+          {busy ? "Creating..." : "Create code"}
+        </button>
+      </form>
+      {message && <p className="muted">{message}</p>}
+
+      {requests.length > 0 && (
+        <div className="admin-requests">
+          <h3>Requests for a place ({requests.length})</h3>
+          <p className="muted">
+            These agencies have used all their seats. Approve adds one seat; then email them the
+            link.
+          </p>
+          <ul>
+            {requests.map((r) => (
+              <li key={r.id}>
+                <div>
+                  <strong>{r.name}</strong> · {r.agency}
+                  {r.branch ? `, ${r.branch}` : ""}
+                  <div className="muted">
+                    {r.email}
+                    {r.phone ? ` · ${r.phone}` : ""} · asked {shortDate(r.created_at)} · seats{" "}
+                    {r.used}/{r.seats ?? "∞"}
+                  </div>
+                </div>
+                <div className="admin-code-actions">
+                  <button type="button" className="primary-button" onClick={() => decide(r, true)}>
+                    Approve
+                  </button>
+                  <a className="link-button" href={approvalEmail(r)}>
+                    Email them
+                  </a>
+                  <button type="button" className="link-button" onClick={() => decide(r, false)}>
+                    Decline
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {codes === null ? (
+        <p className="muted">Loading...</p>
+      ) : codes.length === 0 ? (
+        <p className="muted">No codes yet.</p>
+      ) : (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Agency</th>
+                <th className="num">Agents joined</th>
+                <th className="num">Seats used</th>
+                <th>Created</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {codes.map((c) => (
+                <tr key={c.code} className={c.is_active ? "" : "admin-row-off"}>
+                  <td>
+                    <code>{c.code}</code>
+                    {!c.is_active && <span className="muted"> · off</span>}
+                  </td>
+                  <td>
+                    {c.agency}
+                    {c.note && <div className="muted">{c.note}</div>}
+                  </td>
+                  <td className="num">{c.agents_joined}</td>
+                  <td className="num">
+                    {c.uses} / {c.max_uses ?? "∞"}
+                    {c.pending_requests > 0 && (
+                      <div className="admin-pending">{c.pending_requests} waiting</div>
+                    )}
+                  </td>
+                  <td>{shortDate(c.created_at)}</td>
+                  <td className="admin-code-actions">
+                    {c.is_active && (
+                      <button type="button" className="link-button" onClick={() => copy(c.code)}>
+                        {copied === c.code ? "Copied" : "Copy link"}
+                      </button>
+                    )}
+                    <button type="button" className="link-button" onClick={() => editSeats(c)}>
+                      Edit seats
+                    </button>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => setActive(c.code, !c.is_active)}
+                    >
+                      {c.is_active ? "Switch off" : "Switch on"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
