@@ -1,5 +1,5 @@
 // Public sign-up for estate agents.
-//   GET  /api/agent-signup?code=BROOKS-7F3A2   -> { agency, full }
+//   GET  /api/agent-signup?code=BROOKS-WANDSWORTH-7F3A2 -> { agency, branch, full }
 //   POST /api/agent-signup { name, agency, branch, phone, email, password, code }
 //   POST /api/agent-signup { action: "request_seat", code, name, email, branch, phone }
 //        when the agency's seats are full: asks the admin for one more place
@@ -28,23 +28,28 @@ function clean(value, max) {
 
 export default withCors(handler);
 
-// A live per-agency code: { agency, full }, or null if it's wrong or off.
-// full: every seat the agency asked for is taken.
+// A live branch code: { agency, branch, full }, or null if it's wrong or
+// off. full: every seat the branch asked for is taken.
 async function lookUpCode(code) {
   if (!CODE_RE.test(code)) return null;
   const { data } = await supabaseAdmin
     .from("agent_invite_codes")
-    .select("agency, is_active, max_uses, uses")
+    .select("agency, branch, is_active, max_uses, uses")
     .eq("code", code)
     .maybeSingle();
   if (!data || !data.is_active) return null;
-  return { agency: data.agency, full: data.max_uses !== null && data.uses >= data.max_uses };
+  return {
+    agency: data.agency,
+    branch: data.branch,
+    full: data.max_uses !== null && data.uses >= data.max_uses,
+  };
 }
 
 const CODE_ERROR =
   "That sign-up code isn't right. Ask PropertySearch for your agency's code.";
-const fullError = (agency) =>
-  `${agency} has used all its places on PropertySearch. Request a place and we'll add one.`;
+const branchName = (found) => [found.agency, found.branch].filter(Boolean).join(" · ");
+const fullError = (found) =>
+  `${branchName(found)} has used all its places on PropertySearch. Request a place and we'll add one.`;
 
 async function handleSeatRequest(req, res, body) {
   const code = normaliseCode(body.code);
@@ -101,7 +106,11 @@ async function handler(req, res) {
   if (!usesLegacyCode) {
     const found = await lookUpCode(code);
     if (!found) return res.status(403).json({ error: CODE_ERROR });
-    if (found.full) return res.status(409).json({ error: fullError(found.agency), full: true });
+    if (found.full) return res.status(409).json({ error: fullError(found), full: true });
+    // The code decides the agency and branch, so everyone at a branch is
+    // grouped together (pricing is per branch).
+    body.agency = found.agency;
+    if (found.branch) body.branch = found.branch;
   }
 
   const profile = {
@@ -137,7 +146,7 @@ async function handler(req, res) {
       // Someone took the last seat a moment ago.
       const found = await lookUpCode(code);
       return found?.full
-        ? res.status(409).json({ error: fullError(found.agency), full: true })
+        ? res.status(409).json({ error: fullError(found), full: true })
         : res.status(403).json({ error: CODE_ERROR });
     }
     claimedCode = code;

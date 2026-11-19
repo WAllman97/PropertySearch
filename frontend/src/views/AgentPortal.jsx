@@ -63,8 +63,10 @@ function AgentAuth() {
   });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  // The agency a valid code belongs to (shown, and pre-fills Agency).
+  // The agency and branch a valid code belongs to (shown, and fixed on the
+  // form: the code decides them, since pricing is per branch).
   const [codeAgency, setCodeAgency] = useState("");
+  const [codeBranch, setCodeBranch] = useState("");
   // Every seat on the code is taken: ask for a place instead of signing up.
   const [full, setFull] = useState(false);
   const [requested, setRequested] = useState(false);
@@ -75,9 +77,14 @@ function AgentAuth() {
       const response = await fetch(apiUrl(`/api/agent-signup?code=${encodeURIComponent(linkCode)}`));
       const body = await response.json().catch(() => ({}));
       if (response.ok && body.agency) {
-        setCodeAgency(body.agency);
+        setCodeAgency([body.agency, body.branch].filter(Boolean).join(" · "));
+        setCodeBranch(body.branch || "");
         setFull(Boolean(body.full));
-        setForm((current) => ({ ...current, agency: current.agency || body.agency }));
+        setForm((current) => ({
+          ...current,
+          agency: body.agency,
+          branch: body.branch || current.branch,
+        }));
       } else {
         setMessage(body.error || "That sign-up link isn't valid any more.");
       }
@@ -200,11 +207,22 @@ function AgentAuth() {
               </label>
               <label>
                 Agency *
-                <input required maxLength={100} value={form.agency} onChange={update("agency")} />
+                <input
+                  required
+                  maxLength={100}
+                  value={form.agency}
+                  onChange={update("agency")}
+                  readOnly={Boolean(codeAgency)}
+                />
               </label>
               <label>
                 Branch
-                <input maxLength={100} value={form.branch} onChange={update("branch")} />
+                <input
+                  maxLength={100}
+                  value={form.branch}
+                  onChange={update("branch")}
+                  readOnly={Boolean(codeBranch)}
+                />
               </label>
               <label>
                 Phone (shown to buyers who book)
@@ -249,7 +267,7 @@ function AgentAuth() {
                   onChange={update("code")}
                 />
                 <span className="field-hint">
-                  Your agency's code from PropertySearch. No code?{" "}
+                  Your branch's code from PropertySearch. No code?{" "}
                   <a href="/agents#get-a-code">Ask for one</a>.
                 </span>
               </label>
