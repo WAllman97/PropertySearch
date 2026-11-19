@@ -77,6 +77,8 @@ function MainApp() {
   const [settingPassword, setSettingPassword] = useState(arrivedFromPasswordReset);
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [invite] = useState(getInviteCode);
+  // Settings card to scroll to when another view links there.
+  const [settingsFocus, setSettingsFocus] = useState(null);
 
   useEffect(() => {
     async function getSession() {
@@ -214,11 +216,20 @@ function MainApp() {
                 household instead, log out and sign up with a different email.
               </p>
             )}
-            {activeView === "properties" && <PropertiesView />}
+            {activeView === "properties" && (
+              <PropertiesView
+                onOpenSettings={(section) => {
+                  setSettingsFocus(section);
+                  setActiveView("settings");
+                }}
+              />
+            )}
             {activeView === "dashboard" && <DashboardView />}
             {activeView === "calendar" && <CalendarView />}
             {activeView === "history" && <HistoryView />}
-            {activeView === "settings" && <SettingsView user={user} />}
+            {activeView === "settings" && (
+              <SettingsView user={user} focusSection={settingsFocus} onFocused={() => setSettingsFocus(null)} />
+            )}
           </>
         )}
       </main>

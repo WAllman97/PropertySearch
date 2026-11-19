@@ -120,7 +120,7 @@ def run_property_alerts():
 
         new_properties = properties_result.data or []
         new_ids = {p["id"] for p in new_properties}
-        price_drops = [p for p in get_price_drops(supabase, since) if p["id"] not in new_ids]
+        price_drops = [p for p in get_price_drops(supabase, since, household_id) if p["id"] not in new_ids]
 
         print(
             f"{frequency} alert - found {len(new_properties)} new properties "

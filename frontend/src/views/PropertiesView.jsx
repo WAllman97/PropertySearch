@@ -7,6 +7,7 @@ import MarketSignals from "../components/MarketSignals";
 import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 import MarketToolbar from "../components/MarketToolbar";
 import SaveLinkForm from "../components/SaveLinkForm";
+import GettingStarted from "../components/GettingStarted";
 import { applyMarketView } from "../utils/market";
 
 function getPropertyAgeDays(property) {
@@ -33,7 +34,7 @@ function getAgeClass(days) {
   return "age-old";
 }
 
-function PropertiesView() {
+function PropertiesView({ onOpenSettings }) {
   const { byProperty: viewingsByProperty, reload: reloadViewings } = useAvailableViewings();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -172,6 +173,12 @@ function PropertiesView() {
   }
 
   return (
+    <>
+    <GettingStarted
+      refreshKey={properties.length}
+      onAddHome={() => setShowAddModal(true)}
+      onOpenSettings={onOpenSettings}
+    />
     <section className="card">
       <div className="section-header">
         <div>
@@ -301,13 +308,29 @@ function PropertiesView() {
         </div>
       )}
 
-      <MarketToolbar
-        properties={properties}
-        filter={marketFilter}
-        sort={marketSort}
-        onFilter={setMarketFilter}
-        onSort={setMarketSort}
-      />
+      {properties.length > 0 && (
+        <MarketToolbar
+          properties={properties}
+          filter={marketFilter}
+          sort={marketSort}
+          onFilter={setMarketFilter}
+          onSort={setMarketSort}
+        />
+      )}
+
+      {properties.length === 0 && (
+        <div className="empty-state">
+          <h3>No homes here yet</h3>
+          <p>
+            Paste a link to a home you like from Rightmove, Zoopla or OnTheMarket, and we'll fill
+            in the details. Rightmove homes are checked daily, so you hear when the price drops.
+            Homes that agents send you appear here too.
+          </p>
+          <button type="button" className="primary-button" onClick={() => setShowAddModal(true)}>
+            + Add your first home
+          </button>
+        </div>
+      )}
 
       <div className="property-grid">
         {applyMarketView(properties, marketFilter, marketSort).map((property) => {
@@ -406,6 +429,7 @@ function PropertiesView() {
         })}
       </div>
     </section>
+    </>
   );
 }
 
