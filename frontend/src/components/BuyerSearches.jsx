@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { postAuthed } from "../lib/api";
 import { formatShortGBP } from "../utils/market";
+
+const SearchAreaMap = lazy(() => import("./SearchAreaMap"));
 
 // What the buyer is looking for (buyer_searches, migration 009). Agents'
 // new listings are matched against these instead of scraping portal
@@ -15,6 +18,29 @@ const PROPERTY_TYPES = [
 // Postcode district (SW17, EC1A) or whole area (SW). Mirrors the DB check.
 const AREA_RE = /^[A-Z]{1,2}([0-9][0-9A-Z]?)?$/;
 
+// Where to look (migration 016): postcodes, a place + distance, or an area
+// drawn on the map.
+const WHERE_OPTIONS = [
+  { key: "postcodes", label: "Postcodes" },
+  { key: "circle", label: "Place & distance" },
+  { key: "polygon", label: "Draw on map" },
+];
+
+const MILE = 1609.34;
+const RADII = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5].map((miles) => ({
+  miles,
+  metres: Math.round(miles * MILE),
+}));
+
+export function milesText(metres) {
+  const miles = Math.round((metres / MILE) * 100) / 100;
+  const words = { 0.25: "¼", 0.5: "½", 0.75: "¾", 1.5: "1½" };
+  const n = words[miles] || String(miles);
+  return `${n} mile${miles > 1 ? "s" : ""}`;
+}
+
+const round6 = (n) => Math.round(n * 1e6) / 1e6;
+
 // First search is pre-filled from the old Rightmove/Zoopla searches
 // (backend/config.yaml) so nothing is lost when scraping is switched off.
 const STARTER = {
@@ -26,10 +52,18 @@ const STARTER = {
   property_types: ["house"],
   must_have_garden: true,
   is_active: true,
+  where: "postcodes",
+  center: null,
+  radius_m: RADII[3].metres,
+  polygon: [],
 };
 
 const BLANK = {
   name: "",
+  where: "postcodes",
+  center: null,
+  radius_m: RADII[3].metres,
+  polygon: [],
   areasText: "",
   min_price: "",
   max_price: "",
@@ -58,7 +92,13 @@ function toNumber(value) {
 }
 
 export function describeSearch(search) {
-  const parts = [search.areas.join(", ")];
+  const where = [];
+  if (search.areas?.length) where.push(search.areas.join(", "));
+  if (search.radius_m) {
+    where.push(`within ${milesText(search.radius_m)} of ${search.center_label || "a point on the map"}`);
+  }
+  if (search.polygon) where.push("an area drawn on the map");
+  const parts = [where.join(" or ")];
   if (search.min_price && search.max_price) {
     parts.push(`${formatShortGBP(search.min_price)}–${formatShortGBP(search.max_price)}`);
   } else if (search.max_price) {
@@ -78,7 +118,51 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [places, setPlaces] = useState(null);
+  const [placeError, setPlaceError] = useState("");
   const { valid, invalid } = parseAreas(form.areasText);
+
+  async function findPlace() {
+    if (placeQuery.trim().length < 2) return;
+    setPlaceError("");
+    setPlaces(null);
+    try {
+      const response = await postAuthed("/api/geo", { action: "places", q: placeQuery });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Place search failed");
+      if (!body.results.length) {
+        setPlaceError("No places found. Try a nearby area or a postcode.");
+      } else if (body.results.length === 1) {
+        choosePlace(body.results[0]);
+      } else {
+        setPlaces(body.results);
+      }
+    } catch (err) {
+      setPlaceError(err.message);
+    }
+  }
+
+  function choosePlace(place) {
+    setForm((current) => ({ ...current, center: place }));
+    setPlaces(null);
+    setPlaceQuery("");
+  }
+
+  function mapClick(point) {
+    if (form.where === "circle") {
+      setForm((current) => ({
+        ...current,
+        center: { label: "a point on the map", lat: round6(point.lat), lng: round6(point.lng) },
+      }));
+    } else if (form.where === "polygon") {
+      setForm((current) =>
+        current.polygon.length >= 100
+          ? current
+          : { ...current, polygon: [...current.polygon, [round6(point.lat), round6(point.lng)]] }
+      );
+    }
+  }
 
   const update = (key) => (event) =>
     setForm({
@@ -100,12 +184,22 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
     event.preventDefault();
     setError("");
 
-    if (!valid.length) {
-      setError("Add at least one postcode area, e.g. SW17 or SE24.");
+    if (form.where === "postcodes") {
+      if (!valid.length) {
+        setError("Add at least one postcode area, e.g. SW17 or SE24.");
+        return;
+      }
+      if (invalid.length) {
+        setError(`These aren't postcode areas: ${invalid.join(", ")}. Use the first half, e.g. SW17.`);
+        return;
+      }
+    }
+    if (form.where === "circle" && !form.center) {
+      setError("Choose a place, or tap the map to set the centre.");
       return;
     }
-    if (invalid.length) {
-      setError(`These aren't postcode areas: ${invalid.join(", ")}. Use the first half, e.g. SW17.`);
+    if (form.where === "polygon" && form.polygon.length < 3) {
+      setError("Tap at least three points on the map to draw your area.");
       return;
     }
 
@@ -119,7 +213,13 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
     setSaving(true);
     const message = await onSave({
       name: form.name.trim() || "My search",
-      areas: valid,
+      // One way of saying where per search; the others are cleared.
+      areas: form.where === "postcodes" ? valid : [],
+      center_label: form.where === "circle" ? form.center.label.slice(0, 120) : null,
+      center_lat: form.where === "circle" ? form.center.lat : null,
+      center_lng: form.where === "circle" ? form.center.lng : null,
+      radius_m: form.where === "circle" ? Number(form.radius_m) : null,
+      polygon: form.where === "polygon" ? form.polygon : null,
       min_price: minPrice,
       max_price: maxPrice,
       min_bedrooms: form.min_bedrooms === "" ? null : Number(form.min_bedrooms),
@@ -153,32 +253,141 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
         />
       </label>
 
-      <label>
-        Areas (postcode districts)
-        <input
-          value={form.areasText}
-          onChange={update("areasText")}
-          placeholder="SW17, SE24, SW11"
-          autoCapitalize="characters"
-        />
-        <span className="field-hint">
-          The first half of the postcode, separated by commas. Use just the letters (e.g. SW)
-          for a whole area.
-        </span>
-      </label>
-      {(valid.length > 0 || invalid.length > 0) && (
-        <div className="area-chips" aria-live="polite">
-          {valid.map((a) => (
-            <span key={a} className="area-chip">
-              {a}
-            </span>
-          ))}
-          {invalid.map((a) => (
-            <span key={a} className="area-chip invalid" title="Not a postcode area">
-              {a}
-            </span>
+      <fieldset className="where-options">
+        <legend>Where</legend>
+        <div className="segmented" role="radiogroup">
+          {WHERE_OPTIONS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              role="radio"
+              aria-checked={form.where === option.key}
+              className={form.where === option.key ? "active" : ""}
+              onClick={() => setForm({ ...form, where: option.key })}
+            >
+              {option.label}
+            </button>
           ))}
         </div>
+      </fieldset>
+
+      {form.where === "postcodes" && (
+        <>
+          <label>
+            Areas (postcode districts)
+            <input
+              value={form.areasText}
+              onChange={update("areasText")}
+              placeholder="SW17, SE24, SW11"
+              autoCapitalize="characters"
+            />
+            <span className="field-hint">
+              The first half of the postcode, separated by commas. Use just the letters (e.g. SW)
+              for a whole area.
+            </span>
+          </label>
+          {(valid.length > 0 || invalid.length > 0) && (
+            <div className="area-chips" aria-live="polite">
+              {valid.map((a) => (
+                <span key={a} className="area-chip">
+                  {a}
+                </span>
+              ))}
+              {invalid.map((a) => (
+                <span key={a} className="area-chip invalid" title="Not a postcode area">
+                  {a}
+                </span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {form.where === "circle" && (
+        <div className="where-circle">
+          <div className="place-row">
+            <label className="radius-select">
+              Within
+              <select value={form.radius_m} onChange={update("radius_m")}>
+                {RADII.map((r) => (
+                  <option key={r.metres} value={r.metres}>
+                    {milesText(r.metres)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="place-search">
+              of
+              <input
+                value={placeQuery}
+                onChange={(event) => setPlaceQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    findPlace();
+                  }
+                }}
+                placeholder={form.center ? form.center.label : "Battersea, Clapham Junction, SW11 1AA..."}
+              />
+            </label>
+            <button type="button" onClick={findPlace}>
+              Find
+            </button>
+          </div>
+          {places && (
+            <ul className="place-results">
+              {places.map((place) => (
+                <li key={place.label}>
+                  <button type="button" className="link-button" onClick={() => choosePlace(place)}>
+                    {place.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {placeError && <p className="booking-error">{placeError}</p>}
+          <p className="field-hint">
+            {form.center
+              ? `Within ${milesText(form.radius_m)} of ${form.center.label}. Tap the map to move the centre.`
+              : "Search for a place, or tap the map to set the centre."}
+          </p>
+        </div>
+      )}
+
+      {form.where === "polygon" && (
+        <div className="where-polygon">
+          <p className="field-hint">
+            Tap the map to mark the corners of the area you want (at least three). Drag to move
+            the map; pinch or use + and − to zoom.
+          </p>
+          <div className="buyer-search-actions">
+            <button
+              type="button"
+              disabled={!form.polygon.length}
+              onClick={() => setForm({ ...form, polygon: form.polygon.slice(0, -1) })}
+            >
+              Undo last point
+            </button>
+            <button type="button" disabled={!form.polygon.length} onClick={() => setForm({ ...form, polygon: [] })}>
+              Clear
+            </button>
+            <span className="muted">
+              {form.polygon.length} point{form.polygon.length === 1 ? "" : "s"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {form.where !== "postcodes" && (
+        <Suspense fallback={<div className="search-map loading">Loading map...</div>}>
+          <SearchAreaMap
+            mode={form.where}
+            center={form.center}
+            radiusM={Number(form.radius_m)}
+            polygon={form.polygon}
+            onMapClick={mapClick}
+          />
+        </Suspense>
       )}
 
       <div className="buyer-search-grid">
@@ -251,6 +460,12 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
 function toFormValues(search) {
   return {
     name: search.name,
+    where: search.polygon ? "polygon" : search.radius_m ? "circle" : "postcodes",
+    center: search.radius_m
+      ? { label: search.center_label || "a point on the map", lat: search.center_lat, lng: search.center_lng }
+      : null,
+    radius_m: search.radius_m || RADII[3].metres,
+    polygon: search.polygon || [],
     areasText: search.areas.join(", "),
     min_price: search.min_price ?? "",
     max_price: search.max_price ?? "",

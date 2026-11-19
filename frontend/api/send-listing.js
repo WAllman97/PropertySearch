@@ -13,6 +13,7 @@ import { listingKey } from "./_lib/listing.js";
 import { agentLabel, detailRow } from "./_lib/viewings.js";
 import { sendToUsers } from "./_lib/push.js";
 import { withCors } from "./_lib/cors.js";
+import { locatePostcode } from "./_lib/geo.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SENDS_PER_DAY = 30;
@@ -133,6 +134,9 @@ async function handler(req, res) {
   if (!listing.postcode) {
     return res.status(400).json({ error: "Add the postcode so we can find matching buyers." });
   }
+
+  // Buyers who searched by distance or a drawn area need to know where it is.
+  await locatePostcode(listing.postcode);
 
   const { data: matches, error: matchError } = await supabaseAdmin.rpc("match_buyer_searches", {
     p_postcode: listing.postcode,

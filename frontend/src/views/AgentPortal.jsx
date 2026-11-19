@@ -287,6 +287,14 @@ function formToRow(form) {
   };
 }
 
+async function locatePostcode(postcode) {
+  try {
+    await postAuthed("/api/geo", { action: "postcode", postcode });
+  } catch {
+    // Matching falls back to the postcode district.
+  }
+}
+
 // "12 buyers match" while the agent fills the form. Count only, never who.
 function useMatchCount(row) {
   const [count, setCount] = useState(null);
@@ -298,6 +306,8 @@ function useMatchCount(row) {
       return undefined;
     }
     const timer = setTimeout(async () => {
+      // Cache where the postcode is, so distance and map searches count too.
+      await locatePostcode(row.postcode);
       const { data, error } = await supabase.rpc("count_matching_buyers", {
         p_postcode: row.postcode,
         p_price: row.price,
