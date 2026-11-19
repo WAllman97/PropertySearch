@@ -2188,3 +2188,16 @@ button.link-button:hover {
     padding: 12px;
   }
 }
+
+.tile-tag {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft, #f3e7c4);
+  color: var(--primary);
+  max-width: 100%;
+  line-height: 1.35;
+}

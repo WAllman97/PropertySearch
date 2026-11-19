@@ -6,6 +6,7 @@ import CommuteSummary from "../components/CommuteSummary";
 import MarketSignals from "../components/MarketSignals";
 import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 import { OfferAcceptedButton, OfferStatus } from "../components/OfferStatus";
+import PropertyTile from "../components/PropertyTile";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -57,6 +58,8 @@ function HistoryView() {
   const [notesMessage, setNotesMessage] = useState("");
   // Live accepted offers by property id (withdrawn ones are hidden).
   const [offers, setOffers] = useState({});
+  // The one tile flipped open to show its details.
+  const [openId, setOpenId] = useState(null);
 
   useEffect(() => {
     loadWatchlist();
@@ -431,33 +434,19 @@ function HistoryView() {
         <p>{properties.length} tracked properties</p>
       </div>
 
-      <div className="property-grid">
+      <div className="tile-grid">
         {properties.map((property) => {
           const propertyAgeDays = getPropertyAgeDays(property);
 
           return (
-            <div
-              className="property-card"
+            <PropertyTile
               key={property.id}
-              onClick={() => setSelectedProperty(property)}
+              property={property}
+              open={openId === property.id}
+              onToggle={() => setOpenId((current) => (current === property.id ? null : property.id))}
+              tag={getStatusLabel(property.status)}
             >
-              {property.image_url && (
-                <img
-                  src={property.image_url}
-                  alt={property.address}
-                  className="property-image"
-                />
-              )}
-
               <div className="property-content">
-                <h3>
-                  {property.price
-                    ? `£${Number(property.price).toLocaleString()}`
-                    : "Price unavailable"}
-                </h3>
-
-                <p>{property.address}</p>
-
                 <MarketSignals property={property} />
                 <OfferStatus offer={offers[property.id]} onChanged={loadWatchlist} />
                 <ViewingSlots
@@ -496,25 +485,17 @@ function HistoryView() {
                   </span>
                 </div>
 
-                <a
-                  href={property.listing_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <a href={property.listing_url} target="_blank" rel="noreferrer">
                   View Listing
                 </a>
 
-                <div
-                  className="property-actions"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <div className="property-actions">
                   <button
                     type="button"
                     className="primary-button"
                     onClick={() => setSelectedProperty(property)}
                   >
-                    Open Details
+                    Notes &amp; scoring
                   </button>
 
                   <button
@@ -559,7 +540,7 @@ function HistoryView() {
                   </button>
                 </div>
               </div>
-            </div>
+            </PropertyTile>
           );
         })}
       </div>
