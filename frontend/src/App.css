@@ -2011,3 +2011,27 @@ button.link-button:hover {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Buying position proof document (PositionProof.jsx) */
+.position-proof {
+  border-top: 1px solid var(--border-strong);
+  padding-top: 12px;
+  margin: 4px 0 8px;
+}
+
+.position-proof h4 {
+  margin: 0 0 4px;
+}
+
+.position-proof .proof-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.position-proof .proof-actions {
+  display: inline-flex;
+  gap: 12px;
+}

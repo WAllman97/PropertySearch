@@ -113,6 +113,19 @@ async function deleteHousehold(householdId) {
     if (error) return error;
   }
 
+  // Proof documents (migration 017) live in storage, outside the database
+  // cascade: delete the household's folder.
+  const { data: files, error: filesError } = await supabaseAdmin.storage
+    .from("position-proofs")
+    .list(householdId, { limit: 1000 });
+  if (filesError) return filesError;
+  if (files?.length) {
+    const { error: removeError } = await supabaseAdmin.storage
+      .from("position-proofs")
+      .remove(files.map((f) => `${householdId}/${f.name}`));
+    if (removeError) return removeError;
+  }
+
   const { error } = await supabaseAdmin.from("households").delete().eq("id", householdId);
   return error || null;
 }

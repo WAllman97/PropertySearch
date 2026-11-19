@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import PositionProof from "./PositionProof";
 
 // The household's "ready to proceed" position (migration 015). Agents you
 // book viewings with see it, marked as your own declaration, so they know
@@ -34,40 +35,40 @@ const toNumber = (v) => (v === "" || v === null ? null : Math.round(Number(Strin
 function BuyerPositionSettings() {
   const [form, setForm] = useState(EMPTY);
   const [exists, setExists] = useState(false);
+  // The saved row as stored (household id, proof document), apart from the
+  // form being edited.
+  const [saved, setSaved] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase.from("buyer_positions").select("*").maybeSingle();
-      if (error) {
-        console.error("Could not load buying position:", error);
-        return;
-      }
-      if (data) {
-        setExists(true);
+  const load = useCallback(async (resetForm = true) => {
+    const { data, error } = await supabase.from("buyer_positions").select("*").maybeSingle();
+    if (error) {
+      console.error("Could not load buying position:", error);
+      return;
+    }
+    setSaved(data);
+    if (data) {
+      setExists(true);
+      if (resetForm) {
         setForm({
           ...EMPTY,
           ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v ?? EMPTY[k] ?? ""])),
         });
       }
-    })();
+    }
   }, []);
 
-  const set = (key) => (event) => {
-    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
-    setForm((current) => ({ ...current, [key]: value }));
-    setMessage("");
-  };
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  async function save(event) {
-    event.preventDefault();
-    setSaving(true);
-    setMessage("");
-
+  // What the form says, as a buyer_positions row.
+  async function formRow() {
     const mortgage = form.buying_with === "mortgage";
     const hasAip = mortgage && ["aip", "offer"].includes(form.mortgage_status);
-    const row = {
+    const { data: auth } = await supabase.auth.getUser();
+    return {
       max_budget: toNumber(form.max_budget),
       deposit: toNumber(form.deposit),
       buying_with: form.buying_with || null,
@@ -80,10 +81,37 @@ function BuyerPositionSettings() {
       move_timeframe: form.move_timeframe || null,
       share_with_agents: form.share_with_agents,
       updated_at: new Date().toISOString(),
+      updated_by: auth?.user?.id,
     };
+  }
 
-    const { data: auth } = await supabase.auth.getUser();
-    row.updated_by = auth?.user?.id;
+  // The proof hangs off the position row. If the buyer uploads before ever
+  // saving, save what the form says now, so the document isn't attached to
+  // a blank position. Returns the household id.
+  async function ensurePosition() {
+    if (saved?.household_id) return saved.household_id;
+    const { data, error } = await supabase
+      .from("buyer_positions")
+      .insert(await formRow())
+      .select("household_id")
+      .single();
+    if (error) throw error;
+    setExists(true);
+    return data.household_id;
+  }
+
+  const set = (key) => (event) => {
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    setForm((current) => ({ ...current, [key]: value }));
+    setMessage("");
+  };
+
+  async function save(event) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+
+    const row = await formRow();
 
     // One row per household; the household id fills itself in on insert.
     const { error } = exists
@@ -98,6 +126,7 @@ function BuyerPositionSettings() {
     }
     setExists(true);
     setMessage("Saved.");
+    load(false);
   }
 
   const proceedable = isProceedable({ ...form, aip_expires: form.aip_expires || null });
@@ -183,6 +212,20 @@ function BuyerPositionSettings() {
         </label>
       </div>
 
+      {/* Shown for funding that has paperwork, and always while a document is
+          attached, so it can be seen and removed whatever the form says. */}
+      {(form.buying_with === "cash" || hasAip || saved?.proof_path) && (
+        <PositionProof
+          position={{
+            ...(saved || {}),
+            buying_with: form.buying_with,
+            mortgage_status: form.mortgage_status,
+          }}
+          ensurePosition={ensurePosition}
+          onChanged={() => load(false)}
+        />
+      )}
+
       <label className="checkbox-row">
         <input type="checkbox" checked={form.solicitor_ready} onChange={set("solicitor_ready")} />
         We have a solicitor or conveyancer ready
@@ -192,8 +235,8 @@ function BuyerPositionSettings() {
         Show this to agents I book viewings or make offers with
       </label>
       <p className="muted">
-        Agents see it as your own declaration and will still ask for proof (such as your mortgage
-        agreement) before putting an offer forward.
+        Agents see it as your own declaration. Uploading proof above makes it more convincing,
+        though they may still ask for originals before putting an offer forward.
       </p>
 
       <button type="submit" className="primary-button" disabled={saving}>
