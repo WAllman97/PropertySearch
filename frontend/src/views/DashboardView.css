@@ -167,3 +167,14 @@
     align-items: flex-start;
   }
 }
+
+.dash-undo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #e8efe9;
+  font-weight: 700;
+}
