@@ -59,18 +59,23 @@ jobs:
         run: |
           mkdir -p backup
           SUPABASE_DB_URL="$(printf '%s' "$SUPABASE_DB_URL" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-          # pg_dump 17 reads any older Postgres. App tables (public), logins
+          # pg_dump 17 reads any older Postgres. Two dumps, because pg_dump
+          # ignores --schema once --table is given: the whole app schema
+          # (tables, data, functions, policies), then the logins
           # (auth.users, auth.identities) and the file index (storage).
           docker run --rm -e PGURL="$SUPABASE_DB_URL" -v "$PWD/backup:/out" postgres:17 sh -c '
             set -e
+            pg_dump "$PGURL" --format=custom --no-owner --schema=public --file=/out/database.dump
             pg_dump "$PGURL" --format=custom --no-owner \
-              --schema=public \
               --table=auth.users --table=auth.identities \
               --table=storage.buckets --table=storage.objects \
-              --file=/out/database.dump
+              --file=/out/logins-and-files-index.dump
             pg_restore --list /out/database.dump > /out/contents.txt
+            pg_restore --list /out/logins-and-files-index.dump >> /out/contents.txt
           '
           tables=$(grep -c "TABLE DATA public" backup/contents.txt || true)
+          logins=$(grep -c "TABLE DATA auth users" backup/contents.txt || true)
+          [ "$logins" -ge 1 ] || { echo "::error::The logins (auth.users) are missing from the backup."; exit 1; }
           echo "App tables with data: $tables"
           ls -la backup
           if [ "$tables" -lt 20 ]; then
