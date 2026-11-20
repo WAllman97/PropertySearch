@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
@@ -7,6 +7,7 @@ import MarketSignals from "../components/MarketSignals";
 import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 import { OfferAcceptedButton, OfferStatus } from "../components/OfferStatus";
 import PropertyTile from "../components/PropertyTile";
+import { daysOnMarket, priceDrop } from "../utils/market";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -18,6 +19,34 @@ const emptyNotes = {
   questions: "",
   general_notes: "",
 };
+
+// How far along each home is, for "Progress" (offers first).
+const STAGE = {
+  offer_accepted: 0,
+  offer_made: 1,
+  offer_considered: 2,
+  viewing_booked: 3,
+  viewed: 4,
+  favourite: 5,
+};
+const time = (value) => (value ? new Date(value).getTime() : 0);
+
+// Homes with no price (or score, or cut) always go last.
+const WATCHLIST_SORTS = [
+  { key: "newest", label: "Newest added", compare: (a, b) => time(b.created_at) - time(a.created_at) },
+  { key: "oldest", label: "Oldest added", compare: (a, b) => time(a.created_at) - time(b.created_at) },
+  { key: "price_low", label: "Price: low to high", compare: (a, b) => (a.price || Infinity) - (b.price || Infinity) },
+  { key: "price_high", label: "Price: high to low", compare: (a, b) => (b.price || -Infinity) - (a.price || -Infinity) },
+  { key: "score", label: "Highest score", compare: (a, b) => (b.overall_score ?? -1) - (a.overall_score ?? -1) },
+  {
+    key: "progress",
+    label: "Progress (offers first)",
+    compare: (a, b) => (STAGE[a.status] ?? 9) - (STAGE[b.status] ?? 9) || time(b.created_at) - time(a.created_at),
+  },
+  { key: "biggest_cut", label: "Biggest price cut", compare: (a, b) => (priceDrop(b)?.pct ?? -1) - (priceDrop(a)?.pct ?? -1) },
+  { key: "longest_listed", label: "Longest on market", compare: (a, b) => (daysOnMarket(b) ?? -1) - (daysOnMarket(a) ?? -1) },
+];
+const SORT_KEY = "watchlistSort";
 
 function getPropertyAgeDays(property) {
   const dateValue =
@@ -49,6 +78,22 @@ function getAgeLabel(days) {
 }
 
 function HistoryView() {
+  const [sortKey, setSortKey] = useState(() => {
+    try {
+      const saved = localStorage.getItem(SORT_KEY);
+      return WATCHLIST_SORTS.some((s) => s.key === saved) ? saved : "newest";
+    } catch {
+      return "newest";
+    }
+  });
+  function chooseSort(key) {
+    setSortKey(key);
+    try {
+      localStorage.setItem(SORT_KEY, key);
+    } catch {
+      // Private mode: just don't remember it.
+    }
+  }
   const { byProperty: viewingsByProperty, requestsByProperty, reload: reloadViewings } = useAvailableViewings();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -233,6 +278,11 @@ function HistoryView() {
 
     return labels[status] || status;
   }
+
+  const sortedProperties = useMemo(() => {
+    const sort = WATCHLIST_SORTS.find((item) => item.key === sortKey) || WATCHLIST_SORTS[0];
+    return [...properties].sort(sort.compare);
+  }, [properties, sortKey]);
 
   if (selectedProperty) {
     const selectedAgeDays = getPropertyAgeDays(selectedProperty);
@@ -430,13 +480,27 @@ function HistoryView() {
 
   return (
     <section className="card">
-      <div className="section-header">
-        <h2>Watchlist</h2>
-        <p>{properties.length} tracked properties</p>
+      <div className="section-header watchlist-head">
+        <div>
+          <h2>Watchlist</h2>
+          <p>{properties.length} tracked properties</p>
+        </div>
+        {properties.length > 1 && (
+          <label className="market-sort watchlist-sort">
+            Sort
+            <select value={sortKey} onChange={(event) => chooseSort(event.target.value)}>
+              {WATCHLIST_SORTS.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="tile-grid">
-        {properties.map((property) => {
+        {sortedProperties.map((property) => {
           const propertyAgeDays = getPropertyAgeDays(property);
 
           return (

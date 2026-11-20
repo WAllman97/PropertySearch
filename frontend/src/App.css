@@ -2612,3 +2612,16 @@ button.link-button:hover {
 .save-link-input .secondary-button {
   flex: none;
 }
+
+/* Watchlist: title on the left, Sort on the right */
+.watchlist-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.watchlist-sort {
+  flex: none;
+}
