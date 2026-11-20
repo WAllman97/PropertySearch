@@ -19,9 +19,9 @@ GOLD = (176, 141, 87)
 FONTS = "C:/Windows/Fonts/"
 
 CAPTIONS = {
-    "01_properties": ("Every home you're\nconsidering, in one place", "Save from Rightmove, Zoopla or OnTheMarket"),
+    "01_properties": ("Every home you're\nconsidering, in one place", "Save homes from any property website"),
     "02_book_viewing": ("Book a viewing\nin a tap", "See the agent's free times. No phone tag."),
-    "03_watchlist": ("Follow every home\nfrom saved to sold", "Viewings, offers and price drops together"),
+    "03_watchlist": ("Follow every home\nfrom saved to sold", "Viewings, offers and notes together"),
     "04_calendar": ("All your viewings\nin one calendar", "Shared with everyone in your household"),
     "05_dashboard": ("See what needs\nyou today", "Price drops, viewings and next steps"),
     "06_search_map": ("Draw the area you\nwant to live in", "Agents' new listings that fit come to you"),

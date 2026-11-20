@@ -1,6 +1,11 @@
-// Read one portal listing page into the fields a property needs. Used by
-// /api/lookup when a buyer saves a link: one page, on request, like
-// a link preview. Never crawls search results.
+// Read one portal listing's link preview into the fields a property needs.
+// Used by /api/lookup when a buyer saves a link: one page, on request.
+//
+// Only the link-preview tags are used (og:title, og:description, og:image,
+// the page title and meta description): the summary portals publish so that
+// messaging apps can show a preview when a link is shared. Nothing else on
+// the page is read, and nothing is crawled. The buyer checks the details and
+// fills in anything missing.
 //
 // We only ever fetch a URL we build ourselves from the listing id, so a
 // pasted link can't point the server at anything else.
@@ -8,7 +13,7 @@
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 const TIMEOUT_MS = 8000;
-const GARDEN_RE = /\b(garden|patio|courtyard|terrace|outside space|yard)\b/i;
+const MAX_BYTES = 600000;
 
 export function canonicalListingUrl(key) {
   const [portal, id] = String(key || "").split(":");
@@ -34,151 +39,73 @@ export function normalisePropertyType(...texts) {
   return null;
 }
 
-function priceFromText(text) {
-  const digits = String(text || "").replace(/[^0-9]/g, "");
-  return digits ? Number(digits) : null;
-}
-
-function cleanText(text, max = 1500) {
+function decode(text) {
   return String(text || "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
-    .replace(/&#39;|&rsquo;/g, "'")
+    .replace(/&#39;|&#x27;|&rsquo;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&pound;|&#163;|&#xa3;/gi, "£")
+    .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max);
+    .trim();
 }
 
-// --- Rightmove: window.__PAGE_MODEL is a flattened graph (keys -> indices).
-
-function extractJsonObject(html, marker) {
-  const at = html.indexOf(marker);
-  if (at < 0) return null;
-  const start = html.indexOf("{", at);
-  if (start < 0) return null;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < html.length; i++) {
-    const c = html[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (c === "\\") escaped = true;
-      else if (c === '"') inString = false;
-    } else if (c === '"') inString = true;
-    else if (c === "{") depth++;
-    else if (c === "}" && --depth === 0) return JSON.parse(html.slice(start, i + 1));
+// <meta property|name="..." content="..."> in either attribute order.
+function metaTags(html) {
+  const tags = {};
+  for (const [tag] of html.matchAll(/<meta\b[^>]*>/gi)) {
+    const name = tag.match(/\b(?:property|name)\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase();
+    const content = tag.match(/\bcontent\s*=\s*"([^"]*)"|\bcontent\s*=\s*'([^']*)'/i);
+    if (name && content && !(name in tags)) tags[name] = decode(content[1] ?? content[2]);
   }
-  return null;
+  return tags;
 }
 
-function hydrate(arr) {
-  const memo = new Map();
-  function resolve(idx, depth) {
-    if (!Number.isInteger(idx) || idx < 0 || idx >= arr.length || depth > 80) return null;
-    if (memo.has(idx)) return memo.get(idx);
-    const value = arr[idx];
-    if (Array.isArray(value)) {
-      const out = [];
-      memo.set(idx, out);
-      for (const ref of value) out.push(resolve(ref, depth + 1));
-      return out;
-    }
-    if (value && typeof value === "object") {
-      const out = {};
-      memo.set(idx, out);
-      for (const [key, ref] of Object.entries(value)) out[key] = resolve(ref, depth + 1);
-      return out;
-    }
-    return value;
-  }
-  return resolve(0, 0);
-}
+const POSTCODE_RE = /\b([A-Z]{1,2}[0-9][0-9A-Z]?)(?:\s*([0-9][A-Z]{2}))?\b/;
 
-export function parseRightmove(html) {
-  const model = extractJsonObject(html, "window.__PAGE_MODEL");
-  if (!model?.data) return null;
-  const pd = hydrate(JSON.parse(model.data))?.propertyData;
-  if (!pd) return null;
+// "2 bedroom terraced house for sale in Eversleigh Road, London, SW11 for
+// £780,000. Marketed by Savills, Battersea Park"
+export function parseLinkPreview(html) {
+  const tags = metaTags(html);
+  const title = decode(html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]);
+  const summary = tags["og:description"] || tags["twitter:description"] || tags.description || title;
+  if (!summary || /page not found|not available|no longer/i.test(`${summary} ${title}`)) return null;
 
-  const address = pd.address || {};
-  const features = (pd.keyFeatures || []).filter(Boolean);
-  const description = cleanText(pd.text?.description);
-  const gardenFlag = pd.features?.garden?.[0]?.displayText;
-  const tags = (pd.tags || []).join(" ").toUpperCase();
+  const text = `${summary} ${title}`;
+  const beds = text.match(/\b(\d{1,2})\s*bed(?:room)?s?\b/i);
+  const studio = /\bstudio\b/i.test(text);
+  const price = summary.match(/£\s?([\d,]{4,})/) || text.match(/£\s?([\d,]{4,})/);
+  const address =
+    summary.match(/for sale in (.+?)(?: for £| - |\.\s|$)/i)?.[1] ||
+    title.match(/for sale in (.+?)(?: - |\||$)/i)?.[1] ||
+    "";
+  const postcode = address.toUpperCase().match(POSTCODE_RE);
+  const agent = summary.match(/Marketed by ([^.]+)/i)?.[1];
+  const image = tags["og:image"] || tags["twitter:image"] || tags["twitter:image:src"] || "";
 
+  if (!address && !price) return null;
   return {
-    address: address.displayAddress || null,
-    postcode:
-      address.outcode && address.incode ? `${address.outcode} ${address.incode}`.toUpperCase() : null,
-    price: priceFromText(pd.prices?.primaryPrice),
-    bedrooms: Number.isInteger(pd.bedrooms) ? pd.bedrooms : null,
-    property_type: normalisePropertyType(pd.propertySubType),
-    has_garden:
-      gardenFlag === "Yes" ? true : gardenFlag === "No" ? false : GARDEN_RE.test(features.join(" ")) || null,
-    image_url: pd.images?.[0]?.url || null,
-    latitude: pd.location?.latitude ?? null,
-    longitude: pd.location?.longitude ?? null,
-    description: cleanText([features.join(". "), description].filter(Boolean).join("\n\n"), 5000),
-    listing_status: pd.status?.archived || pd.status?.published === false
-      ? "removed"
-      : /SOLD_STC|SOLD STC/.test(tags)
-        ? "sold_stc"
-        : /UNDER_OFFER|UNDER OFFER/.test(tags)
-          ? "under_offer"
-          : "live",
+    address: address.replace(/\s*,\s*$/, "").slice(0, 200),
+    postcode: postcode ? [postcode[1], postcode[2]].filter(Boolean).join(" ") : null,
+    price: price ? Number(price[1].replace(/,/g, "")) : null,
+    bedrooms: studio ? 0 : beds ? Number(beds[1]) : null,
+    property_type: normalisePropertyType(summary, title),
+    // A site-wide sharing picture isn't a photo of the home.
+    image_url: /^https:\/\//.test(image) && !/social|sharing|logo|default/i.test(image) ? image : "",
+    agent_name: agent ? agent.trim().slice(0, 100) : null,
+    description: summary.slice(0, 500),
+    listing_status: /sold stc|sold subject to contract/i.test(text)
+      ? "sold_stc"
+      : /under offer/i.test(text)
+        ? "under_offer"
+        : "live",
   };
-}
-
-// --- OnTheMarket: Next.js page, property in initialReduxState.
-
-export function parseOnTheMarket(html) {
-  const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-  if (!match) return null;
-  const p = JSON.parse(match[1])?.props?.pageProps?.initialReduxState?.property;
-  if (!p?.id) return null;
-
-  const features = (p.features || []).map((f) => f?.feature).filter(Boolean);
-  const description = cleanText(p.description);
-
-  return {
-    address: p.displayAddress || null,
-    postcode: null, // not on the page; filled from the map pin below
-    price: Number.isFinite(p.priceRaw) ? p.priceRaw : priceFromText(p.price),
-    bedrooms: Number.isInteger(p.bedrooms) ? p.bedrooms : null,
-    property_type: normalisePropertyType(p.humanisedPropertyType, p.propertyTitle),
-    has_garden: GARDEN_RE.test(`${features.join(" ")} ${description}`) || null,
-    image_url: p.images?.[0]?.largeUrl || null,
-    latitude: p.location?.lat ?? null,
-    longitude: p.location?.lon ?? null,
-    description: cleanText([features.join(". "), description].filter(Boolean).join("\n\n"), 5000),
-    listing_status: p.retracted ? "removed" : "live",
-  };
-}
-
-// Nearest postcode to the listing's map pin (postcodes.io, free open data).
-// Portals often place the pin approximately, so this is right to the
-// district (what search matching uses) more than to the exact door.
-async function postcodeNear(lat, lon) {
-  if (lat == null || lon == null) return null;
-  try {
-    const response = await fetch(
-      `https://api.postcodes.io/postcodes?lon=${encodeURIComponent(lon)}&lat=${encodeURIComponent(lat)}&limit=1`,
-      { signal: AbortSignal.timeout(4000) }
-    );
-    const body = await response.json();
-    return body?.result?.[0]?.postcode || null;
-  } catch {
-    return null;
-  }
 }
 
 // -> { status: "ok" | "blocked" | "failed", details }
 export async function fetchListingDetails(key) {
   const url = canonicalListingUrl(key);
   if (!url) return { status: "failed", details: {} };
-  const portal = key.split(":")[0];
 
   let response;
   try {
@@ -199,13 +126,12 @@ export async function fetchListingDetails(key) {
 
   let details = null;
   try {
-    const html = await response.text();
-    details = portal === "rightmove" ? parseRightmove(html) : portal === "onthemarket" ? parseOnTheMarket(html) : null;
+    // The preview tags are in the page head: no need for the rest.
+    const html = (await response.text()).slice(0, MAX_BYTES);
+    details = parseLinkPreview(html);
   } catch (error) {
-    console.error(`Listing page parse failed for ${key}:`, error.message);
+    console.error(`Link preview parse failed for ${key}:`, error.message);
   }
   if (!details) return { status: "failed", details: {} };
-
-  if (!details.postcode) details.postcode = await postcodeNear(details.latitude, details.longitude);
   return { status: "ok", details };
 }
