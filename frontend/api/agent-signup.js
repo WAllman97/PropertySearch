@@ -15,6 +15,7 @@
 // or the older single AGENT_SIGNUP_CODE if that's set in Vercel.
 import { supabaseAdmin } from "./_lib/household.js";
 import { withCors } from "./_lib/cors.js";
+import { sendConfirmEmail } from "./_lib/confirm-email.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_RE = /^[A-Z0-9-]{4,40}$/;
@@ -157,7 +158,7 @@ async function handler(req, res) {
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email: profile.email,
     password,
-    email_confirm: true,
+    email_confirm: false,
     user_metadata: { role: "agent", name: profile.name },
   });
 
@@ -184,5 +185,15 @@ async function handler(req, res) {
     return res.status(500).json({ error: "Could not create your account. Please try again." });
   }
 
-  return res.status(200).json({ success: true });
+  // Unconfirmed until they use the link we email (_lib/confirm-email.js).
+  let emailed = true;
+  try {
+    const result = await sendConfirmEmail(req, { email: profile.email, password, name: profile.name, next: "/agent" });
+    if (result?.sent === false) emailed = false;
+  } catch (sendError) {
+    console.error("Agent confirmation email failed:", sendError);
+    emailed = false;
+  }
+
+  return res.status(200).json({ success: true, confirmEmail: true, emailed });
 }

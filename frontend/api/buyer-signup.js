@@ -1,17 +1,21 @@
 // Public sign-up for buyers.
 //   GET  /api/buyer-signup?invite=<code> -> is this invite link valid, and whose
 //   POST /api/buyer-signup { name, email, password, invite? }
+//   POST /api/buyer-signup { action: "resend_confirmation", email, password, next? }
+//        a new confirmation link, for buyers and agents (_lib/confirm-email.js)
 //
 // Without an invite this creates a new household with its own property list.
 // With a partner's invite code (from Settings → Household) the new account
 // joins that household and shares its list, calendar and notifications.
 //
 // Public sign-ups are switched off in Supabase, so accounts are created here
-// with the service role and confirmed straight away, the same as agents
+// with the service role, unconfirmed: we email a link to confirm the address
+// before they can log in (_lib/confirm-email.js), the same as agents
 // (api/agent-signup.js). New households get the app only: the scraper, its
 // daily email and AI scoring stay with the original household.
 import { supabaseAdmin } from "./_lib/household.js";
 import { withCors } from "./_lib/cors.js";
+import { handleResendConfirmation, sendConfirmEmail } from "./_lib/confirm-email.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INVITE_RE = /^[0-9a-f]{24}$/;
@@ -65,6 +69,7 @@ async function handleGet(req, res) {
 
 async function handlePost(req, res) {
   const body = req.body || {};
+  if (body.action === "resend_confirmation") return handleResendConfirmation(req, res);
 
   // Honeypot: real users never see or fill this field.
   if (body.website) {
@@ -108,7 +113,7 @@ async function handlePost(req, res) {
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
-    email_confirm: true,
+    email_confirm: false,
     user_metadata: { role: "buyer", name },
   });
 
@@ -153,5 +158,16 @@ async function handlePost(req, res) {
     return res.status(500).json({ error: "Could not create your account. Please try again." });
   }
 
-  return res.status(200).json({ success: true, joined: Boolean(invite) });
+  // The account is ready; it opens once the email is confirmed. If sending
+  // fails they can ask for a new link from the log-in screen.
+  let emailed = true;
+  try {
+    const result = await sendConfirmEmail(req, { email, password, name });
+    if (result?.sent === false) emailed = false;
+  } catch (sendError) {
+    console.error("Confirmation email failed:", sendError);
+    emailed = false;
+  }
+
+  return res.status(200).json({ success: true, joined: Boolean(invite), confirmEmail: true, emailed });
 }

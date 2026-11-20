@@ -6,6 +6,7 @@ import { listingKey } from "../../api/_lib/listing.js";
 import { londonToUtc } from "../../api/_lib/time.js";
 import { openProof, proofLabel } from "../components/PositionProof";
 import AgentHours from "./AgentHours";
+import { CheckYourEmail } from "../components/ConfirmEmail";
 import "./AgentPortal.css";
 
 // Estate agent area at /agent: sign up or log in, add listings, publish
@@ -71,6 +72,8 @@ function AgentAuth() {
   // Every seat on the code is taken: ask for a place instead of signing up.
   const [full, setFull] = useState(false);
   const [requested, setRequested] = useState(false);
+  // "signup": just signed up; "login": tried to log in before confirming.
+  const [confirming, setConfirming] = useState(null);
 
   useEffect(() => {
     if (!linkCode) return;
@@ -96,6 +99,10 @@ function AgentAuth() {
 
   async function logIn(email, password) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error?.code === "email_not_confirmed") {
+      setConfirming("login");
+      return;
+    }
     if (error) throw error;
   }
 
@@ -137,6 +144,12 @@ function AgentAuth() {
             throw new Error(body.error);
           }
           if (!response.ok) throw new Error(body.error || "Could not create your account");
+          // The account opens once they tap the link we've emailed.
+          if (body.confirmEmail) {
+            setConfirming("signup");
+            setBusy(false);
+            return;
+          }
         }
         await logIn(form.email.trim(), form.password);
       }
@@ -189,7 +202,18 @@ function AgentAuth() {
           </button>
         </div>
 
-        {mode === "signup" && requested ? (
+        {confirming ? (
+          <CheckYourEmail
+            email={form.email.trim()}
+            password={form.password}
+            next="/agent"
+            afterLogin={confirming === "login"}
+            onBack={() => {
+              setConfirming(null);
+              setMode(confirming === "signup" ? "signup" : "login");
+            }}
+          />
+        ) : mode === "signup" && requested ? (
           <div className="agent-requested" role="status">
             <h3>Request sent</h3>
             <p>

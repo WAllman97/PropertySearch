@@ -93,7 +93,7 @@ function PrivacyPage() {
         <ul>
           <li>Supabase: database and logins</li>
           <li>Vercel: hosting the app</li>
-          <li>Resend: sending emails</li>
+          <li>Resend: sending emails (sent from its servers in Ireland)</li>
           <li>Google Maps: journey times (only the addresses involved)</li>
           <li>Anthropic: summarising and scoring property listings (listing details only)</li>
           <li>Apple: delivering phone notifications</li>
