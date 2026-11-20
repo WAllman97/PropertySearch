@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ConfirmEmailPage } from "./components/ConfirmEmail";
+import { onSharedLink } from "./lib/sharedLinks";
 import ViewingRequestPage from "./views/ViewingRequestPage";
 import { arrivedFromPasswordReset, supabase } from "./lib/supabaseClient";
 import AuthForm from "./components/AuthForm";
@@ -107,6 +108,9 @@ function MainApp() {
   const [invite] = useState(getInviteCode);
   // Settings card to scroll to when another view links there.
   const [settingsFocus, setSettingsFocus] = useState(null);
+
+  // A property link shared to the app opens Add Property on the Properties tab.
+  useEffect(() => onSharedLink(() => setActiveView("properties")), []);
 
   useEffect(() => {
     async function getSession() {

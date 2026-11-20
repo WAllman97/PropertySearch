@@ -7,6 +7,7 @@ import MarketSignals from "../components/MarketSignals";
 import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 import MarketToolbar from "../components/MarketToolbar";
 import SaveLinkForm from "../components/SaveLinkForm";
+import { onSharedLink, takeSharedLink } from "../lib/sharedLinks";
 import GettingStarted from "../components/GettingStarted";
 import PropertyTile from "../components/PropertyTile";
 import { applyMarketView } from "../utils/market";
@@ -40,6 +41,19 @@ function PropertiesView({ onOpenSettings }) {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  // A link shared to the app (Share → PropertySearch, or /?add=) to fill in.
+  const [addLink, setAddLink] = useState(null);
+
+  useEffect(() => {
+    const open = (link) => {
+      takeSharedLink();
+      setAddLink(link);
+      setShowAddModal(true);
+    };
+    const waiting = takeSharedLink();
+    if (waiting) open(waiting);
+    return onSharedLink(open);
+  }, []);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [marketFilter, setMarketFilter] = useState("all");
@@ -251,15 +265,21 @@ function PropertiesView({ onOpenSettings }) {
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setAddLink(null);
+                }}
               >
                 Close
               </button>
             </div>
 
             <SaveLinkForm
+              key={addLink || "blank"}
+              initialUrl={addLink}
               onSaved={async () => {
                 setShowAddModal(false);
+                setAddLink(null);
                 await loadProperties();
               }}
             />
