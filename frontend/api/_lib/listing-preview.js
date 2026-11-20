@@ -5,9 +5,11 @@
 // for everyone (migration 011):
 //   1. an agent on PropertySearch listed it -> their details, no fetch
 //   2. listing_cache has it                 -> stored copy
-//   3. read that one page now (like a link preview) and cache the result
+//   3. read that one page's link-preview tags now (what messaging apps show
+//      when a link is shared; _lib/listing-page.js) and cache the result
 // Zoopla refuses automated reads, so those come back "blocked" and the
-// buyer types the few details in.
+// buyer types the few details in. Portal pages are never read on a
+// schedule for buyers: only when they paste a link.
 import { requireHouseholdUser, supabaseAdmin, underRateLimit } from "./household.js";
 import { listingKey } from "./listing.js";
 import { canonicalListingUrl, fetchListingDetails, normalisePropertyType } from "./listing-page.js";

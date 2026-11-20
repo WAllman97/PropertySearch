@@ -10,9 +10,11 @@ Two sources of truth:
 
 Every change of asking price we observe is written to price_history.
 
-The refresh covers every household's saved Rightmove homes, not just the
-original household's: each listing page is read once a day however many
-households saved it, and the result is applied to all of their rows.
+The refresh covers only the original household's homes: it's the owner's
+personal tool, alongside the daily scrape. Other households (the app's
+users) never have portal pages read automatically; their price changes come
+from agents on PropertySearch. Within the original household, each listing
+page is read at most once a day.
 """
 
 import json
@@ -23,6 +25,7 @@ from datetime import datetime, timezone
 
 import requests
 
+from core.households import original_household_id
 from core.supabase_client import supabase
 from scrapers import rightmove
 
@@ -272,10 +275,11 @@ def apply_facts(property_row, facts, source):
 # ---------------------------------------------------------------------------
 
 def active_rightmove_properties(limit=5000):
-    """Every household's live Rightmove homes, stalest first."""
+    """The original household's live Rightmove homes, stalest first."""
     result = (
         supabase.table("properties")
         .select("id,household_id,title,address,listing_url,price,initial_price,status,listing_status,listing_checked_at,source")
+        .eq("household_id", original_household_id(supabase))
         .eq("source", "rightmove")
         .or_("status.is.null,status.not.in.(" + ",".join(INACTIVE_STATUSES) + ")")
         .order("listing_checked_at", desc=False, nullsfirst=True)
@@ -308,9 +312,9 @@ def group_by_listing(rows):
 
 def refresh_active_listings(max_age_hours=20, limit=150, delay=(1.0, 2.5)):
     """Re-read each active Rightmove listing's page (oldest-checked first)
-    to pick up price changes and removed / sold STC status, for every
-    household. `limit` counts listing pages read, not property rows. A
-    listing is skipped when every household's copy was checked within
+    to pick up price changes and removed / sold STC status, for the original
+    household only (see the module docstring). `limit` counts listing pages
+    read, not property rows. A listing is skipped when it was checked within
     max_age_hours (e.g. by today's search scrape)."""
     stats = {
         "checked": 0, "rows_updated": 0, "price_changes": 0, "removed": 0,

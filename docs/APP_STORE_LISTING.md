@@ -15,7 +15,7 @@ privacy answers with what the app actually does.
 | SKU | propertysearch-ios |
 | Primary category | Lifestyle |
 | Secondary category | Productivity |
-| Content rights | Doesn't contain third-party content you need rights for (listing photos are shown from links agents add) |
+| Content rights | Answer **Yes**, it shows third-party content: when a user saves a link, the app shows that page's link preview (title, short summary, main photo), as messaging apps do, and listings agents add themselves. Portal pages are only read when a user pastes a link, never on a schedule. Check this answer with a solicitor before submitting. |
 | Age rating | Answer "None" / "No" to every question (gives 4+). "Unrestricted web access": No |
 | Privacy policy URL | https://property-search-4jcc.vercel.app/privacy |
 | Support URL | https://property-search-4jcc.vercel.app/support |
@@ -61,7 +61,7 @@ privacy answers with what the app actually does.
 > PropertySearch is a home-buying organiser for you and your partner.
 >
 > KEEP EVERYTHING TOGETHER
-> • Save a home by pasting its Rightmove, Zoopla or OnTheMarket link
+> • Save a home by pasting its link from the property websites you already use
 > • Notes, ratings and a shared shortlist for your household
 > • Journey times to the places that matter to you
 >
@@ -79,7 +79,6 @@ privacy answers with what the app actually does.
 > SHOW AGENTS YOU'RE READY
 > • Share your buying position (mortgage agreement, chain, solicitor) with
 >   agents you book with, so your offers are taken seriously
-> • Price drops and status changes on the homes you're watching
 >
 > FOR ESTATE AGENTS
 > • Set your viewing hours once: every listing gets bookable times, and a
@@ -88,10 +87,25 @@ privacy answers with what the app actually does.
 > • See each buyer's position, and confirm accepted offers in a tap
 
 **Keywords (100 chars, comma separated, no spaces needed):**
-`house,home,buying,property,viewings,rightmove,zoopla,mortgage,estate agent,flat,shortlist,london`
+`house,home,buying,property,viewings,book viewing,mortgage,estate agent,flat,shortlist,london,move`
 
-(Check Apple's rules before keeping competitor names like rightmove/zoopla
-in keywords. They can get a listing rejected. Safer to drop them.)
+No other companies' names (Rightmove, Zoopla, OnTheMarket) in the name,
+subtitle, keywords or description: Apple rejects listings that use other
+brands' trademarks to be found. Mentioning them inside the app, where it
+helps people use it, is fine.
+
+## Listing data and portals (before submitting)
+
+- Buyers' homes are never re-read from portals on a schedule. Only the
+  owner's original household keeps the daily search scrape and price
+  checks (backend), as a personal tool.
+- Save-a-link reads only the link-preview tags of the one page a buyer
+  pastes (`frontend/api/_lib/listing-page.js`).
+- Agents on PropertySearch are the licensed source: their details and
+  photos are used first.
+- Apple guideline 5.2.2 asks that apps showing another service's content
+  are allowed to under its terms. Get a short legal view on the link
+  previews before launch.
 
 ## App Privacy ("nutrition label")
 

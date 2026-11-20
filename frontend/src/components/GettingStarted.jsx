@@ -10,7 +10,7 @@ const STEPS = [
   {
     id: "home",
     title: "Save your first home",
-    text: "Paste a link from Rightmove, Zoopla or OnTheMarket. We fill in the details, and alert you when a Rightmove home's price drops.",
+    text: "Paste a link from Rightmove, Zoopla or OnTheMarket. We fill in the details for you to check.",
     action: "Add a home",
   },
   {

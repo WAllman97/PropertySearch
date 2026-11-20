@@ -123,6 +123,14 @@ function SaveLinkForm({ onSaved, initialUrl = null }) {
       return;
     }
 
+    // The listing's agent, from the link preview: ready for viewing requests.
+    if (d.agent_name) {
+      const { error: notesError } = await supabase
+        .from("property_notes")
+        .insert({ property_id: data.id, estate_agent: d.agent_name });
+      if (notesError) console.error("Could not save the agent:", notesError);
+    }
+
     try {
       await postAuthed("/api/calculate-commute", { propertyId: data.id });
     } catch (err) {
