@@ -385,7 +385,8 @@ function PropertiesView({ onOpenSettings }) {
           <h3>No homes here yet</h3>
           <p>
             Paste a link to a home you like from Rightmove, Zoopla or OnTheMarket, and we'll fill
-            in the details for you to check. Homes that agents send you appear here too.
+            in the details for you to check. Homes that agents send you appear here too, and when an
+            agent on PropertySearch cuts the price of a home you saved, you're told straight away.
           </p>
           <button type="button" className="primary-button" onClick={() => setShowAddModal(true)}>
             + Add your first home

@@ -1,5 +1,7 @@
 // Agent sends a listing to every buyer whose saved search it fits.
 //   POST /api/send-listing { listingId }
+//   POST /api/send-listing { action: "price_update", listingId }
+//        the agent changed the price: tell buyers who saved it (_lib/agent-price.js)
 //
 // Replaces scraping: instead of us crawling portals, agents push listings
 // to buyers who want them (migrations 009 + 010). Each buyer gets a listing
@@ -14,6 +16,7 @@ import { agentLabel, detailRow } from "./_lib/viewings.js";
 import { sendToUsers } from "./_lib/push.js";
 import { withCors } from "./_lib/cors.js";
 import { locatePostcode } from "./_lib/geo.js";
+import { handlePriceUpdate } from "./_lib/agent-price.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SENDS_PER_DAY = 30;
@@ -128,6 +131,8 @@ async function handler(req, res) {
   if (!listing || listing.agent_id !== user.id) {
     return res.status(404).json({ error: "Listing not found" });
   }
+  // The agent changed the price: pass it on to buyers who saved the home.
+  if (req.body?.action === "price_update") return handlePriceUpdate(req, res, listing, user.id);
   if (!listing.is_active) {
     return res.status(409).json({ error: "Show this listing to buyers before sending it." });
   }

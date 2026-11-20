@@ -79,6 +79,7 @@ privacy answers with what the app actually does.
 > SHOW AGENTS YOU'RE READY
 > • Share your buying position (mortgage agreement, chain, solicitor) with
 >   agents you book with, so your offers are taken seriously
+> • Hear straight away when an agent cuts the price of a home you saved
 >
 > FOR ESTATE AGENTS
 > • Set your viewing hours once: every listing gets bookable times, and a
