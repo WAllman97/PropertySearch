@@ -34,6 +34,23 @@ jobs:
           missing=0
           [ -n "$SUPABASE_DB_URL" ] || { echo "::error::Add the SUPABASE_DB_URL secret (see docs/BACKUPS.md)"; missing=1; }
           [ -n "$BACKUP_PASSPHRASE" ] || { echo "::error::Add the BACKUP_PASSPHRASE secret (see docs/BACKUPS.md)"; missing=1; }
+          # Check the connection string's shape without ever printing it.
+          url="$(printf '%s' "$SUPABASE_DB_URL" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+          case "$url" in
+            postgres://*|postgresql://*) ;;
+            *) echo "::error::SUPABASE_DB_URL must be the whole connection string, starting postgresql:// (not just the password)"; missing=1 ;;
+          esac
+          case "$url" in
+            *pooler.supabase.com:5432/*) ;;
+            *) echo "::error::SUPABASE_DB_URL must be the Session pooler string (…pooler.supabase.com:5432/postgres)"; missing=1 ;;
+          esac
+          case "$url" in
+            *'['*|*']'*) echo "::error::SUPABASE_DB_URL still has [ or ]: replace [YOUR-PASSWORD], brackets included, with the password"; missing=1 ;;
+          esac
+          case "$url" in
+            *postgres.*:*@*) ;;
+            *) echo "::error::SUPABASE_DB_URL's user should be postgres.<project id>, followed by :password@"; missing=1 ;;
+          esac
           exit $missing
 
       - name: Dump the database
@@ -41,6 +58,7 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           mkdir -p backup
+          SUPABASE_DB_URL="$(printf '%s' "$SUPABASE_DB_URL" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
           # pg_dump 17 reads any older Postgres. App tables (public), logins
           # (auth.users, auth.identities) and the file index (storage).
           docker run --rm -e PGURL="$SUPABASE_DB_URL" -v "$PWD/backup:/out" postgres:17 sh -c '
