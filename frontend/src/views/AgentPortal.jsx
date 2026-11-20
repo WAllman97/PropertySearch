@@ -5,6 +5,7 @@ import { apiUrl, siteUrl } from "../lib/platform";
 import { listingKey } from "../../api/_lib/listing.js";
 import { londonToUtc } from "../../api/_lib/time.js";
 import { openProof, proofLabel } from "../components/PositionProof";
+import AgentHours from "./AgentHours";
 import "./AgentPortal.css";
 
 // Estate agent area at /agent: sign up or log in, add listings, publish
@@ -932,7 +933,7 @@ function SlotRow({ slot, bookings, positions, onChanged }) {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.from("viewing_slots").delete().eq("id", slot.id);
+    const { error } = await supabase.rpc("agent_remove_slots", { p_slots: [slot.id] });
     setBusy(false);
     if (error) window.alert(error.message);
     onChanged();
@@ -1074,9 +1075,68 @@ function listingFacts(listing) {
     .join(" · ");
 }
 
-function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach, onChanged }) {
-  const [adding, setAdding] = useState(slots.length === 0);
+// Free private times shown as small chips (there can be many with weekly
+// hours). Tap × to remove one; blocked ones are times you're at another
+// viewing (plus travel) or inside your shortest notice.
+function FreeTimes({ slots, blocked, onChanged }) {
+  const [busy, setBusy] = useState(false);
+
+  async function remove(ids) {
+    setBusy(true);
+    const { error } = await supabase.rpc("agent_remove_slots", { p_slots: ids });
+    setBusy(false);
+    if (error) window.alert(error.message);
+    onChanged();
+  }
+
+  return (
+    <div className="agent-free">
+      <ul className="agent-chips">
+        {slots.map((slot) => {
+          const isBlocked = blocked.has(slot.id);
+          const time = timeFormatter.format(new Date(slot.starts_at));
+          return (
+            <li
+              key={slot.id}
+              className={`agent-chip ${isBlocked ? "blocked" : ""}`}
+              title={isBlocked ? "Not offered: you're at another viewing then, or it's too short notice" : timeRange(slot)}
+            >
+              {time}
+              <button
+                type="button"
+                aria-label={`Remove ${time}`}
+                disabled={busy}
+                onClick={() => remove([slot.id])}
+              >
+                ×
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {slots.length > 1 && (
+        <button
+          type="button"
+          className="link-button"
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm(`Remove all ${slots.length} free times on this day?`)) remove(slots.map((s) => s.id));
+          }}
+        >
+          Clear free times
+        </button>
+      )}
+    </div>
+  );
+}
+
+const DAYS_SHOWN = 7;
+
+function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach, hoursOn, blocked, onChanged }) {
+  const [adding, setAdding] = useState(slots.length === 0 && !hoursOn);
   const [editing, setEditing] = useState(false);
+  const [allDays, setAllDays] = useState(false);
+  const [savingAuto, setSavingAuto] = useState(false);
 
   const days = useMemo(() => {
     const groups = new Map();
@@ -1087,6 +1147,15 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
     }
     return [...groups.entries()];
   }, [slots]);
+  const shownDays = allDays ? days : days.slice(0, DAYS_SHOWN);
+
+  async function toggleAuto() {
+    setSavingAuto(true);
+    await supabase.from("agent_listings").update({ auto_times: !listing.auto_times }).eq("id", listing.id);
+    await supabase.rpc("sync_pattern_slots", { p_agent: agentId });
+    setSavingAuto(false);
+    onChanged();
+  }
 
   async function toggleActive() {
     await supabase
@@ -1140,25 +1209,50 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
         <p className="muted">Hidden: buyers can't see or book these times, and the link is off.</p>
       )}
 
+      {hoursOn && (
+        <label className="agent-auto">
+          <input type="checkbox" checked={listing.auto_times} disabled={savingAuto} onChange={toggleAuto} />
+          Offer my weekly viewing hours on this home
+        </label>
+      )}
+
       {days.length === 0 ? (
-        <p className="muted">No upcoming viewing times yet.</p>
+        <p className="muted">
+          {hoursOn && listing.auto_times && listing.is_active
+            ? "No free times in your weekly hours coming up. Check your hours and time off above."
+            : hoursOn
+              ? "No upcoming viewing times. Add some by hand below."
+              : "No upcoming viewing times yet. Set your viewing hours above and times appear here automatically, or add some by hand."}
+        </p>
       ) : (
-        days.map(([day, daySlots]) => (
-          <div key={day} className="agent-day">
-            <h4>{day}</h4>
-            <ul className="agent-slots">
-              {daySlots.map((slot) => (
-                <SlotRow
-                  key={slot.id}
-                  slot={slot}
-                  bookings={bookingsBySlot[slot.id] || []}
-                  positions={positions}
-                  onChanged={onChanged}
-                />
-              ))}
-            </ul>
-          </div>
-        ))
+        shownDays.map(([day, daySlots]) => {
+          const free = daySlots.filter((slot) => slot.capacity === 1 && !bookingsBySlot[slot.id]?.length);
+          const rows = daySlots.filter((slot) => !free.includes(slot));
+          return (
+            <div key={day} className="agent-day">
+              <h4>{day}</h4>
+              {rows.length > 0 && (
+                <ul className="agent-slots">
+                  {rows.map((slot) => (
+                    <SlotRow
+                      key={slot.id}
+                      slot={slot}
+                      bookings={bookingsBySlot[slot.id] || []}
+                      positions={positions}
+                      onChanged={onChanged}
+                    />
+                  ))}
+                </ul>
+              )}
+              {free.length > 0 && <FreeTimes slots={free} blocked={blocked} onChanged={onChanged} />}
+            </div>
+          );
+        })
+      )}
+      {days.length > DAYS_SHOWN && (
+        <button type="button" className="link-button" onClick={() => setAllDays(!allDays)}>
+          {allDays ? "Show fewer days" : `Show all ${days.length} days`}
+        </button>
       )}
 
       {adding ? (
@@ -1172,7 +1266,7 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
         />
       ) : (
         <button type="button" className="secondary-button" onClick={() => setAdding(true)}>
-          Add viewing times
+          {hoursOn ? "Add one-off times or an open house" : "Add viewing times"}
         </button>
       )}
     </section>
@@ -1182,7 +1276,7 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
 // First-run checklist for a new agent: list a home, publish times, send it
 // to matching buyers. Ticks itself off from what's saved; hidden once done
 // or when the agent hides it (remembered on this device).
-function AgentGettingStarted({ agentId, listings, slots, reach }) {
+function AgentGettingStarted({ agentId, listings, slots, reach, hoursSet }) {
   const key = `agentStartHidden:${agentId}`;
   const [hidden, setHidden] = useState(() => {
     try {
@@ -1203,11 +1297,11 @@ function AgentGettingStarted({ agentId, listings, slots, reach }) {
     },
     {
       id: "times",
-      title: "Publish viewing times",
-      text: "Add the slots you can show it. Buyers who've saved the home book straight in, and you get a calendar invite.",
-      done: slots.length > 0,
-      target: "agent-listings",
-      action: "Add times",
+      title: "Set your viewing hours",
+      text: "Once, for all your listings. Buyers who've saved the home book straight in, and you get a calendar invite.",
+      done: hoursSet || slots.length > 0,
+      target: "agent-hours",
+      action: "Set hours",
     },
     {
       id: "send",
@@ -1267,7 +1361,7 @@ function AgentGettingStarted({ agentId, listings, slots, reach }) {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={step.id !== "listing" && listings.length === 0}
+                disabled={step.id === "send" && listings.length === 0}
                 onClick={() => go(step.target)}
               >
                 {step.action}
@@ -1287,12 +1381,28 @@ function AgentDashboard({ agent }) {
   const [reach, setReach] = useState({});
   const [offers, setOffers] = useState([]);
   const [positions, setPositions] = useState({});
+  const [availability, setAvailability] = useState(null);
+  const [hours, setHours] = useState([]);
+  const [timeOff, setTimeOff] = useState([]);
+  const [blocked, setBlocked] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     const since = new Date(Date.now() - 2 * 3600000).toISOString();
-    const [listingsResult, slotsResult, bookingsResult, reachResult, offersResult, positionsResult] =
-      await Promise.all([
+    // Weekly hours: add any times now due (new listing, a new day in range).
+    await supabase.rpc("sync_pattern_slots", { p_agent: agent.user_id });
+    const [
+      listingsResult,
+      slotsResult,
+      bookingsResult,
+      reachResult,
+      offersResult,
+      positionsResult,
+      availabilityResult,
+      hoursResult,
+      timeOffResult,
+      blockedResult,
+    ] = await Promise.all([
       supabase.from("agent_listings").select("*").order("created_at", { ascending: false }),
       supabase
         .from("viewing_slots")
@@ -1308,7 +1418,15 @@ function AgentDashboard({ agent }) {
       supabase.rpc("agent_listing_reach"),
       supabase.rpc("agent_offers"),
       supabase.rpc("agent_buyer_positions"),
+      supabase.from("agent_availability").select("*").maybeSingle(),
+      supabase.from("agent_hours").select("*"),
+      supabase.from("agent_time_off").select("*").order("starts_on"),
+      supabase.rpc("agent_blocked_slots"),
     ]);
+    setAvailability(availabilityResult.data || null);
+    setHours(hoursResult.data || []);
+    setTimeOff(timeOffResult.data || []);
+    setBlocked(new Set((blockedResult.data || []).map((row) => (typeof row === "string" ? row : Object.values(row)[0]))));
     setOffers(offersResult.data || []);
     setPositions(Object.fromEntries((positionsResult.data || []).map((p) => [p.buyer_id, p])));
     const reachMap = {};
@@ -1318,7 +1436,7 @@ function AgentDashboard({ agent }) {
     setSlots(slotsResult.data || []);
     setBookings(bookingsResult.data || []);
     setLoading(false);
-  }, []);
+  }, [agent.user_id]);
 
   useEffect(() => {
     load();
@@ -1354,7 +1472,24 @@ function AgentDashboard({ agent }) {
       </header>
 
       {!loading && (
-        <AgentGettingStarted agentId={agent.user_id} listings={listings} slots={slots} reach={reach} />
+        <AgentGettingStarted
+          agentId={agent.user_id}
+          listings={listings}
+          slots={slots}
+          reach={reach}
+          hoursSet={!!availability}
+        />
+      )}
+
+      {!loading && (
+        <AgentHours
+          agentId={agent.user_id}
+          availability={availability}
+          hours={hours}
+          timeOff={timeOff}
+          bookedSlots={slots.filter((slot) => bookingsBySlot[slot.id]?.length)}
+          onChanged={load}
+        />
       )}
 
       <OfferRequests offers={offers} positions={positions} onChanged={load} />
@@ -1377,6 +1512,8 @@ function AgentDashboard({ agent }) {
             positions={positions}
             agentId={agent.user_id}
             reach={reach[listing.id]}
+            hoursOn={!!availability?.enabled}
+            blocked={blocked}
             onChanged={load}
           />
         ))

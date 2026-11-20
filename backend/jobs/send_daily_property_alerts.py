@@ -144,5 +144,16 @@ def run_property_alerts():
         )
 
 
+def top_up_agent_viewing_slots():
+    """Keep agents' weekly-hours viewing slots topped up a few weeks ahead
+    (migration 022). Never stops the alerts if it fails."""
+    try:
+        result = supabase.rpc("sync_all_pattern_slots").execute()
+        print(f"Topped up weekly viewing slots for {result.data} agent(s).")
+    except Exception as error:  # noqa: BLE001
+        print(f"Could not top up agents' viewing slots: {error}")
+
+
 if __name__ == "__main__":
+    top_up_agent_viewing_slots()
     run_property_alerts()

@@ -497,3 +497,210 @@
   color: var(--muted);
   cursor: default;
 }
+
+/* Weekly viewing hours (AgentHours.jsx) */
+.agent-hours .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.agent-hours h3,
+.agent-hours h4 {
+  margin: 0 0 4px;
+}
+
+.agent-hours-form {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-hours-switch,
+.agent-auto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.agent-auto {
+  margin: 4px 0 6px;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.agent-week {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-week:disabled {
+  opacity: 0.5;
+}
+
+.agent-week-day {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  flex-wrap: wrap;
+}
+
+.agent-week-day.on {
+  background: var(--surface);
+}
+
+.agent-week-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 64px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.agent-week-periods {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+  font-size: 13px;
+}
+
+.agent-week-period {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.agent-week-period input[type="time"] {
+  width: auto;
+  padding: 4px 6px;
+}
+
+.agent-hours-note {
+  margin: 0;
+  font-size: 12px;
+}
+
+.agent-saved {
+  margin: 8px 0 0;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.agent-time-off {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.agent-time-off p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.agent-time-off-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.agent-time-off-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-warning {
+  color: #9a5b00;
+}
+
+.agent-time-off-add {
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Free times as chips on a listing */
+.agent-free {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.agent-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-chip.blocked {
+  color: var(--muted-light);
+  text-decoration: line-through;
+  background: var(--surface-soft);
+}
+
+.agent-chip button {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 999px;
+}
+
+.agent-chip button:hover {
+  background: var(--surface-soft);
+  color: var(--text, #222);
+}
+
+@media (max-width: 760px) {
+  .agent-week-name {
+    width: 100%;
+  }
+}
+
+.agent-auto input[type="checkbox"],
+.agent-hours-switch input[type="checkbox"],
+.agent-week-name input[type="checkbox"] {
+  width: auto;
+  flex: none;
+  margin: 0;
+}
