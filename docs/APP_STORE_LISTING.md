@@ -29,15 +29,27 @@ privacy answers with what the app actually does.
   > straight from local agents. Partners share one list. Estate agents can
   > publish viewing times and send new listings to matching buyers.
 - **Feedback email:** your contact email
-- **Sign-in required:** Yes. Give a demo buyer login (and, in the notes, a
-  demo agent login) that Apple's beta reviewers can use. Create them from the
-  live sign-up page with an address you control, add a couple of saved
-  properties so the app isn't empty, and don't use your own account.
+- **Sign-in required:** Yes. Use the demo accounts made by
+  `frontend/scripts/seed-demo.mjs`: the emails and passwords are in
+  `docs/app-review-logins.local.md` (on your PC only, not in git). Put the
+  buyer login in the username/password boxes and the agent login in the
+  notes. Re-run the script before each submission to refresh the dates.
 - **Review notes:**
-  > Buyers sign up in the app. Estate agents use the "Estate agent?" link on
-  > the login screen. Phone notifications are sent for new matching listings,
-  > viewing reminders and booking requests. Account deletion:
-  > Settings → Delete Account (buyers), bottom of the agent page (agents).
+  > Demo data: the buyer account is a fictional household with saved homes,
+  > a booked viewing, an offer and a drawn search area. To see the estate
+  > agent side, tap "Estate agent? Sign in or sign up here" on the log-in
+  > screen and use the agent login below. Its listings match some of the
+  > buyer's homes, so you can book a viewing as the buyer and see it
+  > appear for the agent.
+  >
+  > Agent login: (email) / (password)
+  >
+  > New accounts confirm their email address before first log-in (the demo
+  > accounts are already confirmed). Estate agents need a sign-up code from
+  > us, so please use the demo agent rather than signing up. Phone
+  > notifications are sent for new matching listings, viewing reminders and
+  > price drops. Account deletion: Settings → Delete Account (buyers),
+  > bottom of the agent page (agents).
 
 ## Description (App Store)
 
@@ -60,16 +72,20 @@ privacy answers with what the app actually does.
 >   reach the portals
 >
 > VIEWINGS WITHOUT THE PHONE TAG
-> • Book viewings from agents' available times
-> • Reminders the day before, all in one calendar
+> • Book viewings from agents' available times, with a calendar invite
+> • Every viewing in one calendar, shared with your household
+> • Reminders the day before
 >
 > SHOW AGENTS YOU'RE READY
 > • Share your buying position (mortgage agreement, chain, solicitor) with
 >   agents you book with, so your offers are taken seriously
+> • Price drops and status changes on the homes you're watching
 >
 > FOR ESTATE AGENTS
-> • Publish viewing times, send new listings to buyers whose searches match,
->   and see proceedable buyers at a glance
+> • Set your viewing hours once: every listing gets bookable times, and a
+>   booking at one home takes clashing times off the others
+> • Send new listings to buyers whose searches match
+> • See each buyer's position, and confirm accepted offers in a tap
 
 **Keywords (100 chars, comma separated, no spaces needed):**
 `house,home,buying,property,viewings,rightmove,zoopla,mortgage,estate agent,flat,shortlist,london`
@@ -104,8 +120,22 @@ on each build.
 
 ## Screenshots (App Store only, not TestFlight)
 
-Needed: iPhone 6.9" (1320 × 2868) or 6.5" (1284 × 2778), 3 to 10 images.
-Easiest from a TestFlight build on a large iPhone (side button + volume up),
-or from the iOS simulator on the Mac. Suggested set: property list, a
-property with notes, the drawn-area search, viewing booking,
-calendar, buying position.
+Ready to upload: `docs/app-store/screenshots/` (nine iPhone 6.9" images,
+1320 × 2868, in upload order). Drag them into App Store Connect → your app
+→ the version → iPhone 6.9" Display. Apple scales them for smaller iPhones.
+
+They show the demo accounts. Photos are from Unsplash (free for commercial
+use, no credit needed); streets are real, listings and prices made up.
+
+To retake them (after a rename or design change):
+
+```
+cd frontend
+node --env-file=../backend/.env --env-file=.env scripts/seed-demo.mjs
+npm install --no-save puppeteer-core@23.11.1
+npm run dev        (in another terminal)
+node scripts/app-store/shoot.mjs ../docs/app-store/raw
+python scripts/app-store/compose.py ../docs/app-store/raw ../docs/app-store/screenshots
+```
+
+Captions are in `compose.py`.
