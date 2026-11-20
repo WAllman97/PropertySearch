@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { apiUrl, siteUrl } from "../lib/platform";
+import { CheckYourEmail } from "./ConfirmEmail";
 
 // Log in, reset a password, or sign up. Sign-up goes through
 // /api/buyer-signup, which creates a new household, or joins the household
 // whose invite link (/join/<code>) brought them here.
 function AuthForm({ invite = null }) {
-  const [mode, setMode] = useState(invite ? "signup" : "login"); // "login" | "forgot" | "signup"
+  // "login" | "forgot" | "signup" | "check" (confirm your email) | "unconfirmed"
+  const [mode, setMode] = useState(invite ? "signup" : "login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,11 +57,17 @@ function AuthForm({ invite = null }) {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Could not create your account");
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-
       // Drop /join/<code> so a refresh doesn't offer to sign up again.
       if (invite) window.history.replaceState(null, "", "/");
+
+      // The account opens once they tap the link we've emailed.
+      if (body.confirmEmail) {
+        setMode("check");
+        setLoading(false);
+        return;
+      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
     } catch (error) {
       setMessage(error.message);
       setLoading(false);
@@ -78,7 +86,11 @@ function AuthForm({ invite = null }) {
         password,
       });
 
-      if (error) throw error;
+      if (error?.code === "email_not_confirmed") {
+        setMode("unconfirmed");
+      } else if (error) {
+        throw error;
+      }
     } catch (error) {
       setMessage(error.message);
     }
@@ -114,6 +126,19 @@ function AuthForm({ invite = null }) {
     // Same message whether or not the account exists, so the form can't be
     // used to find out who has an account.
     setMessage("If that email has an account, a reset link is on its way. Check your inbox.");
+  }
+
+  if (mode === "check" || mode === "unconfirmed") {
+    return (
+      <div className="auth-card">
+        <CheckYourEmail
+          email={email.trim()}
+          password={password}
+          afterLogin={mode === "unconfirmed"}
+          onBack={() => switchMode(mode === "check" ? "signup" : "login")}
+        />
+      </div>
+    );
   }
 
   if (mode === "forgot") {

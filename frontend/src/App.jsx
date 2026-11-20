@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { ConfirmEmailPage } from "./components/ConfirmEmail";
 import { arrivedFromPasswordReset, supabase } from "./lib/supabaseClient";
 import AuthForm from "./components/AuthForm";
 import SetNewPasswordForm from "./components/SetNewPasswordForm";
@@ -57,6 +58,11 @@ function App() {
   const viewingsMatch = window.location.pathname.match(/^\/viewings\/([0-9a-f-]{36})\/?$/i);
   if (viewingsMatch) {
     return <PublicViewingPage listingId={viewingsMatch[1]} />;
+  }
+
+  // The link in the "confirm your email" message sent at sign-up.
+  if (/^\/confirm\/?$/.test(window.location.pathname)) {
+    return <ConfirmEmailPage />;
   }
 
   if (/^\/privacy\/?$/.test(window.location.pathname)) {

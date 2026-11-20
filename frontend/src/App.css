@@ -2558,3 +2558,41 @@ button.link-button:hover {
     flex: 0 0 auto;
   }
 }
+
+/* Confirm your email (components/ConfirmEmail.jsx) */
+.check-email {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.check-email h3 {
+  margin: 4px 0;
+}
+
+.check-email p {
+  margin: 0;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+.check-email-icon {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.check-email-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.check-email .primary-button {
+  margin-top: 10px;
+  text-decoration: none;
+}
