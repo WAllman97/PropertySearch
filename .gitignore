@@ -11,3 +11,9 @@ dist/
 # Local Claude Code settings / worktrees
 .claude/settings.local.json
 .claude/worktrees/
+
+# Demo App Review logins (frontend/scripts/seed-demo.mjs)
+*.local.md
+
+# Raw App Store shots (re-made by frontend/scripts/app-store/shoot.mjs)
+docs/app-store/raw/
