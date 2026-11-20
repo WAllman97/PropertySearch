@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
+import ViewingRequest from "./ViewingRequest";
 import "../views/AgentPortal.css";
 
 // Viewing times that agents have published for homes the household saved
@@ -19,27 +20,43 @@ const timeFormatter = new Intl.DateTimeFormat("en-GB", {
   hourCycle: "h23",
 });
 
-// Loads every open slot for the household's saved homes, grouped by property.
+// Loads every open slot for the household's saved homes, grouped by
+// property, and each home's latest viewing request to an agent who isn't on
+// PropertySearch (migration 023).
 export function useAvailableViewings() {
   const [byProperty, setByProperty] = useState({});
+  const [requestsByProperty, setRequestsByProperty] = useState({});
 
   const reload = useCallback(async () => {
-    const { data, error } = await supabase.rpc("available_viewings");
-    // Before migration 006 is run the function doesn't exist: show nothing.
-    if (error) return;
-    const map = {};
-    for (const row of data || []) (map[row.property_id] ||= []).push(row);
-    setByProperty(map);
+    const [slots, requests] = await Promise.all([
+      supabase.rpc("available_viewings"),
+      supabase
+        .from("viewing_requests")
+        .select("*")
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false }),
+    ]);
+    // Before a migration is run its function or table doesn't exist: show nothing.
+    if (!slots.error) {
+      const map = {};
+      for (const row of slots.data || []) (map[row.property_id] ||= []).push(row);
+      setByProperty(map);
+    }
+    if (!requests.error) {
+      const latest = {};
+      for (const row of requests.data || []) latest[row.property_id] ||= row;
+      setRequestsByProperty(latest);
+    }
   }, []);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
-  return { byProperty, reload };
+  return { byProperty, requestsByProperty, reload };
 }
 
-function ViewingSlots({ property, slots, onChanged }) {
+function ViewingSlots({ property, slots, request, onChanged }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const [phone, setPhone] = useState(() => {
@@ -65,7 +82,11 @@ function ViewingSlots({ property, slots, onChanged }) {
     return [...groups.entries()];
   }, [bookable]);
 
-  if (!slots?.length) return null;
+  // No agent on PropertySearch for this home (or no times left): ask the
+  // agent by email instead.
+  if (!slots?.length || (!mine && !bookable.length)) {
+    return <ViewingRequest property={property} request={request} onChanged={onChanged} />;
+  }
 
   const agent = slots[0];
   const agentText = [agent.agent_name, agent.agency].filter(Boolean).join(", ");
@@ -124,8 +145,6 @@ function ViewingSlots({ property, slots, onChanged }) {
       </div>
     );
   }
-
-  if (!bookable.length) return null;
 
   return (
     <div className="viewing-slots" onClick={(event) => event.stopPropagation()}>

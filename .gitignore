@@ -17,3 +17,6 @@ dist/
 
 # Raw App Store shots (re-made by frontend/scripts/app-store/shoot.mjs)
 docs/app-store/raw/
+
+# Private notes and documents (never committed)
+private/

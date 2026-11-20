@@ -36,7 +36,7 @@ function getAgeClass(days) {
 }
 
 function PropertiesView({ onOpenSettings }) {
-  const { byProperty: viewingsByProperty, reload: reloadViewings } = useAvailableViewings();
+  const { byProperty: viewingsByProperty, requestsByProperty, reload: reloadViewings } = useAvailableViewings();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -391,6 +391,7 @@ function PropertiesView({ onOpenSettings }) {
                 <ViewingSlots
                   property={property}
                   slots={viewingsByProperty[property.id]}
+                  request={requestsByProperty[property.id]}
                   onChanged={reloadViewings}
                 />
 
