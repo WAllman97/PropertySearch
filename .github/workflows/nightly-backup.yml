@@ -1,0 +1,88 @@
+name: Nightly Backup
+
+# Every night: a copy of the database (all app tables, plus logins) and every
+# uploaded file, encrypted with BACKUP_PASSPHRASE and kept here as a workflow
+# artifact for 30 days. Supabase's free plan keeps no backups of its own.
+# How to restore: docs/BACKUPS.md.
+#
+# Secrets: SUPABASE_DB_URL (the "Session pooler" connection string, with the
+# database password in it), BACKUP_PASSPHRASE, SUPABASE_URL,
+# SUPABASE_SERVICE_ROLE_KEY. GitHub emails you if a run fails.
+
+on:
+  schedule:
+    - cron: "30 2 * * *" # 02:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Check secrets are set
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          missing=0
+          [ -n "$SUPABASE_DB_URL" ] || { echo "::error::Add the SUPABASE_DB_URL secret (see docs/BACKUPS.md)"; missing=1; }
+          [ -n "$BACKUP_PASSPHRASE" ] || { echo "::error::Add the BACKUP_PASSPHRASE secret (see docs/BACKUPS.md)"; missing=1; }
+          exit $missing
+
+      - name: Dump the database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p backup
+          # pg_dump 17 reads any older Postgres. App tables (public), logins
+          # (auth.users, auth.identities) and the file index (storage).
+          docker run --rm -e PGURL="$SUPABASE_DB_URL" -v "$PWD/backup:/out" postgres:17 sh -c '
+            set -e
+            pg_dump "$PGURL" --format=custom --no-owner \
+              --schema=public \
+              --table=auth.users --table=auth.identities \
+              --table=storage.buckets --table=storage.objects \
+              --file=/out/database.dump
+            pg_restore --list /out/database.dump > /out/contents.txt
+          '
+          tables=$(grep -c "TABLE DATA public" backup/contents.txt || true)
+          echo "App tables with data: $tables"
+          ls -la backup
+          if [ "$tables" -lt 20 ]; then
+            echo "::error::The dump looks incomplete ($tables app tables)."
+            exit 1
+          fi
+
+      - name: Download uploaded files
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python backend/jobs/backup_storage_files.py backup/files
+
+      - name: Encrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          stamp=$(date -u +%Y-%m-%d)
+          tar -czf - -C backup . | gpg --batch --yes --pinentry-mode loopback \
+            --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" \
+            --output "propertysearch-backup-$stamp.tar.gz.gpg"
+          rm -rf backup
+          ls -la propertysearch-backup-*.gpg
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+
+      - name: Keep for 30 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ env.STAMP }}
+          path: propertysearch-backup-*.tar.gz.gpg
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error
