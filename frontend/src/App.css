@@ -2596,3 +2596,19 @@ button.link-button:hover {
   margin-top: 10px;
   text-decoration: none;
 }
+
+/* Add Property: the link box with its Paste button */
+.save-link-input {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.save-link-input input {
+  flex: 1;
+  min-width: 0;
+}
+
+.save-link-input .secondary-button {
+  flex: none;
+}

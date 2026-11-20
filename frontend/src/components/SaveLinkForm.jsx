@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 
@@ -28,14 +28,41 @@ function toForm(details = {}) {
   };
 }
 
-function SaveLinkForm({ onSaved }) {
-  const [url, setUrl] = useState("");
+function SaveLinkForm({ onSaved, initialUrl = null }) {
+  const [url, setUrl] = useState(initialUrl || "");
   const [preview, setPreview] = useState(null);
   const [form, setForm] = useState(toForm());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const update = (key) => (event) => setForm({ ...form, [key]: event.target.value });
+  const [pasteHint, setPasteHint] = useState("");
+
+  // Opened with a shared link: look it up straight away.
+  useEffect(() => {
+    if (initialUrl) lookUp(initialUrl);
+    // Only when the form opens with a link.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // One tap instead of press-and-hold: reads the copied link (the phone may
+  // show its own "Paste" button to allow it).
+  async function pasteLink() {
+    setPasteHint("");
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      const link = text.match(/https?:\/\/\S+/)?.[0];
+      if (!link) {
+        setPasteHint("No link copied. In Rightmove or Zoopla, tap Share, then Copy link.");
+        return;
+      }
+      setUrl(link);
+      lookUp(link);
+    } catch {
+      setPasteHint("Couldn't read the clipboard here. Press and hold the box, then Paste.");
+      document.getElementById("save-link-url")?.focus();
+    }
+  }
 
   async function lookUp(value = url) {
     const link = value.trim();
@@ -122,7 +149,9 @@ function SaveLinkForm({ onSaved }) {
       >
         <label>
           Property link
+          <span className="save-link-input">
           <input
+            id="save-link-url"
             type="url"
             required
             value={url}
@@ -134,7 +163,12 @@ function SaveLinkForm({ onSaved }) {
               if (pasted) setTimeout(() => lookUp(pasted), 0);
             }}
           />
+          <button type="button" className="secondary-button" disabled={busy} onClick={pasteLink}>
+            Paste
+          </button>
+          </span>
         </label>
+        {pasteHint && <p className="save-link-note">{pasteHint}</p>}
         <button type="submit" className="primary-button" disabled={busy || !url.trim()}>
           {busy && !preview ? "Getting details..." : "Get details"}
         </button>

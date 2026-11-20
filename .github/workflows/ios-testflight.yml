@@ -27,6 +27,10 @@ on:
         description: "Upload to TestFlight (untick to only check it builds)"
         type: boolean
         default: true
+      check_only:
+        description: "Only check it compiles (no signing; works before an iPhone is registered)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ios-testflight
@@ -85,8 +89,12 @@ jobs:
         id: mode
         env:
           ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+          CHECK_ONLY: ${{ inputs.check_only }}
         run: |
-          if [ -n "$ASC_KEY" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$TEAM_ID" ]; then
+          if [ "$CHECK_ONLY" = "true" ]; then
+            echo "Compile check only: no signing, nothing uploaded."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$ASC_KEY" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$TEAM_ID" ]; then
             mkdir -p "$RUNNER_TEMP/keys"
             printf '%s\n' "$ASC_KEY" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
             echo "signed=true" >> "$GITHUB_OUTPUT"
