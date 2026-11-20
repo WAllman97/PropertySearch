@@ -503,6 +503,17 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
       return;
     }
 
+    // A new price goes straight to buyers who saved the home.
+    if (listing && row.price && row.price !== listing.price) {
+      const response = await postAuthed("/api/send-listing", { action: "price_update", listingId: listing.id });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok && result.notified) {
+        window.alert(
+          `New price saved. ${result.notified} household${result.notified === 1 ? " that saved this home has" : "s that saved this home have"} been told.`
+        );
+      }
+    }
+
     if (!listing) setForm(EMPTY_LISTING);
     onSaved();
   }
