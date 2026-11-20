@@ -51,8 +51,10 @@ gpg --decrypt propertysearch-backup-YYYY-MM-DD.tar.gz.gpg > backup.tar.gz
 mkdir backup && tar -xzf backup.tar.gz -C backup
 ```
 
-Inside: `database.dump` (Postgres custom format), `contents.txt` (what's in
-it) and `files/` (uploaded documents, by bucket and path).
+Inside: `database.dump` (the app's tables, data, functions and policies),
+`logins-and-files-index.dump` (logins and the storage index), both
+Postgres custom format; `contents.txt` (what's in them) and `files/`
+(uploaded documents, by bucket and path).
 
 ## Restoring
 
@@ -63,9 +65,12 @@ Ask for help with this the first time; the outline:
    editor, then load the data only:
    ```
    pg_restore --data-only --no-owner \
+     --dbname "<new project's session pooler URI>" backup/logins-and-files-index.dump
+   pg_restore --data-only --no-owner \
      --dbname "<new project's session pooler URI>" backup/database.dump
    ```
-   Logins come back too, with their passwords. Then point Vercel, GitHub
+   Logins first (the app's tables point at them); they come back with
+   their passwords. Then point Vercel, GitHub
    and the app at the new project's URL and keys.
 2. **One table or a few rows** (a mistake, not a disaster): restore into a
    scratch database or read the rows out, e.g.
