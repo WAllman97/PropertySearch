@@ -59,6 +59,13 @@ async function handleGetListing(req, res) {
   const taken = {};
   for (const b of bookings || []) taken[b.slot_id] = (taken[b.slot_id] || 0) + 1;
 
+  // Times the agent can no longer do: booked at another home, or too short
+  // notice (migration 022).
+  const { data: blocked } = ids.length
+    ? await supabaseAdmin.rpc("listing_blocked_slots", { p_listing: listing.id })
+    : { data: [] };
+  const blockedIds = new Set(blocked || []);
+
   return res.status(200).json({
     listing: {
       id: listing.id,
@@ -76,7 +83,7 @@ async function handleGetListing(req, res) {
         openHouse: s.capacity > 1,
         spacesLeft: s.capacity - (taken[s.id] || 0),
       }))
-      .filter((s) => s.spacesLeft > 0),
+      .filter((s) => s.spacesLeft > 0 && !blockedIds.has(s.id)),
   });
 }
 
