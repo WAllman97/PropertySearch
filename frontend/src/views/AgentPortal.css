@@ -704,3 +704,171 @@
   flex: none;
   margin: 0;
 }
+
+/* Viewing requests to agents who aren't on PropertySearch */
+.viewing-request-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.viewing-request-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.viewing-request-grid label,
+.viewing-request-message,
+.request-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.viewing-request-times {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.viewing-request-times legend {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.viewing-request-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.viewing-request-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.viewing-request-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.request-chip {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.request-chip.waiting {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.request-chip.proposed {
+  background: var(--primary-soft);
+  border-color: transparent;
+  color: var(--primary);
+}
+
+.request-chip.declined {
+  color: #9a3b2a;
+}
+
+/* /request/<token>: the agent's page */
+.request-page .card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.request-page h3 {
+  margin: 0;
+}
+
+.request-position {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.request-message {
+  margin: 0;
+  font-style: italic;
+}
+
+.request-options {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.request-options legend {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.request-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.request-option input {
+  width: auto;
+  margin: 0;
+}
+
+.request-option.selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.request-option.past {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.request-option small {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.request-result.confirmed {
+  border-color: #c4e3d0;
+  background: var(--primary-soft);
+}
+
+.request-pitch .secondary-button {
+  align-self: flex-start;
+  text-decoration: none;
+}

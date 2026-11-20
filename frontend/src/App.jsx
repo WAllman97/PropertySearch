@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ConfirmEmailPage } from "./components/ConfirmEmail";
+import ViewingRequestPage from "./views/ViewingRequestPage";
 import { arrivedFromPasswordReset, supabase } from "./lib/supabaseClient";
 import AuthForm from "./components/AuthForm";
 import SetNewPasswordForm from "./components/SetNewPasswordForm";
@@ -58,6 +59,12 @@ function App() {
   const viewingsMatch = window.location.pathname.match(/^\/viewings\/([0-9a-f-]{36})\/?$/i);
   if (viewingsMatch) {
     return <PublicViewingPage listingId={viewingsMatch[1]} />;
+  }
+
+  // An agent who isn't on PropertySearch answering a buyer's viewing request.
+  const requestMatch = window.location.pathname.match(/^\/request\/([0-9a-f-]{36})\/?$/i);
+  if (requestMatch) {
+    return <ViewingRequestPage token={requestMatch[1]} />;
   }
 
   // The link in the "confirm your email" message sent at sign-up.

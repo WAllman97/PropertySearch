@@ -49,7 +49,7 @@ function getAgeLabel(days) {
 }
 
 function HistoryView() {
-  const { byProperty: viewingsByProperty, reload: reloadViewings } = useAvailableViewings();
+  const { byProperty: viewingsByProperty, requestsByProperty, reload: reloadViewings } = useAvailableViewings();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedProperty, setSelectedProperty] = useState(null);
@@ -269,6 +269,7 @@ function HistoryView() {
             <ViewingSlots
               property={selectedProperty}
               slots={viewingsByProperty[selectedProperty.id]}
+              request={requestsByProperty[selectedProperty.id]}
               onChanged={reloadViewings}
             />
 
@@ -452,6 +453,7 @@ function HistoryView() {
                 <ViewingSlots
                   property={property}
                   slots={viewingsByProperty[property.id]}
+                  request={requestsByProperty[property.id]}
                   onChanged={reloadViewings}
                 />
 
