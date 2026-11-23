@@ -8,6 +8,7 @@ import BuyerProfileSettings from "../components/BuyerProfileSettings";
 import NotificationSettings from "../components/NotificationSettings";
 import PushSettings from "../components/PushSettings";
 import { isNativeApp } from "../lib/platform";
+import EmailPreferences from "../components/EmailPreferences";
 
 const PHONE = "(max-width: 760px)";
 const isPhone = () => typeof window !== "undefined" && window.matchMedia?.(PHONE).matches;
@@ -120,6 +121,8 @@ function SettingsView({ user, focusSection, onFocused, onLogOut, isAgent = false
         )}
 
       {isNativeApp && section("notifications", "Phone Notifications", null, <PushSettings />)}
+
+      {section("emails", "Emails", "Choose which emails you get. Everything is still in the app.", <EmailPreferences user={user} />)}
 
       {section(
         "booking",

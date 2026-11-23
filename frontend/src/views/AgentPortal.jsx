@@ -146,7 +146,7 @@ function AgentAuth() {
         // allowed under Supabase -> Authentication -> URL Configuration ->
         // Redirect URLs (e.g. https://<site>/**), otherwise the Site URL is used.
         const { error } = await supabase.auth.resetPasswordForEmail(form.email.trim(), {
-          redirectTo: `${siteUrl}/agent`,
+          redirectTo: `${siteUrl}/reset/agent`,
         });
         if (error) {
           throw new Error(

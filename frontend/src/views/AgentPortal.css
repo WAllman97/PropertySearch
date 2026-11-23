@@ -724,6 +724,17 @@
   margin: 10px auto 0;
 }
 
+/* Viewing request sent by the buyer themselves (no agent email) */
+.viewing-request-share textarea {
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.viewing-request-share p {
+  margin: 0 0 4px;
+}
+
 /* One-tap pages from emails: /offer/<token>, /suggested/<token> */
 .offer-page h2 {
   margin: 0 0 4px;

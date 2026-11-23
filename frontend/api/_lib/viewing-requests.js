@@ -167,7 +167,7 @@ async function confirm(request, start, req) {
           `<table style="border-collapse:collapse;font-size:14px;margin-bottom:16px;">
             ${detailRow("Property", escapeHtml(address))}
             ${detailRow("When", escapeHtml(label))}
-            ${detailRow("Agent", escapeHtml(request.agent_name || request.agent_email))}
+            ${detailRow("Agent", escapeHtml(request.agent_name || request.agent_email || "The agent"))}
             ${detailRow("Agent's note", escapeHtml(request.agent_note))}
           </table>
           <p style="margin:0;">It's in your PropertySearch calendar. Reply to this email to reach the agent.</p>`
@@ -197,7 +197,11 @@ export async function handleRequest(req, res) {
   const message = clean(body.message, 500);
   const phone = clean(body.phone, 40);
   const duration = DURATIONS.includes(Number(body.durationMinutes)) ? Number(body.durationMinutes) : 30;
-  if (!EMAIL_RE.test(agentEmail)) return res.status(400).json({ error: "Add the agent's email address" });
+  // The agent's email is optional (migration 028): portals hide it behind a
+  // contact form, so without it the buyer sends the agent the link instead.
+  if (agentEmail && !EMAIL_RE.test(agentEmail)) {
+    return res.status(400).json({ error: "That agent email doesn't look right. Leave it blank to send the request yourself." });
+  }
   if (agentEmail.endsWith("@viewpal.co.uk")) return res.status(400).json({ error: "That's one of our addresses, not the agent's" });
 
   const now = Date.now();
@@ -219,19 +223,22 @@ export async function handleRequest(req, res) {
     .maybeSingle();
   if (!property) return res.status(404).json({ error: "Home not found" });
 
-  const { data: optedOut } = await supabaseAdmin
-    .from("viewing_request_opt_outs").select("email").eq("email", agentEmail).maybeSingle();
+  const { data: optedOut } = agentEmail
+    ? await supabaseAdmin.from("viewing_request_opt_outs").select("email").eq("email", agentEmail).maybeSingle()
+    : { data: null };
   if (optedOut) {
     return res.status(409).json({ error: "This agent has asked not to get requests through PropertySearch. Please contact them directly." });
   }
   if (!(await underRateLimit(user.id, "viewing_request", MAX_REQUESTS_PER_DAY, 24 * 60))) {
     return res.status(429).json({ error: "That's a lot of requests today. Please try again tomorrow." });
   }
-  const { count: toAgent } = await supabaseAdmin
-    .from("viewing_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("agent_email", agentEmail)
-    .gte("created_at", new Date(now - 24 * HOUR).toISOString());
+  const { count: toAgent } = agentEmail
+    ? await supabaseAdmin
+        .from("viewing_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("agent_email", agentEmail)
+        .gte("created_at", new Date(now - 24 * HOUR).toISOString())
+    : { count: 0 };
   if ((toAgent || 0) >= MAX_PER_AGENT_PER_DAY) {
     return res.status(429).json({ error: "This agent has had a lot of requests today. Please try again tomorrow." });
   }
@@ -247,7 +254,7 @@ export async function handleRequest(req, res) {
       buyer_name: buyerName,
       buyer_email: user.email,
       buyer_phone: phone || null,
-      agent_email: agentEmail,
+      agent_email: agentEmail || null,
       agent_name: agentName || null,
       message: message || null,
       options,
@@ -264,7 +271,7 @@ export async function handleRequest(req, res) {
   // Keep the agent's details with the home, as if typed into its notes.
   const { data: notes } = await supabaseAdmin
     .from("property_notes").select("estate_agent, estate_agent_email").eq("property_id", property.id).maybeSingle();
-  if (!notes?.estate_agent_email) {
+  if (agentEmail && !notes?.estate_agent_email) {
     await supabaseAdmin.from("property_notes").upsert(
       {
         property_id: property.id,
@@ -280,6 +287,21 @@ export async function handleRequest(req, res) {
     .from("buyer_positions").select("*").eq("household_id", user.householdId).maybeSingle();
   const positionLine = positionText(position);
   const page = `${appBaseUrl(req)}/request/${request.token}`;
+
+  // No email for the agent: hand the buyer a ready message with the agent's
+  // private link, to paste into the portal's contact form, WhatsApp or a text.
+  if (!agentEmail) {
+    const shareText = [
+      `Hi${agentName ? ` ${agentName.split(/\s+/)[0]}` : ""}, I'd like to view ${property.address}.`,
+      `Times that suit me: ${options.map(when).join(", ")}.`,
+      positionLine ? `My position: ${positionLine}.` : "",
+      `You can confirm one (or suggest another) in one tap here, no account needed: ${page}`,
+      `Thanks, ${buyerName}${phone ? `, ${phone}` : ""}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    return res.status(200).json({ success: true, requestId: request.id, emailed: false, shareUrl: page, shareText });
+  }
 
   const sent = await sendEmail({
     to: agentEmail,
@@ -366,7 +388,7 @@ export async function handleRequestDetails(req, res) {
   const { data: position } = await supabaseAdmin
     .from("buyer_positions").select("*").eq("household_id", request.household_id).maybeSingle();
   const { data: optedOut } = await supabaseAdmin
-    .from("viewing_request_opt_outs").select("email").eq("email", request.agent_email.toLowerCase()).maybeSingle();
+    .from("viewing_request_opt_outs").select("email").eq("email", (request.agent_email || "").toLowerCase()).maybeSingle();
   const p = request.properties;
   return res.status(200).json({
     request: {
@@ -432,7 +454,7 @@ export async function handleRespondRequest(req, res) {
           subject: `The agent suggests ${label}: ${address}`,
           html: emailLayout(
             "The agent suggested another time",
-            `<p style="margin:0 0 12px;">${escapeHtml(request.agent_name || request.agent_email)} can't do your times for
+            `<p style="margin:0 0 12px;">${escapeHtml(request.agent_name || request.agent_email || "The agent")} can't do your times for
             <strong>${escapeHtml(address)}</strong>, but suggests <strong>${escapeHtml(label)}</strong>.</p>
             ${note ? `<p style="margin:0 0 12px;font-style:italic;">“${escapeHtml(note)}”</p>` : ""}
             <p style="margin:0 0 16px;">${button(
@@ -465,7 +487,7 @@ export async function handleRespondRequest(req, res) {
           subject: `Viewing request declined: ${address}`,
           html: emailLayout(
             "The agent can't do a viewing",
-            `<p style="margin:0 0 12px;">${escapeHtml(request.agent_name || request.agent_email)} can't arrange a viewing of
+            `<p style="margin:0 0 12px;">${escapeHtml(request.agent_name || request.agent_email || "The agent")} can't arrange a viewing of
             <strong>${escapeHtml(address)}</strong> at the moment.</p>
             ${note ? `<p style="margin:0 0 12px;font-style:italic;">“${escapeHtml(note)}”</p>` : ""}
             <p style="margin:0;">Reply to this email to ask them about it.</p>`
@@ -482,6 +504,8 @@ export async function handleRespondRequest(req, res) {
 export async function handleRequestOptOut(req, res) {
   const request = await loadByToken(req.body?.token);
   if (!request) return res.status(404).json({ error: "This request link isn't valid" });
+  // Sent by the buyer themselves (no agent email): nothing to block.
+  if (!request.agent_email) return res.status(200).json({ success: true });
   await supabaseAdmin
     .from("viewing_request_opt_outs")
     .upsert({ email: request.agent_email.toLowerCase() }, { onConflict: "email" });
@@ -508,7 +532,7 @@ export async function handleProposalDetails(req, res) {
   return res.status(200).json({
     request: {
       status: request.status,
-      agentName: request.agent_name || request.agent_email,
+      agentName: request.agent_name || request.agent_email || "The agent",
       agentNote: request.agent_note,
       proposedStart: request.proposed_start,
       confirmedStart: request.confirmed_start,

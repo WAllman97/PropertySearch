@@ -62,8 +62,11 @@ export function emailLayout(title, bodyHtml) {
 
 // Returns { sent: boolean }. With no RESEND_API_KEY (e.g. local dev) it logs
 // and skips, so the booking flow still works end to end without sending mail.
-export async function sendEmail({ to, subject, html, replyTo, ics }) {
+export async function sendEmail({ to, subject, html, replyTo, ics, unsubscribe }) {
   const apiKey = process.env.RESEND_API_KEY;
+  // No address (e.g. a viewing request where the buyer messaged the agent
+  // themselves): nothing to send.
+  if (!to) return { sent: false };
 
   if (!apiKey) {
     console.log(`[email skipped: no RESEND_API_KEY] to=${to} subject=${subject}`);
@@ -73,6 +76,14 @@ export async function sendEmail({ to, subject, html, replyTo, ics }) {
   const body = { from: fromEmail, to: [to], subject, html };
 
   if (replyTo) body.reply_to = replyTo;
+  // One-click unsubscribe in Gmail / Apple Mail (RFC 8058), for the "new
+  // match" and price-cut emails (_lib/email-prefs.js).
+  if (unsubscribe?.oneClick) {
+    body.headers = {
+      "List-Unsubscribe": `<${unsubscribe.oneClick}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    };
+  }
 
   if (ics) {
     const cancelled = ics.includes("METHOD:CANCEL");
