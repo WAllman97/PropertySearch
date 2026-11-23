@@ -610,6 +610,155 @@
   color: var(--primary);
 }
 
+/* Agent page: "Coming up" first */
+.agent-agenda .section-header {
+  margin-bottom: 4px;
+}
+
+.agent-agenda h3 {
+  margin: 0 0 2px;
+}
+
+.agent-agenda-day h4 {
+  margin: 12px 0 6px;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.agent-agenda-day ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-agenda-row {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.agent-agenda-time {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-agenda-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+}
+
+.agent-agenda-main > strong {
+  font-size: 15px;
+}
+
+.agent-agenda-main > span {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-agenda-call {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  text-decoration: none;
+}
+
+.agent-add-button {
+  width: 100%;
+  min-height: 48px;
+}
+
+.agent-add-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.agent-add-section h3 {
+  margin: 0;
+}
+
+.agent-listings-head {
+  margin: 4px 0 -4px;
+}
+
+/* Compact listing card: one line, tap to open */
+.agent-listing-summary {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-listing-summary strong {
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.agent-listing-collapse {
+  display: block;
+  margin: 10px auto 0;
+}
+
+/* One-tap pages from emails: /offer/<token>, /suggested/<token> */
+.offer-page h2 {
+  margin: 0 0 4px;
+}
+
+.offer-page-amount {
+  margin: 4px 0 8px;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.offer-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.offer-page-actions button {
+  flex: 1 1 160px;
+  min-height: 46px;
+}
+
+.offer-page-done {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+}
+
+.offer-page-done p {
+  margin: 0;
+}
+
 /* After adding a listing: the next step */
 .agent-added {
   padding: 14px 16px;

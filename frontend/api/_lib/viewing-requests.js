@@ -10,6 +10,9 @@
 //     { action: "respond_request", token, choice: "confirm" | "propose" | "decline",
 //       option?, proposedStart?, note? }
 //     { action: "request_opt_out", token }
+//   buyer (private token from the "agent suggests a time" email, migration 027):
+//     { action: "proposal_details", token }
+//     { action: "proposal_answer", token, accept }
 //
 // Links in the email only open /request/<token>; nothing changes until the
 // agent presses a button there (mail scanners open links automatically).
@@ -432,7 +435,11 @@ export async function handleRespondRequest(req, res) {
             `<p style="margin:0 0 12px;">${escapeHtml(request.agent_name || request.agent_email)} can't do your times for
             <strong>${escapeHtml(address)}</strong>, but suggests <strong>${escapeHtml(label)}</strong>.</p>
             ${note ? `<p style="margin:0 0 12px;font-style:italic;">“${escapeHtml(note)}”</p>` : ""}
-            <p style="margin:0 0 16px;">${button(`${base}/?view=history`, "Accept or decline in PropertySearch")}</p>`
+            <p style="margin:0 0 16px;">${button(
+              request.buyer_token ? `${base}/suggested/${request.buyer_token}` : `${base}/?view=history`,
+              "Accept or decline"
+            )}</p>
+            <p style="margin:0;color:#6b7280;font-size:13px;">One tap, no login needed.</p>`
           ),
         })
       ),
@@ -479,4 +486,71 @@ export async function handleRequestOptOut(req, res) {
     .from("viewing_request_opt_outs")
     .upsert({ email: request.agent_email.toLowerCase() }, { onConflict: "email" });
   return res.status(200).json({ success: true });
+}
+
+// ---------------------------------------------------------------------------
+// Buyer (token): answer the agent's suggested time from the email, no login.
+
+async function loadByBuyerToken(token) {
+  if (!UUID_RE.test(String(token || ""))) return null;
+  const { data } = await supabaseAdmin
+    .from("viewing_requests")
+    .select("*, properties(id, address, listing_url, image_url, price, bedrooms)")
+    .eq("buyer_token", token)
+    .maybeSingle();
+  return data;
+}
+
+export async function handleProposalDetails(req, res) {
+  const request = await loadByBuyerToken(req.body?.token);
+  if (!request) return res.status(404).json({ error: "This link isn't valid any more" });
+  const p = request.properties;
+  return res.status(200).json({
+    request: {
+      status: request.status,
+      agentName: request.agent_name || request.agent_email,
+      agentNote: request.agent_note,
+      proposedStart: request.proposed_start,
+      confirmedStart: request.confirmed_start,
+      property: { address: p.address, imageUrl: p.image_url, price: p.price, bedrooms: p.bedrooms },
+    },
+  });
+}
+
+export async function handleProposalAnswer(req, res) {
+  const request = await loadByBuyerToken(req.body?.token);
+  if (!request) return res.status(404).json({ error: "This link isn't valid any more" });
+  if (typeof req.body.accept !== "boolean") return res.status(400).json({ error: "Missing answer" });
+  if (request.status !== "proposed") {
+    return res.status(409).json({ error: "This has already been answered.", status: request.status });
+  }
+
+  if (req.body.accept) {
+    if (new Date(request.proposed_start).getTime() < Date.now()) {
+      return res.status(410).json({ error: "That time has passed. Ask the agent for another." });
+    }
+    const ok = await confirm(request, request.proposed_start, req);
+    return ok
+      ? res.status(200).json({ success: true, status: "confirmed" })
+      : res.status(409).json({ error: "This has just changed. Refresh the page." });
+  }
+
+  // Can't make it: close the request and let the agent know.
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from("viewing_requests")
+    .update({ status: "cancelled", updated_at: now })
+    .eq("id", request.id)
+    .eq("status", "proposed");
+  await sendEmail({
+    to: request.agent_email,
+    replyTo: request.buyer_email,
+    subject: `Can't make that time: ${request.properties.address}`,
+    html: emailLayout(
+      "The buyer can't make your suggested time",
+      `<p style="margin:0;">${escapeHtml(request.buyer_name)} can't make ${escapeHtml(when(request.proposed_start))}
+      for <strong>${escapeHtml(request.properties.address)}</strong>. Reply to this email to find another time.</p>`
+    ),
+  });
+  return res.status(200).json({ success: true, status: "cancelled" });
 }

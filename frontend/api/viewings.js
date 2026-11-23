@@ -26,9 +26,12 @@ import {
   slotLabel,
 } from "./_lib/viewings.js";
 import { withCors } from "./_lib/cors.js";
+import { sendToUsers } from "./_lib/push.js";
 import {
   handleAcceptProposal,
   handleCancelRequest,
+  handleProposalAnswer,
+  handleProposalDetails,
   handleRequest,
   handleRequestDetails,
   handleRequestOptOut,
@@ -154,6 +157,11 @@ async function handleCancel(req, res) {
 
   if (by === "buyer") {
     await Promise.all([
+      sendToUsers([slot.agent_id], {
+        title: "Viewing cancelled",
+        body: `${booking.buyer_name} cancelled ${address}, ${when}`,
+        url: "/agent",
+      }).catch((error) => console.error("Agent cancel push failed:", error)),
       sendEmail({
         to: agent.email,
         replyTo: booking.buyer_email,
@@ -238,6 +246,9 @@ async function handler(req, res) {
   if (action === "request_details") return handleRequestDetails(req, res);
   if (action === "respond_request") return handleRespondRequest(req, res);
   if (action === "request_opt_out") return handleRequestOptOut(req, res);
+  // The buyer answering an agent's suggested time from the email (no login).
+  if (action === "proposal_details") return handleProposalDetails(req, res);
+  if (action === "proposal_answer") return handleProposalAnswer(req, res);
 
   return res.status(400).json({ error: "Unknown action" });
 }

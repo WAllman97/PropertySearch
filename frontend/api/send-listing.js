@@ -2,6 +2,8 @@
 //   POST /api/send-listing { listingId }
 //   POST /api/send-listing { action: "price_update", listingId }
 //        the agent changed the price: tell buyers who saved it (_lib/agent-price.js)
+//   POST /api/send-listing { action: "for_search", searchId }
+//        a buyer saved a search: send them live auto-send listings it fits
 //   POST /api/send-listing { action: "status_update", listingId }
 //        under offer / sold STC / off market: update buyers' copies (_lib/agent-status.js)
 //
@@ -123,6 +125,8 @@ async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  if (req.body?.action === "for_search") return handleForSearch(req, res);
+
   const user = await requireUser(req, res);
   if (!user) return;
 
@@ -180,6 +184,19 @@ async function handler(req, res) {
     return res.status(429).json({ error: "You've sent a lot of listings today. Try again tomorrow." });
   }
 
+  try {
+    const result = await deliverListing(listing, matchedIds, appBaseUrl(req));
+    return res.status(200).json({ success: true, matched: matchedIds.length, ...result });
+  } catch (error) {
+    console.error("listing_sends insert failed:", error);
+    return res.status(500).json({ error: "Could not send the listing" });
+  }
+}
+
+// Send one listing to these buyers: each gets it at most once (listing_sends),
+// it's added to their household's list, and they get an email and a push
+// with their own one-tap booking link. -> { sent, emailed, pushed }
+async function deliverListing(listing, matchedIds, base) {
   // Claim each buyer atomically: only rows actually inserted are emailed, so
   // a double click or two tabs can't send the same listing twice.
   const { data: claimed, error: claimError } = await supabaseAdmin
@@ -189,18 +206,13 @@ async function handler(req, res) {
       { onConflict: "listing_id,user_id", ignoreDuplicates: true }
     )
     .select("*");
-  if (claimError) {
-    console.error("listing_sends insert failed:", claimError);
-    return res.status(500).json({ error: "Could not send the listing" });
-  }
+  if (claimError) throw claimError;
 
   const newIds = (claimed || []).map((c) => c.user_id);
   // Each buyer's private booking token ("*" above, so this still works
   // before migration 025 adds the column: the link just has no token).
   const tokenOf = new Map((claimed || []).map((c) => [c.user_id, c.book_token || null]));
-  if (!newIds.length) {
-    return res.status(200).json({ success: true, matched: matchedIds.length, sent: 0 });
-  }
+  if (!newIds.length) return { sent: 0, emailed: 0, pushed: 0 };
 
   const { data: members } = await supabaseAdmin
     .from("household_members")
@@ -214,7 +226,6 @@ async function handler(req, res) {
     households.set(householdId, await addToHouseholdList(listing, householdId));
   }
 
-  const base = appBaseUrl(req);
   let emailed = 0;
   // They marked this property as not for them: respect that, quietly.
   const recipients = newIds.filter((id) => !households.get(householdOf.get(id))?.dismissed);
@@ -260,12 +271,44 @@ async function handler(req, res) {
   );
 
   const { sent: pushed } = await push;
+  return { sent: newIds.length, emailed, pushed };
+}
 
-  return res.status(200).json({
-    success: true,
-    matched: matchedIds.length,
-    sent: newIds.length,
-    emailed,
-    pushed,
-  });
+// A buyer saved or changed a search: send them every live listing it fits
+// that agents have left on auto-send (migration 027), so a new buyer gets
+// matching homes straight away rather than waiting for the next listing.
+//   POST /api/send-listing { action: "for_search", searchId }   buyer
+async function handleForSearch(req, res) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const { searchId } = req.body || {};
+  if (!UUID_RE.test(String(searchId || ""))) return res.status(400).json({ error: "Missing search" });
+
+  const { data: search } = await supabaseAdmin
+    .from("buyer_searches")
+    .select("id, user_id")
+    .eq("id", searchId)
+    .maybeSingle();
+  if (!search || search.user_id !== user.id) return res.status(404).json({ error: "Search not found" });
+
+  const { data: rows, error } = await supabaseAdmin.rpc("listings_for_search", { p_search: search.id });
+  if (error) {
+    // Before migration 027: nothing to send yet, not an error for the buyer.
+    console.error("listings_for_search failed:", error);
+    return res.status(200).json({ success: true, sent: 0 });
+  }
+
+  const ids = (rows || []).map((r) => r.listing_id).slice(0, 20);
+  if (!ids.length) return res.status(200).json({ success: true, sent: 0 });
+  const { data: listings } = await supabaseAdmin.from("agent_listings").select("*, agents(*)").in("id", ids);
+
+  let sent = 0;
+  for (const listing of listings || []) {
+    const result = await deliverListing(listing, [user.id], appBaseUrl(req)).catch((err) => {
+      console.error("for_search delivery failed:", err);
+      return { sent: 0 };
+    });
+    sent += result.sent;
+  }
+  return res.status(200).json({ success: true, sent });
 }
