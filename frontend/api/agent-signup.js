@@ -6,7 +6,8 @@
 //
 // Public sign-ups are switched off in Supabase (the household app is
 // invite-only), so agent accounts are created here with the service role.
-// They are confirmed straight away (no email round trip) and are never added
+// They start unconfirmed and must use the link we email before they can log
+// in (_lib/confirm-email.js, the same as buyers). They are never added
 // to household_members, so they can't see any household data: only their own
 // agent profile, listings, slots and the bookings on them.
 //

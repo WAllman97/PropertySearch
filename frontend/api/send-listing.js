@@ -2,6 +2,8 @@
 //   POST /api/send-listing { listingId }
 //   POST /api/send-listing { action: "price_update", listingId }
 //        the agent changed the price: tell buyers who saved it (_lib/agent-price.js)
+//   POST /api/send-listing { action: "status_update", listingId }
+//        under offer / sold STC / off market: update buyers' copies (_lib/agent-status.js)
 //
 // Replaces scraping: instead of us crawling portals, agents push listings
 // to buyers who want them (migrations 009 + 010). Each buyer gets a listing
@@ -17,6 +19,7 @@ import { sendToUsers } from "./_lib/push.js";
 import { withCors } from "./_lib/cors.js";
 import { locatePostcode } from "./_lib/geo.js";
 import { handlePriceUpdate } from "./_lib/agent-price.js";
+import { handleStatusUpdate } from "./_lib/agent-status.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SENDS_PER_DAY = 30;
@@ -133,8 +136,13 @@ async function handler(req, res) {
   }
   // The agent changed the price: pass it on to buyers who saved the home.
   if (req.body?.action === "price_update") return handlePriceUpdate(req, res, listing, user.id);
+  // The agent changed the status: pass it on to buyers who saved the home.
+  if (req.body?.action === "status_update") return handleStatusUpdate(req, res, listing, user.id);
   if (!listing.is_active) {
     return res.status(409).json({ error: "Show this listing to buyers before sending it." });
+  }
+  if (listing.market_status === "sold_stc" || listing.market_status === "off_market") {
+    return res.status(409).json({ error: "This home is sold or off the market, so it isn't sent to buyers." });
   }
   if (!listing.postcode) {
     return res.status(400).json({ error: "Add the postcode so we can find matching buyers." });

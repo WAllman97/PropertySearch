@@ -281,20 +281,261 @@
   font-size: 13px;
 }
 
-/* Listing details, match preview and sending */
-.agent-listing-photo {
-  width: 96px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: 10px;
+/* Listing card: photo, price, facts, status */
+.agent-listing {
+  border-left: 4px solid var(--primary);
+}
+
+.agent-listing.status-under_offer {
+  border-left-color: #c98a1b;
+}
+
+.agent-listing.status-sold_stc {
+  border-left-color: #9a3b2a;
+}
+
+.agent-listing.status-off_market {
+  border-left-color: var(--border-strong);
+}
+
+.agent-listing .agent-listing-head {
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.agent-listing-photo-wrap {
+  position: relative;
   flex: none;
+}
+
+.agent-listing-photo {
+  display: block;
+  width: 168px;
+  height: 126px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.agent-listing-photo.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+}
+
+.agent-listing-ribbon {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(20, 20, 20, 0.7);
+}
+
+.agent-listing-ribbon.status-under_offer {
+  background: #c98a1b;
+}
+
+.agent-listing-ribbon.status-sold_stc {
+  background: #9a3b2a;
+}
+
+.agent-listing-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-listing-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--primary);
+}
+
+.agent-listing-was {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.agent-listing-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.agent-listing-badge.reduced {
+  background: #fde8e4;
+  color: #9a3b2a;
+}
+
+.agent-listing .agent-listing-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.agent-listing-facts {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0;
+  padding: 0;
+}
+
+.agent-listing-facts li {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agent-listing-links {
+  font-size: 13px;
 }
 
 .agent-listing-buttons {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
   margin-left: auto;
+}
+
+/* Status switch and price reduction */
+.agent-status {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.agent-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agent-status-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  padding: 3px;
+  gap: 3px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.agent-status-switch button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.agent-status-switch button:hover:not(:disabled) {
+  color: var(--text, #222);
+}
+
+.agent-status-switch button.selected {
+  color: #fff;
+  background: var(--primary);
+}
+
+.agent-status-switch button.status-under_offer.selected {
+  background: #c98a1b;
+}
+
+.agent-status-switch button.status-sold_stc.selected {
+  background: #9a3b2a;
+}
+
+.agent-status-switch button.status-off_market.selected {
+  background: #5f6368;
+}
+
+.agent-reduce-button {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.agent-reduce {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.agent-reduce label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agent-reduce input {
+  max-width: 200px;
+}
+
+.agent-status-message {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .agent-listing-photo-wrap {
+    width: 100%;
+  }
+
+  .agent-listing-photo {
+    width: 100%;
+    height: 180px;
+  }
+
+  .agent-listing-buttons {
+    flex-direction: row;
+    margin-left: 0;
+  }
+
+  .agent-status-switch {
+    width: 100%;
+  }
+
+  .agent-status-switch button {
+    flex: 1;
+    padding: 6px 8px;
+  }
 }
 
 .agent-match-preview {
@@ -367,6 +608,11 @@
   border-radius: 10px;
   background: var(--primary-soft, #dcefe4);
   color: var(--primary);
+}
+
+.agent-forgot {
+  display: block;
+  margin: 10px auto 0;
 }
 
 .agent-auth-foot {
