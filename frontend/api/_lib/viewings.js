@@ -3,6 +3,7 @@
 import { supabaseAdmin } from "./household.js";
 import { buildIcs, emailLayout, escapeHtml, sendEmail } from "./email.js";
 import { formatLondon } from "./time.js";
+import { sendToUsers } from "./push.js";
 
 export const BOOKING_ERRORS = {
   SLOT_GONE: [410, "Sorry, the agent has removed that time."],
@@ -69,6 +70,12 @@ export async function sendBookingEmails({ slot, bookingId, buyer, base, inCalend
   const source = inCalendar ? "through PropertySearch" : "through your PropertySearch booking link";
 
   await Promise.all([
+    // The agent's phone too (when they use the iPhone app).
+    sendToUsers([slot.agent_id], {
+      title: "New viewing booked",
+      body: `${buyer.name}: ${address}, ${when}`,
+      url: "/agent",
+    }).catch((error) => console.error("Agent booking push failed:", error)),
     sendEmail({
       to: agent.email,
       replyTo: buyer.email,

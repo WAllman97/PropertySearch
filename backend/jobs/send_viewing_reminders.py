@@ -1,6 +1,8 @@
+import html
 import os
 import sys
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from supabase import create_client
@@ -8,7 +10,7 @@ from supabase import create_client
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BACKEND_DIR)
 
-from core.emailer import format_viewing_datetime, send_viewing_reminder
+from core.emailer import format_viewing_datetime, send_resend_email, send_viewing_reminder
 from core.households import member_emails, original_household_id
 from core.push import send_to_household
 
@@ -23,6 +25,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # the first run after a viewing enters the 24h window sends the reminder,
 # and reminder_sent_at stops it being sent again.
 REMINDER_WINDOW_HOURS = 24
+LONDON = ZoneInfo("Europe/London")
 
 
 def run_viewing_reminders():
@@ -101,6 +104,94 @@ def run_viewing_reminders():
             print(f"Push failed for {address} @ {when}: {error}")
 
 
+RUNSHEET_FROM_HOUR = 7  # London time
+RUNSHEET_UNTIL_HOUR = 12
+
+
+def _esc(value):
+    return html.escape(str(value or ""))
+
+
+def send_agent_runsheets():
+    """Each morning, email every agent the day's booked viewings in one list.
+
+    Runs hourly with the reminders; sends once per agent per day (agents.
+    runsheet_sent_on, migration 027) on the first run after 7am London.
+    """
+    london_now = datetime.now(LONDON)
+    if not (RUNSHEET_FROM_HOUR <= london_now.hour < RUNSHEET_UNTIL_HOUR):
+        return
+    today = london_now.date()
+    day_start = datetime.combine(today, datetime.min.time(), LONDON).astimezone(timezone.utc)
+    day_end = day_start + timedelta(days=1)
+
+    slots = (
+        supabase.table("viewing_slots")
+        .select(
+            "id, agent_id, starts_at, ends_at, agent_listings(address), "
+            "viewing_bookings(buyer_name, buyer_phone, buyer_email, status)"
+        )
+        .is_("cancelled_at", "null")
+        .gte("starts_at", day_start.isoformat())
+        .lt("starts_at", day_end.isoformat())
+        .order("starts_at")
+        .execute()
+    ).data or []
+
+    by_agent = {}
+    for slot in slots:
+        booked = [b for b in (slot.get("viewing_bookings") or []) if b.get("status") == "confirmed"]
+        if booked:
+            by_agent.setdefault(slot["agent_id"], []).append((slot, booked))
+    if not by_agent:
+        return
+
+    agents = (
+        supabase.table("agents")
+        .select("user_id, name, email, runsheet_sent_on")
+        .in_("user_id", list(by_agent))
+        .execute()
+    ).data or []
+
+    for agent in agents:
+        if agent.get("runsheet_sent_on") == today.isoformat() or not agent.get("email"):
+            continue
+        rows = []
+        count = 0
+        for slot, booked in by_agent[agent["user_id"]]:
+            start = datetime.fromisoformat(slot["starts_at"].replace("Z", "+00:00")).astimezone(LONDON)
+            address = (slot.get("agent_listings") or {}).get("address", "")
+            for b in booked:
+                count += 1
+                phone = b.get("buyer_phone") or ""
+                phone_html = (
+                    f'<a href="tel:{_esc(phone.replace(" ", ""))}" style="color:#223a33;">{_esc(phone)}</a>'
+                    if phone else ""
+                )
+                rows.append(
+                    f'<tr><td style="padding:8px 12px 8px 0;font-weight:bold;vertical-align:top;">{start:%H:%M}</td>'
+                    f'<td style="padding:8px 0;"><strong>{_esc(address)}</strong><br>'
+                    f'{_esc(b.get("buyer_name"))} {phone_html}</td></tr>'
+                )
+        first = (agent.get("name") or "").split(" ")[0]
+        body = f"""<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f8f6f2;font-family:Arial,sans-serif;color:#1f2937;">
+<div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4ddd2;border-radius:14px;padding:24px;">
+<div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">PropertySearch</div>
+<h1 style="font-family:Georgia,serif;font-size:21px;color:#223a33;margin:0 0 12px;">Today's viewings</h1>
+<p style="margin:0 0 12px;">Morning{(' ' + _esc(first)) if first else ''}. You have {count} viewing{'s' if count != 1 else ''} today:</p>
+<table style="border-collapse:collapse;font-size:14px;margin-bottom:16px;">{''.join(rows)}</table>
+<p style="margin:0;color:#6b7280;font-size:13px;">Buyers can cancel up to the last minute; you'll get an email and a notification if they do.</p>
+</div></body></html>"""
+        try:
+            send_resend_email(f"Today: {count} viewing{'s' if count != 1 else ''}", body, [agent["email"]])
+            supabase.table("agents").update({"runsheet_sent_on": today.isoformat()}).eq(
+                "user_id", agent["user_id"]
+            ).execute()
+            print(f"Run-sheet sent to agent {agent['user_id'][:8]} ({count} viewing(s)).")
+        except Exception as error:
+            print(f"Run-sheet failed for agent {agent['user_id'][:8]}: {error}")
+
+
 def mark_past_viewings_viewed():
     """Move homes from "Viewing booked" to "Viewed" once the viewing is over.
 
@@ -139,4 +230,9 @@ if __name__ == "__main__":
     except Exception as error:
         # Never let this stop the reminders.
         print(f"Marking past viewings failed: {error}")
+    try:
+        send_agent_runsheets()
+    except Exception as error:
+        # Never let this stop the buyers' reminders.
+        print(f"Agent run-sheets failed: {error}")
     run_viewing_reminders()

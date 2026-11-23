@@ -28,14 +28,25 @@ const DISMISSED = ["ignored", "archived", "lost"];
 const MAX_UPDATES_PER_DAY = 60;
 
 export async function handleStatusUpdate(req, res, listing, agentId) {
-  const status = PROPERTY_STATUS[listing.market_status];
-  const key = listingKey(listing.listing_url);
-  const portalId = key?.split(":")[1];
-  if (!status || !portalId) return res.status(200).json({ success: true, updated: 0, notified: 0 });
-
   if (!(await underRateLimit(agentId, "listing_status_update", MAX_UPDATES_PER_DAY, 24 * 60))) {
     return res.status(429).json({ error: "Too many status changes today. Please try again tomorrow." });
   }
+  try {
+    const result = await passStatusToBuyers(listing);
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    console.error("listing status update failed:", error);
+    return res.status(500).json({ error: "Could not update buyers' lists" });
+  }
+}
+
+// Copy the listing's market_status onto every saved copy and push the
+// households that still want it. -> { updated, notified }
+export async function passStatusToBuyers(listing) {
+  const status = PROPERTY_STATUS[listing.market_status];
+  const key = listingKey(listing.listing_url);
+  const portalId = key?.split(":")[1];
+  if (!status || !portalId) return { updated: 0, notified: 0 };
 
   const { data: candidates } = await supabaseAdmin
     .from("properties")
@@ -44,16 +55,13 @@ export async function handleStatusUpdate(req, res, listing, agentId) {
   const saved = (candidates || []).filter(
     (p) => listingKey(p.listing_url) === key && p.listing_status !== status
   );
-  if (!saved.length) return res.status(200).json({ success: true, updated: 0, notified: 0 });
+  if (!saved.length) return { updated: 0, notified: 0 };
 
   const { error } = await supabaseAdmin
     .from("properties")
     .update({ listing_status: status })
     .in("id", saved.map((p) => p.id));
-  if (error) {
-    console.error("listing status update failed:", error);
-    return res.status(500).json({ error: "Could not update buyers' lists" });
-  }
+  if (error) throw error;
 
   // One push per household that still wants the home.
   const households = new Map();
@@ -72,5 +80,5 @@ export async function handleStatusUpdate(req, res, listing, agentId) {
     })
   );
 
-  return res.status(200).json({ success: true, updated: saved.length, notified: households.size });
+  return { updated: saved.length, notified: households.size };
 }

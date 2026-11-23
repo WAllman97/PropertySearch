@@ -24,6 +24,7 @@ import {
 } from "./_lib/viewings.js";
 import { listingKey } from "./_lib/listing.js";
 import { withCors } from "./_lib/cors.js";
+import { sendToUsers } from "./_lib/push.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -327,6 +328,11 @@ async function handleCancel(req, res) {
   const removal = cancelledIcs(slot, booking.id);
 
   await Promise.all([
+    sendToUsers([slot.agent_id], {
+      title: "Viewing cancelled",
+      body: `${booking.buyer_name} cancelled ${address}, ${when}`,
+      url: "/agent",
+    }).catch((error) => console.error("Agent cancel push failed:", error)),
     sendEmail({
       to: slot.agents.email,
       replyTo: booking.buyer_email,

@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { ConfirmEmailPage } from "./components/ConfirmEmail";
 import { onSharedLink } from "./lib/sharedLinks";
 import ViewingRequestPage from "./views/ViewingRequestPage";
+import OfferConfirmPage from "./views/OfferConfirmPage";
+import SuggestedTimePage from "./views/SuggestedTimePage";
 import { arrivedFromPasswordReset, supabase } from "./lib/supabaseClient";
 import AuthForm, { SEEN_ACCOUNT_KEY } from "./components/AuthForm";
 import SetNewPasswordForm from "./components/SetNewPasswordForm";
@@ -66,6 +68,18 @@ function App() {
   const requestMatch = window.location.pathname.match(/^\/request\/([0-9a-f-]{36})\/?$/i);
   if (requestMatch) {
     return <ViewingRequestPage token={requestMatch[1]} />;
+  }
+
+  // An agent confirming a buyer's accepted offer from the email (no login).
+  const offerMatch = window.location.pathname.match(/^\/offer\/([0-9a-f-]{36})\/?$/i);
+  if (offerMatch) {
+    return <OfferConfirmPage token={offerMatch[1]} />;
+  }
+
+  // A buyer answering a time the agent suggested, from the email (no login).
+  const suggestedMatch = window.location.pathname.match(/^\/suggested\/([0-9a-f-]{36})\/?$/i);
+  if (suggestedMatch) {
+    return <SuggestedTimePage token={suggestedMatch[1]} />;
   }
 
   // The link in the "confirm your email" message sent at sign-up.

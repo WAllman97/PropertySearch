@@ -2,6 +2,10 @@
 //   POST /api/offers { action: "report", propertyId, amount }     buyer
 //   POST /api/offers { action: "withdraw", offerId }              buyer
 //   POST /api/offers { action: "respond", offerId, confirm }      agent
+//   POST /api/offers { action: "offer_details", token }            agent, no login
+//   POST /api/offers { action: "offer_answer", token, confirm, underOffer }
+//        the agent answers from the email's private link (/offer/<token>,
+//        migration 027), and can mark the home Under offer in the same tap
 //
 // A buyer's word alone isn't proof, so an offer only counts as verified when
 // the agent selling the home confirms it. If the home is one of an agent's
@@ -14,6 +18,7 @@ import { listingKey } from "./_lib/listing.js";
 import { detailRow } from "./_lib/viewings.js";
 import { sendToUsers } from "./_lib/push.js";
 import { withCors } from "./_lib/cors.js";
+import { passStatusToBuyers } from "./_lib/agent-status.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_REPORTS_PER_DAY = 10;
@@ -33,6 +38,8 @@ async function handler(req, res) {
     if (action === "report") return await handleReport(req, res);
     if (action === "withdraw") return await handleWithdraw(req, res);
     if (action === "respond") return await handleRespond(req, res);
+    if (action === "offer_details") return await handleOfferDetails(req, res);
+    if (action === "offer_answer") return await handleOfferAnswer(req, res);
     return res.status(400).json({ error: "Unknown action" });
   } catch (error) {
     console.error(error);
@@ -110,6 +117,13 @@ async function handleReport(req, res) {
     .eq("household_id", user.householdId);
 
   // Ask the agent to confirm. Reply goes straight to the buyer.
+  if (listing?.agent_id) {
+    sendToUsers([listing.agent_id], {
+      title: "Offer to confirm",
+      body: `A buyer says you've accepted ${pounds(amount)} on ${listing.address}. One tap to confirm.`,
+      url: offer.agent_token ? `/offer/${offer.agent_token}` : "/agent",
+    }).catch((err) => console.error("offer push failed:", err));
+  }
   if (listing?.agents?.email) {
     const buyerName = user.user_metadata?.name || user.email;
     await sendEmail({
@@ -123,9 +137,11 @@ async function handleReport(req, res) {
           ${detailRow("Buyer", escapeHtml(buyerName))}
           ${detailRow("Offer", escapeHtml(pounds(amount)))}
         </table>
-        <p style="margin:0 0 16px;">Is this right? It takes one tap, and confirmed offers keep your
-        buyers' records accurate.</p>
-        <p style="margin:0;"><a href="${escapeHtml(appBaseUrl(req))}/agent" style="background:#223a33;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">Confirm or correct</a></p>`
+        <p style="margin:0 0 16px;">Is this right? It takes one tap, no login, and you can mark the
+        home Under offer at the same time.</p>
+        <p style="margin:0;"><a href="${escapeHtml(
+          offer.agent_token ? `${appBaseUrl(req)}/offer/${offer.agent_token}` : `${appBaseUrl(req)}/agent`
+        )}" style="background:#223a33;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">Confirm or correct</a></p>`
       ),
     }).catch((err) => console.error("offer email failed:", err));
   }
@@ -185,24 +201,94 @@ async function handleRespond(req, res) {
     return res.status(404).json({ error: "Offer not found" });
   }
 
-  const status = req.body.confirm ? "confirmed" : "disputed";
+  const status = await answerOffer(offer, req.body.confirm);
+  if (!status) return res.status(500).json({ error: "Could not save your answer" });
+  return res.status(200).json({ success: true, status });
+}
+
+// Save the agent's answer and tell the buyer's household. -> status or null
+async function answerOffer(offer, confirm) {
+  const status = confirm ? "confirmed" : "disputed";
   const { error } = await supabaseAdmin
     .from("offers")
     .update({ status, agent_responded_at: new Date().toISOString() })
     .eq("id", offer.id);
   if (error) {
     console.error("offer respond failed:", error);
-    return res.status(500).json({ error: "Could not save your answer" });
+    return null;
   }
 
   const address = offer.agent_listings.address;
   await sendToUsers(await householdMemberIds(offer.household_id), {
-    title: req.body.confirm ? `Offer confirmed: ${address}` : `Agent queried your offer: ${address}`,
-    body: req.body.confirm
+    title: confirm ? `Offer confirmed: ${address}` : `Agent queried your offer: ${address}`,
+    body: confirm
       ? `The agent confirmed your accepted offer of ${pounds(offer.amount)}.`
       : `The agent says the accepted offer of ${pounds(offer.amount)} isn't right. Tap to check.`,
     url: "/?view=history",
   }).catch((err) => console.error("offer push failed:", err));
+  return status;
+}
 
-  return res.status(200).json({ success: true, status });
+async function loadOfferByToken(token) {
+  if (!UUID_RE.test(String(token || ""))) return null;
+  const { data } = await supabaseAdmin
+    .from("offers")
+    .select(
+      "id, household_id, amount, status, reported_at, reported_by, agent_listings(id, agent_id, address, listing_url, image_url, market_status)"
+    )
+    .eq("agent_token", token)
+    .maybeSingle();
+  return data?.agent_listings ? data : null;
+}
+
+// What the agent sees on /offer/<token>: the home, the buyer, the amount.
+async function handleOfferDetails(req, res) {
+  const offer = await loadOfferByToken(req.body?.token);
+  if (!offer) return res.status(404).json({ error: "This link isn't valid any more" });
+  let buyerName = "The buyer";
+  if (offer.reported_by) {
+    const { data } = await supabaseAdmin.auth.admin.getUserById(offer.reported_by);
+    buyerName = data?.user?.user_metadata?.name || data?.user?.email || buyerName;
+  }
+  const listing = offer.agent_listings;
+  return res.status(200).json({
+    offer: {
+      status: offer.status,
+      amount: offer.amount,
+      reportedAt: offer.reported_at,
+      buyerName,
+      address: listing.address,
+      imageUrl: listing.image_url,
+      marketStatus: listing.market_status,
+    },
+  });
+}
+
+async function handleOfferAnswer(req, res) {
+  const offer = await loadOfferByToken(req.body?.token);
+  if (!offer || offer.status === "withdrawn") {
+    return res.status(404).json({ error: "This offer has been withdrawn by the buyer" });
+  }
+  if (typeof req.body.confirm !== "boolean") return res.status(400).json({ error: "Missing answer" });
+
+  const status = await answerOffer(offer, req.body.confirm);
+  if (!status) return res.status(500).json({ error: "Could not save your answer" });
+
+  // Confirmed, and the agent ticked "mark it Under offer": do that too, and
+  // tell everyone else who saved the home.
+  let underOffer = false;
+  const listing = offer.agent_listings;
+  if (req.body.confirm && req.body.underOffer && listing.market_status === "available") {
+    const { error } = await supabaseAdmin
+      .from("agent_listings")
+      .update({ market_status: "under_offer" })
+      .eq("id", listing.id);
+    if (!error) {
+      underOffer = true;
+      await passStatusToBuyers({ ...listing, market_status: "under_offer" }).catch((err) =>
+        console.error("under offer update failed:", err)
+      );
+    }
+  }
+  return res.status(200).json({ success: true, status, underOffer });
 }

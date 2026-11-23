@@ -533,13 +533,31 @@ function BuyerSearches({ user }) {
 
   async function save(id, values) {
     const now = new Date().toISOString();
-    const { error } = id
-      ? await supabase.from("buyer_searches").update({ ...values, updated_at: now }).eq("id", id)
-      : await supabase.from("buyer_searches").insert({ ...values, user_id: user.id });
+    const { data: saved, error } = id
+      ? await supabase.from("buyer_searches").update({ ...values, updated_at: now }).eq("id", id).select("id").single()
+      : await supabase.from("buyer_searches").insert({ ...values, user_id: user.id }).select("id").single();
     if (error) return error.message;
     setEditing(null);
     setMessage("Search saved.");
     await load();
+
+    // Homes agents have already listed that fit: send them now, rather than
+    // waiting for the next new listing.
+    if (saved?.id && values.is_active !== false) {
+      try {
+        const response = await postAuthed("/api/send-listing", { action: "for_search", searchId: saved.id });
+        const result = await response.json().catch(() => ({}));
+        if (result.sent) {
+          setMessage(
+            `Search saved. ${result.sent} home${result.sent === 1 ? "" : "s"} already on PropertySearch ${
+              result.sent === 1 ? "fits" : "fit"
+            }: ${result.sent === 1 ? "it's" : "they're"} in your list, and we've emailed you the details.`
+          );
+        }
+      } catch {
+        // Saving worked; matching homes will still come as agents send them.
+      }
+    }
     return "";
   }
 

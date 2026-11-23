@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { arrivedFromPasswordReset, supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 import SetNewPasswordForm from "../components/SetNewPasswordForm";
+import { dismissPushOffer, enablePush, forgetThisPhone, refreshPushRegistration, shouldOfferPush } from "../lib/push";
 import { apiUrl, siteUrl } from "../lib/platform";
 import { listingKey } from "../../api/_lib/listing.js";
 import { londonToUtc } from "../../api/_lib/time.js";
@@ -658,23 +659,27 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
     if (!listing) {
       setForm(EMPTY_LISTING);
       setLookup("");
-      // Don't just reset: offer the obvious next step while the match
-      // count is fresh.
-      if (saved) setJustAdded({ listing: saved, matches: matchCount || 0 });
+      // Don't just reset: show the obvious next step while the match
+      // count is fresh. With auto-send on (the default), it's already done.
+      if (saved) {
+        const matches = matchCount || 0;
+        setJustAdded({ listing: saved, matches });
+        if (matches > 0 && saved.auto_send !== false) await sendNow({ listing: saved, matches });
+      }
     }
     onSaved();
   }
 
-  async function sendNow() {
+  async function sendNow(added = justAdded) {
     setSending(true);
     try {
-      const response = await postAuthed("/api/send-listing", { listingId: justAdded.listing.id });
+      const response = await postAuthed("/api/send-listing", { listingId: added.listing.id });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Could not send");
-      setJustAdded({ ...justAdded, sent: body.sent || 0 });
+      setJustAdded({ ...added, sent: body.sent || 0 });
       onSaved();
     } catch (err) {
-      setJustAdded({ ...justAdded, sendError: err.message });
+      setJustAdded({ ...added, sendError: err.message });
     }
     setSending(false);
   }
@@ -706,7 +711,7 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
         {sendError && <p className="booking-error">{sendError}</p>}
         <div className="delete-account-actions">
           {matches > 0 && sent === undefined && (
-            <button type="button" className="primary-button" disabled={sending} onClick={sendNow}>
+            <button type="button" className="primary-button" disabled={sending} onClick={() => sendNow()}>
               {sending ? "Sending..." : `Send to ${matches} buyer${matches === 1 ? "" : "s"}`}
             </button>
           )}
@@ -1585,7 +1590,9 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
   );
 }
 
-function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach, hoursOn, blocked, onChanged }) {
+function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach, hoursOn, blocked, startOpen = true, onChanged }) {
+  // Compact (head + one-line summary) until opened, when there are lots.
+  const [open, setOpen] = useState(startOpen);
   const [adding, setAdding] = useState(slots.length === 0 && !hoursOn);
   const [editing, setEditing] = useState(false);
   const [allDays, setAllDays] = useState(false);
@@ -1606,6 +1613,15 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
     setSavingAuto(true);
     await supabase.from("agent_listings").update({ auto_times: !listing.auto_times }).eq("id", listing.id);
     await supabase.rpc("sync_pattern_slots", { p_agent: agentId });
+    setSavingAuto(false);
+    onChanged();
+  }
+
+  // Off: the agent sends by hand. On: buyers whose saved search fits get it
+  // as soon as they save it (api/send-listing.js for_search).
+  async function toggleAutoSend() {
+    setSavingAuto(true);
+    await supabase.from("agent_listings").update({ auto_send: !listing.auto_send }).eq("id", listing.id);
     setSavingAuto(false);
     onChanged();
   }
@@ -1670,15 +1686,26 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
             {listing.notes ? ` · ${listing.notes}` : ""}
           </p>
         </div>
-        <div className="agent-listing-buttons">
-          <button type="button" className="secondary-button" onClick={() => setEditing(!editing)}>
-            {editing ? "Close" : "Edit details"}
-          </button>
-          <button type="button" className="secondary-button" onClick={toggleActive}>
-            {listing.is_active ? "Hide from buyers" : "Show to buyers"}
-          </button>
-        </div>
+        {open ? (
+          <div className="agent-listing-buttons">
+            <button type="button" className="secondary-button" onClick={() => setEditing(!editing)}>
+              {editing ? "Close" : "Edit details"}
+            </button>
+            <button type="button" className="secondary-button" onClick={toggleActive}>
+              {listing.is_active ? "Hide from buyers" : "Show to buyers"}
+            </button>
+          </div>
+        ) : null}
       </div>
+
+      {!open && (
+        <button type="button" className="agent-listing-summary" onClick={() => setOpen(true)}>
+          <span>{listingSummary(listing, slots, bookingsBySlot, reach)}</span>
+          <strong>Open ›</strong>
+        </button>
+      )}
+      {open && (
+      <>
 
       {editing && (
         <ListingForm
@@ -1713,6 +1740,12 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
         <label className="agent-auto">
           <input type="checkbox" checked={listing.auto_times} disabled={savingAuto} onChange={toggleAuto} />
           Offer my weekly viewing hours on this home
+        </label>
+      )}
+      {"auto_send" in listing && (
+        <label className="agent-auto">
+          <input type="checkbox" checked={listing.auto_send} disabled={savingAuto} onChange={toggleAutoSend} />
+          Send to new matching buyers automatically
         </label>
       )}
 
@@ -1769,8 +1802,30 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
           {hoursOn ? "Add one-off times or an open house" : "Add viewing times"}
         </button>
       )}
+      {!startOpen && (
+        <button type="button" className="link-button agent-listing-collapse" onClick={() => setOpen(false)}>
+          Show less
+        </button>
+      )}
+      </>
+      )}
     </section>
   );
+}
+
+// "3 booked · 14 free times · 5 matching buyers" for a compact card.
+function listingSummary(listing, slots, bookingsBySlot, reach) {
+  const future = slots.filter((s) => new Date(s.starts_at) > new Date());
+  const booked = future.reduce((n, s) => n + (bookingsBySlot[s.id]?.length || 0), 0);
+  const free = future.filter((s) => !(bookingsBySlot[s.id]?.length)).length;
+  return [
+    booked ? `${booked} booked` : "No viewings booked",
+    `${free} free time${free === 1 ? "" : "s"}`,
+    reach?.matching ? `${reach.matching} matching buyer${reach.matching === 1 ? "" : "s"}` : "",
+    listing.is_active ? "" : "hidden from buyers",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 // First-run checklist for a new agent: list a home, publish times, send it
@@ -1874,6 +1929,91 @@ function AgentGettingStarted({ agentId, listings, slots, reach, hoursSet }) {
   );
 }
 
+// "Who am I seeing?": every booked viewing in the next week, across all
+// listings, first thing on the page. Tap to call; position at a glance.
+const agendaDay = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  weekday: "long",
+  day: "numeric",
+  month: "short",
+});
+const agendaTime = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function londonDayKey(date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(date);
+}
+
+function AgentAgenda({ listings, slots, bookingsBySlot, positions }) {
+  const now = Date.now();
+  const weekAhead = now + 7 * 864e5;
+  const listingById = Object.fromEntries(listings.map((l) => [l.id, l]));
+  const items = slots
+    .filter((s) => new Date(s.ends_at).getTime() > now && new Date(s.starts_at).getTime() < weekAhead)
+    .flatMap((slot) => (bookingsBySlot[slot.id] || []).map((booking) => ({ slot, booking })))
+    .sort((a, b) => new Date(a.slot.starts_at) - new Date(b.slot.starts_at));
+
+  const todayKey = londonDayKey(new Date());
+  const tomorrowKey = londonDayKey(new Date(now + 864e5));
+  const days = [];
+  for (const item of items) {
+    const key = londonDayKey(new Date(item.slot.starts_at));
+    const last = days[days.length - 1];
+    if (last?.key === key) last.items.push(item);
+    else days.push({ key, items: [item] });
+  }
+  const label = (day) =>
+    day.key === todayKey
+      ? "Today"
+      : day.key === tomorrowKey
+        ? "Tomorrow"
+        : agendaDay.format(new Date(day.items[0].slot.starts_at));
+
+  return (
+    <section className="card agent-agenda">
+      <div className="section-header">
+        <div>
+          <h3>Coming up</h3>
+          <p className="muted">
+            {items.length
+              ? `${items.length} viewing${items.length === 1 ? "" : "s"} booked in the next 7 days`
+              : "No viewings booked in the next 7 days. They'll appear here as buyers book."}
+          </p>
+        </div>
+      </div>
+      {days.map((day) => (
+        <div key={day.key} className="agent-agenda-day">
+          <h4>{label(day)}</h4>
+          <ul>
+            {day.items.map(({ slot, booking }) => {
+              const listing = listingById[slot.listing_id];
+              return (
+                <li key={booking.id} className="agent-agenda-row">
+                  <strong className="agent-agenda-time">{agendaTime.format(new Date(slot.starts_at))}</strong>
+                  <div className="agent-agenda-main">
+                    <strong>{booking.buyer_name}</strong>
+                    <span>{listing?.address || "Viewing"}</span>
+                    {booking.buyer_id && <BuyerPosition position={positions[booking.buyer_id]} />}
+                  </div>
+                  {booking.buyer_phone && (
+                    <a className="secondary-button agent-agenda-call" href={`tel:${booking.buyer_phone.replace(/\s+/g, "")}`}>
+                      Call
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function AgentDashboard({ agent }) {
   const [listings, setListings] = useState([]);
   const [slots, setSlots] = useState([]);
@@ -1886,6 +2026,7 @@ function AgentDashboard({ agent }) {
   const [timeOff, setTimeOff] = useState([]);
   const [blocked, setBlocked] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [addingListing, setAddingListing] = useState(false);
 
   const load = useCallback(async () => {
     const since = new Date(Date.now() - 2 * 3600000).toISOString();
@@ -1957,6 +2098,17 @@ function AgentDashboard({ agent }) {
   const upcomingBooked = slots.filter((slot) => bookingsBySlot[slot.id]?.length).length;
   const bookedCount = slots.reduce((sum, slot) => sum + (bookingsBySlot[slot.id]?.length || 0), 0);
 
+  const hoursCard = (
+    <AgentHours
+      agentId={agent.user_id}
+      availability={availability}
+      hours={hours}
+      timeOff={timeOff}
+      bookedSlots={slots.filter((slot) => bookingsBySlot[slot.id]?.length)}
+      onChanged={load}
+    />
+  );
+
   return (
     <div className="agent-dashboard">
       <header className="agent-dashboard-head">
@@ -1981,43 +2133,68 @@ function AgentDashboard({ agent }) {
         />
       )}
 
-      {!loading && (
-        <AgentHours
-          agentId={agent.user_id}
-          availability={availability}
-          hours={hours}
-          timeOff={timeOff}
-          bookedSlots={slots.filter((slot) => bookingsBySlot[slot.id]?.length)}
-          onChanged={load}
-        />
+      {/* Order: what's happening (viewings, offers to answer), then
+          listings, then the set-once things (weekly hours). New agents
+          with no hours yet see the hours first, since nothing works
+          without them. */}
+      {!loading && listings.length > 0 && (
+        <AgentAgenda listings={listings} slots={slots} bookingsBySlot={bookingsBySlot} positions={positions} />
       )}
 
       <OfferRequests offers={offers} positions={positions} onChanged={load} />
 
-      <section className="card" id="agent-add-listing">
-        <h3>Add a listing</h3>
-        <ListingForm agentId={agent.user_id} onSaved={load} />
+      {!loading && !availability && hoursCard}
+
+      <section className="card agent-add-section" id="agent-add-listing">
+        {addingListing || listings.length === 0 ? (
+          <>
+            <div className="section-header">
+              <h3>Add a listing</h3>
+              {listings.length > 0 && (
+                <button type="button" className="link-button" onClick={() => setAddingListing(false)}>
+                  Close
+                </button>
+              )}
+            </div>
+            <ListingForm agentId={agent.user_id} onSaved={load} />
+          </>
+        ) : (
+          <button type="button" className="primary-button agent-add-button" onClick={() => setAddingListing(true)}>
+            + Add a listing
+          </button>
+        )}
       </section>
 
       <div id="agent-listings" />
       {loading ? (
         <p className="muted">Loading...</p>
       ) : (
-        listings.map((listing) => (
-          <ListingCard
-            key={listing.id}
-            listing={listing}
-            slots={slotsByListing[listing.id] || []}
-            bookingsBySlot={bookingsBySlot}
-            positions={positions}
-            agentId={agent.user_id}
-            reach={reach[listing.id]}
-            hoursOn={!!availability?.enabled}
-            blocked={blocked}
-            onChanged={load}
-          />
-        ))
+        <>
+          {listings.length > 0 && (
+            <h3 className="agent-listings-head">
+              Your listings <span className="muted">({listings.length})</span>
+            </h3>
+          )}
+          {listings.map((listing) => (
+            <ListingCard
+              key={listing.id}
+              listing={listing}
+              slots={slotsByListing[listing.id] || []}
+              bookingsBySlot={bookingsBySlot}
+              positions={positions}
+              agentId={agent.user_id}
+              reach={reach[listing.id]}
+              hoursOn={!!availability?.enabled}
+              blocked={blocked}
+              // A few listings: show them in full. Lots: compact, tap to open.
+              startOpen={listings.length <= 2}
+              onChanged={load}
+            />
+          ))}
+        </>
       )}
+
+      {!loading && availability && hoursCard}
     </div>
   );
 }
@@ -2129,6 +2306,15 @@ function AgentPortal() {
     loadAgent();
   }, [loadAgent]);
 
+  // iPhone app: notifications for new bookings, cancellations and offers.
+  // Keep this phone's token current, and offer it once.
+  const [offerPush, setOfferPush] = useState(false);
+  useEffect(() => {
+    if (!agent) return;
+    refreshPushRegistration();
+    shouldOfferPush().then(setOfferPush).catch(() => {});
+  }, [agent]);
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -2146,7 +2332,10 @@ function AgentPortal() {
             <button
               type="button"
               className="secondary-button"
-              onClick={() => supabase.auth.signOut({ scope: "local" })}
+              onClick={async () => {
+                await forgetThisPhone();
+                supabase.auth.signOut({ scope: "local" });
+              }}
             >
               Log Out
             </button>
@@ -2155,6 +2344,37 @@ function AgentPortal() {
       </header>
 
       <main className="app-main">
+        {agent && offerPush && (
+          <div className="push-offer" role="status">
+            <p>Get a notification the moment a buyer books, cancels or reports an offer.</p>
+            <div className="push-offer-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={async () => {
+                  setOfferPush(false);
+                  try {
+                    await enablePush();
+                  } catch (error) {
+                    console.error("Could not turn on notifications:", error);
+                  }
+                }}
+              >
+                Turn on
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  dismissPushOffer();
+                  setOfferPush(false);
+                }}
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        )}
         {passwordChanged && (
           <p className="agent-joining" role="status">
             Your password has been changed.
