@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { postAuthed } from "../lib/api";
+import { resumeSearches } from "./SearchStatus";
 
 // "Offer accepted" on a saved home (migration 015, /api/offers). It only
 // counts as verified once the selling agent confirms it.
@@ -25,6 +26,10 @@ export function OfferStatus({ offer, onChanged }) {
     const body = await response.json().catch(() => ({}));
     setBusy(false);
     if (!response.ok) window.alert(body.error || "Could not withdraw the offer");
+    else if (body.lookingAgain) {
+      window.alert("Withdrawn. You're looking again, so agents will send you matching homes.");
+      resumeSearches();
+    }
     onChanged();
   }
 
@@ -65,11 +70,16 @@ export function OfferAcceptedButton({ property, onChanged }) {
       window.alert(body.error || "Could not save the offer");
       return;
     }
-    window.alert(
-      body.offer?.status === "awaiting_agent"
-        ? "Saved. We've asked the agent to confirm it."
-        : "Saved."
-    );
+    const lines = [
+      body.offer?.status === "awaiting_agent" ? "Saved. We've asked the agent to confirm it." : "Saved.",
+    ];
+    if (body.foundHome) {
+      lines.push(
+        "We've also told agents you've found somewhere, so they'll stop sending you homes. " +
+          "If it falls through, withdraw the offer and you'll be looking again."
+      );
+    }
+    window.alert(lines.join("\n\n"));
     onChanged();
   }
 

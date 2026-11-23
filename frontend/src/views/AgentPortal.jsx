@@ -1084,7 +1084,36 @@ function shortPounds(amount) {
   return `£${Math.round(amount / 1000)}k`;
 }
 
+// The buyer told everyone at once they've paused or found somewhere
+// (migration 029), so the agent knows not to chase them.
+function BuyerSearchStatus({ search }) {
+  if (!search || search.search_status === "searching") return null;
+  const text =
+    search.search_status === "found"
+      ? "Found somewhere"
+      : search.paused_until
+        ? `Search paused until ${new Date(`${search.paused_until}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+        : "Search paused";
+  return (
+    <span className={`buyer-search-status ${search.search_status}`} title="Set by the buyer in PropertySearch">
+      {text}
+    </span>
+  );
+}
+
 function BuyerPosition({ position }) {
+  if (position?.search && position.search.search_status !== "searching") {
+    return (
+      <>
+        <BuyerSearchStatus search={position.search} />{" "}
+        <BuyerPositionFacts position={position.status_only ? null : position} />
+      </>
+    );
+  }
+  return <BuyerPositionFacts position={position?.status_only ? null : position} />;
+}
+
+function BuyerPositionFacts({ position }) {
   if (!position) return <span className="buyer-position-tag muted">No buying position shared</span>;
   let funding = "";
   if (position.buying_with === "cash") funding = "cash buyer";
@@ -2043,6 +2072,7 @@ function AgentDashboard({ agent }) {
       hoursResult,
       timeOffResult,
       blockedResult,
+      statusesResult,
     ] = await Promise.all([
       supabase.from("agent_listings").select("*").order("created_at", { ascending: false }),
       supabase
@@ -2063,13 +2093,21 @@ function AgentDashboard({ agent }) {
       supabase.from("agent_hours").select("*"),
       supabase.from("agent_time_off").select("*").order("starts_on"),
       supabase.rpc("agent_blocked_slots"),
+      // Paused or found somewhere (migration 029); fails quietly before it.
+      supabase.rpc("agent_buyer_statuses"),
     ]);
     setAvailability(availabilityResult.data || null);
     setHours(hoursResult.data || []);
     setTimeOff(timeOffResult.data || []);
     setBlocked(new Set((blockedResult.data || []).map((row) => (typeof row === "string" ? row : Object.values(row)[0]))));
     setOffers(offersResult.data || []);
-    setPositions(Object.fromEntries((positionsResult.data || []).map((p) => [p.buyer_id, p])));
+    // Each buyer's position (if shared) and search status, under one key.
+    const byBuyer = {};
+    for (const p of positionsResult.data || []) byBuyer[p.buyer_id] = { ...p };
+    for (const s of statusesResult.data || []) {
+      byBuyer[s.buyer_id] = { ...(byBuyer[s.buyer_id] || { status_only: true }), search: s };
+    }
+    setPositions(byBuyer);
     const reachMap = {};
     for (const r of reachResult.data || []) reachMap[r.listing_id] = r;
     setReach(reachMap);

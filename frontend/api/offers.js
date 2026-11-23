@@ -146,7 +146,27 @@ async function handleReport(req, res) {
     }).catch((err) => console.error("offer email failed:", err));
   }
 
-  return res.status(200).json({ success: true, offer });
+  // Found somewhere: every agent stops sending homes and sees it, without the
+  // buyer having to tell each one (migration 029). One tap undoes it.
+  const foundHome = await setSearchStatus(user.householdId, "found");
+
+  return res.status(200).json({ success: true, offer, foundHome });
+}
+
+// The household's search status (migration 029). Before that migration the
+// columns don't exist: log it and carry on, the offer itself is saved.
+async function setSearchStatus(householdId, status, onlyIf) {
+  let query = supabaseAdmin
+    .from("households")
+    .update({ search_status: status, paused_until: null, search_status_at: new Date().toISOString() })
+    .eq("id", householdId);
+  if (onlyIf) query = query.eq("search_status", onlyIf);
+  const { data, error } = await query.select("id");
+  if (error) {
+    console.error("search status update failed:", error);
+    return false;
+  }
+  return Boolean(data?.length);
 }
 
 async function handleWithdraw(req, res) {
@@ -177,7 +197,16 @@ async function handleWithdraw(req, res) {
     .eq("household_id", user.householdId)
     .eq("status", "offer_accepted");
 
-  return res.status(200).json({ success: true });
+  // The sale fell through: looking again, unless another accepted offer is
+  // still going.
+  const { count: stillAccepted } = await supabaseAdmin
+    .from("offers")
+    .select("id", { count: "exact", head: true })
+    .eq("household_id", user.householdId)
+    .neq("status", "withdrawn");
+  const lookingAgain = !stillAccepted && (await setSearchStatus(user.householdId, "searching", "found"));
+
+  return res.status(200).json({ success: true, lookingAgain });
 }
 
 async function handleRespond(req, res) {

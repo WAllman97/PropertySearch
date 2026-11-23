@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { isProceedable } from "../components/BuyerPositionSettings";
 import { proofLabel } from "../components/PositionProof";
 import LoadError from "../components/LoadError";
+import { setSearchStatus, statusSummary } from "../components/SearchStatus";
 import "./DashboardView.css";
 
 // The buyer's "what needs my attention" page: things to act on, what's coming
@@ -39,7 +40,7 @@ async function loadEverything() {
   const weekAgo = new Date(now - 7 * DAY).toISOString();
   const weekAhead = new Date(now.getTime() + 7 * DAY).toISOString();
 
-  const [homes, viewings, requests, offers, position, recent] = await Promise.all([
+  const [homes, viewings, requests, offers, position, recent, household] = await Promise.all([
     supabase
       .from("properties")
       .select("id, address, title, price, initial_price, status, listing_status, last_price_change_at"),
@@ -64,6 +65,8 @@ async function loadEverything() {
       .gte("viewing_datetime", new Date(now - 14 * DAY).toISOString())
       .lt("viewing_datetime", now.toISOString())
       .order("viewing_datetime", { ascending: false }),
+    // Paused or found somewhere (migration 029).
+    supabase.rpc("my_household"),
   ]);
   // A failed load should say so, not look like an empty dashboard.
   const failed = [homes, viewings, requests, offers].find((r) => r.error);
@@ -99,6 +102,8 @@ async function loadEverything() {
     requests: requests.data || [],
     offers: offers.data || [],
     position: position.data || null,
+    searchStatus: household.data?.search_status || "searching",
+    pausedUntil: household.data?.paused_until || null,
     // Been to see it, nothing written down yet.
     toReview: (recent.data || []).filter(
       (v) =>
@@ -143,6 +148,26 @@ function DashboardView({ onNavigate }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Back from a pause or a sale that fell through: tell agents, catch up.
+  const [resumed, setResumed] = useState("");
+  async function lookAgain() {
+    setBusy(true);
+    try {
+      const { caughtUp } = await setSearchStatus("searching");
+      setResumed(
+        caughtUp
+          ? `Welcome back. ${caughtUp} matching home${caughtUp === 1 ? "" : "s"} added to your list.`
+          : "Welcome back. Agents will send you matching homes again."
+      );
+      load();
+    } catch (error) {
+      console.error("Could not resume search:", error);
+      setResumed("Couldn't save that. Try again in Settings.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (loadError && !data) return <LoadError error={loadError} onRetry={load} />;
 
@@ -345,6 +370,18 @@ function DashboardView({ onNavigate }) {
 
   return (
     <div className="dashboard-page">
+      {data.searchStatus !== "searching" && (
+        <section className="card search-status-banner" role="status">
+          <p>{statusSummary(data.searchStatus, data.pausedUntil)}</p>
+          {resumed ? (
+            <p className="muted">{resumed}</p>
+          ) : (
+            <button type="button" className="primary-button" disabled={busy} onClick={lookAgain}>
+              I'm looking again
+            </button>
+          )}
+        </section>
+      )}
       <Section title="Needs you">
         {undo && (
           <p className="dash-undo" role="status">

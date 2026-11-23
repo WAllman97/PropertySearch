@@ -2931,3 +2931,65 @@ button.link-button:hover {
     text-decoration: none;
   }
 }
+
+/* Where the buyer is with their search (Settings, Dashboard; migration 029) */
+.search-status-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.search-status-option {
+  flex: 1 1 0;
+  min-width: 96px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #c9d3cc;
+  border-radius: 10px;
+  background: #fff;
+  color: #223a33;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search-status-option.active {
+  background: #223a33;
+  border-color: #223a33;
+  color: #fff;
+}
+
+.search-status-pause {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.search-status p {
+  margin: 4px 0;
+}
+
+.search-status .small {
+  font-size: 13px;
+}
+
+.search-status-note {
+  font-weight: 600;
+  color: #223a33;
+}
+
+.search-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #f3efe4;
+}
+
+.search-status-banner p {
+  margin: 0;
+  font-weight: 600;
+}

@@ -1319,3 +1319,20 @@
   align-self: flex-start;
   text-decoration: none;
 }
+
+/* The buyer paused their search or found somewhere (migration 029) */
+.buyer-search-status {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #f3efe4;
+  color: #6b5a2e;
+}
+
+.buyer-search-status.found {
+  background: #e8efe9;
+  color: #223a33;
+}
