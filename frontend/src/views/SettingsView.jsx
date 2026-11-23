@@ -10,6 +10,7 @@ import PushSettings from "../components/PushSettings";
 import { isNativeApp } from "../lib/platform";
 import EmailPreferences from "../components/EmailPreferences";
 import SearchStatus, { statusSummary } from "../components/SearchStatus";
+import AgentControls from "../components/AgentControls";
 
 const PHONE = "(max-width: 760px)";
 const isPhone = () => typeof window !== "undefined" && window.matchMedia?.(PHONE).matches;
@@ -130,6 +131,14 @@ function SettingsView({ user, focusSection, onFocused, onLogOut, isAgent = false
         )}
 
       {isNativeApp && section("notifications", "Phone Notifications", null, <PushSettings />)}
+
+      {household &&
+        section(
+          "agents",
+          "Agents",
+          "Which agents can see your buying position and status, and send you homes.",
+          <AgentControls householdId={household.id} />
+        )}
 
       {section("emails", "Emails", "Choose which emails you get. Everything is still in the app.", <EmailPreferences user={user} />)}
 

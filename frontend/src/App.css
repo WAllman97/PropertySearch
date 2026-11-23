@@ -2993,3 +2993,26 @@ button.link-button:hover {
   margin: 0;
   font-weight: 600;
 }
+
+/* Settings → Agents: what each agent may do (migration 030) */
+.agent-controls ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+}
+
+.agent-controls li {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid #eef0ec;
+}
+
+.agent-controls li:first-child {
+  border-top: 0;
+}
+
+.agent-controls .small {
+  font-size: 13px;
+  margin: 2px 0 0;
+}

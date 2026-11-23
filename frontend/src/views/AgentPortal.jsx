@@ -2043,6 +2043,80 @@ function AgentAgenda({ listings, slots, bookingsBySlot, positions }) {
   );
 }
 
+// Roughly how much time PropertySearch saved this agent (migration 030):
+// the evidence for "is it worth it". Hidden until there's something to show.
+const SAVED_ROWS = [
+  { kind: "bookings", label: (n) => `${n} viewing${n === 1 ? "" : "s"} booked without a phone call`, each: 10, unit: "booking" },
+  { kind: "homes_sent", label: (n) => `${n} home${n === 1 ? "" : "s"} sent to buyers who fit`, each: 2, unit: "home sent" },
+  { kind: "buyers_skipped", label: (n) => `${n} buyer${n === 1 ? "" : "s"} not chased: paused, found somewhere or opted out`, each: 3, unit: "buyer not chased" },
+  { kind: "offers_answered", label: (n) => `${n} offer${n === 1 ? "" : "s"} confirmed in one tap`, each: 5, unit: "offer answered" },
+  { kind: "cancellations", label: (n) => `${n} cancellation${n === 1 ? "" : "s"} handled, slot freed and everyone told`, each: 5, unit: "cancellation" },
+];
+
+function hoursAndMinutes(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function TimeSaved({ refreshKey }) {
+  const [month, setMonth] = useState(null);
+  const [total, setTotal] = useState(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    const toMap = (rows) => Object.fromEntries((rows || []).map((r) => [r.kind, r]));
+    Promise.all([
+      supabase.rpc("agent_time_saved", { p_since: start.toISOString() }),
+      supabase.rpc("agent_time_saved", { p_since: "2000-01-01T00:00:00Z" }),
+    ]).then(([thisMonth, ever]) => {
+      // Before migration 030 these fail: show nothing.
+      if (thisMonth.error || ever.error) return;
+      setMonth(toMap(thisMonth.data));
+      setTotal(toMap(ever.data));
+    });
+  }, [refreshKey]);
+
+  if (!month || !total) return null;
+  const sum = (map) => Object.values(map).reduce((s, r) => s + (r.minutes || 0), 0);
+  const monthMinutes = sum(month);
+  const totalMinutes = sum(total);
+  if (!totalMinutes) return null;
+  const monthName = new Date().toLocaleDateString("en-GB", { month: "long" });
+
+  return (
+    <section className="card agent-time-saved">
+      <button type="button" className="agent-time-saved-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span>
+          <strong>{monthMinutes ? `About ${hoursAndMinutes(monthMinutes)} saved in ${monthName}` : `Nothing yet in ${monthName}`}</strong>
+          <span className="muted"> · {hoursAndMinutes(totalMinutes)} since you joined</span>
+        </span>
+        <span className="muted">{open ? "Hide" : "How?"}</span>
+      </button>
+      {open && (
+        <>
+          <ul className="agent-time-saved-list">
+            {SAVED_ROWS.filter((r) => month[r.kind]?.count).map((r) => (
+              <li key={r.kind}>
+                <span>{r.label(month[r.kind].count)}</span>
+                <span className="muted">{hoursAndMinutes(month[r.kind].minutes)}</span>
+              </li>
+            ))}
+            {!monthMinutes && <li className="muted">Nothing yet this month.</li>}
+          </ul>
+          <p className="muted small">
+            Estimates: {SAVED_ROWS.map((r) => `${r.each} min per ${r.unit}`).join(", ")}.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function AgentDashboard({ agent }) {
   const [listings, setListings] = useState([]);
   const [slots, setSlots] = useState([]);
@@ -2160,6 +2234,8 @@ function AgentDashboard({ agent }) {
           </p>
         </div>
       </header>
+
+      {!loading && <TimeSaved refreshKey={listings.length + bookedCount + offers.length} />}
 
       {!loading && (
         <AgentGettingStarted

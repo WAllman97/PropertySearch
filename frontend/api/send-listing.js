@@ -175,9 +175,13 @@ async function handler(req, res) {
     return res.status(500).json({ error: "Could not find matching buyers" });
   }
 
+  const blocked = await buyersBlocking(listing.agent_id);
   const matchedIds = [...new Set((matches || []).map((m) => m.user_id))].filter(
-    (id) => id !== user.id
+    (id) => id !== user.id && !blocked.has(id)
   );
+  // Buyers who'd have fitted but paused, found somewhere or turned this agent
+  // off: calls the agent doesn't waste (agent_time_saved, migration 030).
+  await recordSkipped(listing);
   if (!matchedIds.length) {
     return res.status(200).json({ success: true, matched: 0, sent: 0 });
   }
@@ -195,10 +199,42 @@ async function handler(req, res) {
   }
 }
 
+// Buyers whose household turned off homes from this agent (Settings →
+// Agents, migration 030). Before that migration: nobody.
+async function buyersBlocking(agentId) {
+  const { data, error } = await supabaseAdmin.rpc("buyers_blocking_agent", { p_agent: agentId });
+  if (error) return new Set();
+  return new Set((data || []).map((row) => (typeof row === "string" ? row : Object.values(row)[0])));
+}
+
+async function recordSkipped(listing) {
+  const { data: count, error } = await supabaseAdmin.rpc("buyers_skipped_for_listing", { p_listing: listing.id });
+  if (error || !count) return;
+  const { data: existing } = await supabaseAdmin
+    .from("agent_activity")
+    .select("count")
+    .eq("listing_id", listing.id)
+    .eq("kind", "buyers_skipped")
+    .maybeSingle();
+  if (existing && existing.count >= count) return;
+  const { error: saveError } = await supabaseAdmin
+    .from("agent_activity")
+    .upsert(
+      { agent_id: listing.agent_id, listing_id: listing.id, kind: "buyers_skipped", count },
+      { onConflict: "listing_id,kind" }
+    );
+  if (saveError) console.error("agent_activity save failed:", saveError);
+}
+
 // Send one listing to these buyers: each gets it at most once (listing_sends),
 // it's added to their household's list, and they get an email and a push
 // with their own one-tap booking link. -> { sent, emailed, pushed }
-async function deliverListing(listing, matchedIds, base) {
+async function deliverListing(listing, wantedIds, base) {
+  // Never to a buyer who turned this agent off, whichever way we got here.
+  const blocked = await buyersBlocking(listing.agent_id);
+  const matchedIds = wantedIds.filter((id) => !blocked.has(id));
+  if (!matchedIds.length) return { sent: 0, emailed: 0, pushed: 0 };
+
   // Claim each buyer atomically: only rows actually inserted are emailed, so
   // a double click or two tabs can't send the same listing twice.
   const { data: claimed, error: claimError } = await supabaseAdmin
