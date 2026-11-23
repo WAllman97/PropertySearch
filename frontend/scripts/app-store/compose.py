@@ -26,8 +26,9 @@ CAPTIONS = {
     "05_dashboard": ("See what needs\nyou today", "Price drops, viewings and next steps"),
     "06_search_map": ("Draw the area you\nwant to live in", "Agents' new listings that fit come to you"),
     "07_buying_position": ("Show agents you're\nready to move", "Share your buying position in one place"),
-    "08_agent_hours": ("For agents: set your\nviewing hours once", "Every listing gets bookable times"),
-    "09_agent_listing": ("Never\ndouble-booked", "Book one home and clashing times go"),
+    "08_agent_day": ("For agents: the day\nat a glance", "Viewings, offers and the time you've saved"),
+    "09_agent_listing": ("Send new listings\nto buyers who fit", "Never double-booked: clashing times go"),
+    "10_tell_agents": ("Found somewhere?\nTell every agent at once", "And choose what each agent can see"),
 }
 
 

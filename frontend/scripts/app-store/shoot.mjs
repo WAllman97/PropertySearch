@@ -42,7 +42,12 @@ async function newPage() {
 async function login(page, who, at = "/") {
   const c = cred(who);
   await page.goto(BASE + at, { waitUntil: "networkidle2" });
-  await page.evaluate(() => Object.keys(localStorage).forEach((k) => localStorage.removeItem(k)));
+  // Clear any old session, but say this device has logged in before, so
+  // it opens on Log in rather than Create account (AuthForm.jsx).
+  await page.evaluate(() => {
+    Object.keys(localStorage).forEach((k) => localStorage.removeItem(k));
+    localStorage.setItem("ps:hasLoggedIn", "1");
+  });
   await page.goto(BASE + at, { waitUntil: "networkidle2" });
   await page.type('input[type="email"]', c.email);
   await page.type('input[type="password"]', c.password);
@@ -111,7 +116,8 @@ async function buyer(page) {
     [...cards[cards.length - 1].querySelectorAll("button")].find((b) => b.textContent.trim() === "Edit").click();
   });
   await sleep(3500);
-  await scrollToText(page, "Where", 120);
+  // The search form's area picker (not the "Where you are" card above it).
+  await scrollToText(page, "Tap the map", 260);
   await sleep(2500);
   await shot(page, "06_search_map");
 
@@ -121,14 +127,23 @@ async function buyer(page) {
   await clickText(page, "button", "Your Buying Position");
   await scrollToText(page, "Your Buying Position", 40);
   await shot(page, "07_buying_position");
+
+  // Where you are + which agents can see you (migrations 029, 030).
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await clickText(page, "button", "Your Buying Position");
+  await clickText(page, "button", "Where you are");
+  await clickText(page, "button", "Which agents can see");
+  await scrollToText(page, "Where you are", 40);
+  await shot(page, "10_tell_agents");
 }
 
 async function agent(page) {
   await login(page, "agent", "/agent");
   await page.evaluate(() => window.scrollTo(0, 0));
-  await shot(page, "08_agent_hours");
-  // Starts below the share link (it shows this PC's address when run locally).
-  await scrollToText(page, "Offer my weekly viewing hours", 24);
+  await clickText(page, "button", "saved in");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot(page, "08_agent_day");
+  await scrollToText(page, "Your listings", 24);
   await shot(page, "09_agent_listing");
 }
 

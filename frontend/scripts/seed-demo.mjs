@@ -7,10 +7,11 @@
 // separate from every real household and agent:
 //   * a buyer household, "Sam & Alex", house-hunting in south-west London:
 //     saved homes, notes and scores, a search area, travel times, a buying
-//     position, a booked viewing and an offer;
+//     position, a booked viewing and an offer, and the agent below under
+//     Settings → Agents;
 //   * an agent, "Jordan Ellis, Larkspur Homes · Clapham", with listings that
 //     match some of the buyer's homes, weekly viewing hours, the buyer's
-//     booking and offer.
+//     booking and offer, and some time saved.
 // Both logins are already confirmed. Passwords are made on the first run and
 // kept in docs/app-review-logins.local.md (git-ignored); later runs reuse them.
 //
@@ -371,6 +372,12 @@ async function main() {
     household_id: H, property_id: ids.offer, agent_listing_id: listingIds.offer, amount: 835000,
     reported_by: buyerId, reported_at: daysAgo(1), status: "awaiting_agent",
   }), "offer");
+
+  // Time saved (migration 030): two buyers this agent didn't chase because
+  // they'd paused or found somewhere. Bookings and sends above count too.
+  await must(admin.from("agent_activity").insert({
+    agent_id: agentId, listing_id: listingIds.extra, kind: "buyers_skipped", count: 2,
+  }), "time saved");
 
   // No reminder emails for the demo viewings (the hourly job sends them).
   await must(admin.from("property_notes").update({ reminder_sent_at: iso(now) })

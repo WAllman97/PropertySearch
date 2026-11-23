@@ -35,6 +35,9 @@ privacy answers with what the app actually does.
   buyer login in the username/password boxes and the agent login in the
   notes. Re-run the script before each submission to refresh the dates.
 - **Review notes:**
+  > To sign in: the app opens on "Create an account" on a new phone; tap
+  > "Already have an account? Log in" at the bottom.
+  >
   > Demo data: the buyer account is a fictional household with saved homes,
   > a booked viewing, an offer and a drawn search area. To see the estate
   > agent side, tap "Estate agent? Sign in or sign up here" on the log-in
@@ -44,12 +47,28 @@ privacy answers with what the app actually does.
   >
   > Agent login: (email) / (password)
   >
+  > Things to try as the buyer: Settings → "Where you are" pauses the search
+  > or marks "Found somewhere", which every agent the buyer deals with sees
+  > at once; Settings → Agents chooses what each agent can see and send.
+  > As the agent: the card at the top shows the time the app has saved.
+  >
+  > Built for iPhone, not just a website: phone notifications (new matching
+  > homes, viewing reminders, bookings, agents' price cuts and offer
+  > answers); a Share-sheet extension to save a home from Safari or any
+  > property app; links in our emails open straight in the app (universal
+  > links); viewings go into the iPhone Calendar from the share sheet; and
+  > a phone-first calendar and layout.
+  >
   > New accounts confirm their email address before first log-in (the demo
   > accounts are already confirmed). Estate agents need a sign-up code from
-  > us, so please use the demo agent rather than signing up. Phone
-  > notifications are sent for new matching listings, viewing reminders and
-  > price drops. Account deletion: Settings → Delete Account (buyers),
-  > bottom of the agent page (agents).
+  > us, so please use the demo agent rather than signing up. Account
+  > deletion: Settings → Delete Account (buyers), bottom of the agent page
+  > (agents).
+  >
+  > Listing details: agents enter their own listings. When a buyer pastes a
+  > link to a home on another website, the app shows only that page's
+  > public link preview (title, summary, photo), the same as Messages or
+  > WhatsApp. Nothing is collected from other websites automatically.
 
 ## Description (App Store)
 
@@ -72,20 +91,27 @@ privacy answers with what the app actually does.
 >   reach the portals
 >
 > VIEWINGS WITHOUT THE PHONE TAG
-> • Book viewings from agents' available times, with a calendar invite
-> • Every viewing in one calendar, shared with your household
+> • Book a viewing in one tap, straight from an agent's email: your details
+>   are already filled in
+> • Every viewing in one calendar, shared with your household, and added
+>   to your iPhone calendar
 > • Reminders the day before
 >
-> SHOW AGENTS YOU'RE READY
+> ONE UPDATE, EVERY AGENT
+> • Found somewhere, or taking a break? Tell every agent at once, and the
+>   calls and emails stop
+> • Choose what each agent can see, and which ones can send you homes
 > • Share your buying position (mortgage agreement, chain, solicitor) with
->   agents you book with, so your offers are taken seriously
+>   agents you deal with, so your offers are taken seriously
 > • Hear straight away when an agent cuts the price of a home you saved
 >
 > FOR ESTATE AGENTS
+> • Paste your listing's link and the details fill themselves in
 > • Set your viewing hours once: every listing gets bookable times, and a
 >   booking at one home takes clashing times off the others
-> • Send new listings to buyers whose searches match
-> • See each buyer's position, and confirm accepted offers in a tap
+> • New listings go to buyers whose searches match, automatically
+> • See each buyer's position and status, confirm accepted offers in a tap,
+>   and see how much time the app has saved you
 
 **Keywords (100 chars, comma separated, no spaces needed):**
 `house,home,buying,property,viewings,book viewing,mortgage,estate agent,flat,shortlist,london,move`
@@ -135,8 +161,8 @@ on each build.
 
 ## Screenshots (App Store only, not TestFlight)
 
-Ready to upload: `docs/app-store/screenshots/` (nine iPhone 6.9" images,
-1320 × 2868, in upload order). Drag them into App Store Connect → your app
+Ready to upload: `docs/app-store/screenshots/` (ten iPhone 6.9" images,
+1320 × 2868, in upload order; retaken 23 Nov 2026). Drag them into App Store Connect → your app
 → the version → iPhone 6.9" Display. Apple scales them for smaller iPhones.
 
 They show the demo accounts. Photos are from Unsplash (free for commercial
