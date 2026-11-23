@@ -3,7 +3,7 @@ import { ConfirmEmailPage } from "./components/ConfirmEmail";
 import { onSharedLink } from "./lib/sharedLinks";
 import ViewingRequestPage from "./views/ViewingRequestPage";
 import { arrivedFromPasswordReset, supabase } from "./lib/supabaseClient";
-import AuthForm from "./components/AuthForm";
+import AuthForm, { SEEN_ACCOUNT_KEY } from "./components/AuthForm";
 import SetNewPasswordForm from "./components/SetNewPasswordForm";
 
 import DashboardView from "./views/DashboardView";
@@ -138,6 +138,12 @@ function MainApp() {
   // see household data, so the tabs would just be empty.
   useEffect(() => {
     if (!user) return;
+    // Someone has an account on this device: open on Log In next time.
+    try {
+      localStorage.setItem(SEEN_ACCOUNT_KEY, "1");
+    } catch {
+      // Private mode: they just see Create account first.
+    }
     (async () => {
       const [{ data: isMember }, { data: agent }] = await Promise.all([
         supabase.rpc("is_household_member"),
@@ -266,6 +272,7 @@ function MainApp() {
                   setSettingsFocus(section);
                   setActiveView("settings");
                 }}
+                onOpenWatchlist={() => setActiveView("history")}
               />
             )}
             {activeView === "dashboard" && (

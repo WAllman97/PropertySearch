@@ -3,12 +3,25 @@ import { supabase } from "../lib/supabaseClient";
 import { apiUrl, siteUrl } from "../lib/platform";
 import { CheckYourEmail } from "./ConfirmEmail";
 
+// Has anyone logged in on this device before? Then open on Log In; a new
+// person (most App Store downloads) gets Create account first. Set by App.jsx
+// once a session exists.
+export const SEEN_ACCOUNT_KEY = "ps:hasLoggedIn";
+
+function seenAccountHere() {
+  try {
+    return localStorage.getItem(SEEN_ACCOUNT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 // Log in, reset a password, or sign up. Sign-up goes through
 // /api/buyer-signup, which creates a new household, or joins the household
 // whose invite link (/join/<code>) brought them here.
 function AuthForm({ invite = null }) {
   // "login" | "forgot" | "signup" | "check" (confirm your email) | "unconfirmed"
-  const [mode, setMode] = useState(invite ? "signup" : "login");
+  const [mode, setMode] = useState(() => (invite || !seenAccountHere() ? "signup" : "login"));
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

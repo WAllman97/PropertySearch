@@ -22,14 +22,19 @@ function icsText(value) {
     .replace(/\r?\n/g, "\\n");
 }
 
-export function buildIcs({ uid, start, end, summary, description, location }) {
+// cancelled: the same event (same UID, later SEQUENCE) marked cancelled, so
+// a calendar that added the original invite removes it instead of keeping a
+// viewing that isn't happening.
+export function buildIcs({ uid, start, end, summary, description, location, cancelled = false }) {
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//PropertySearch//Bookings//EN",
-    "METHOD:PUBLISH",
+    cancelled ? "METHOD:CANCEL" : "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:${uid}@propertysearch`,
+    `SEQUENCE:${cancelled ? 1 : 0}`,
+    cancelled ? "STATUS:CANCELLED" : "STATUS:CONFIRMED",
     `DTSTAMP:${icsDate(new Date())}`,
     `DTSTART:${icsDate(start)}`,
     `DTEND:${icsDate(end)}`,
@@ -70,8 +75,12 @@ export async function sendEmail({ to, subject, html, replyTo, ics }) {
   if (replyTo) body.reply_to = replyTo;
 
   if (ics) {
+    const cancelled = ics.includes("METHOD:CANCEL");
     body.attachments = [
-      { filename: "invite.ics", content: Buffer.from(ics).toString("base64") },
+      {
+        filename: cancelled ? "cancelled.ics" : "invite.ics",
+        content: Buffer.from(ics).toString("base64"),
+      },
     ];
   }
 

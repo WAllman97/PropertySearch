@@ -3,6 +3,8 @@
 //   POST /api/agent-signup { name, agency, branch, phone, email, password, code }
 //   POST /api/agent-signup { action: "request_seat", code, name, email, branch, phone }
 //        when the agency's seats are full: asks the admin for one more place
+//   POST /api/agent-signup { action: "add_profile", code, name, phone }   signed in
+//        an existing account (e.g. a buyer) becomes an agent too, with a code
 //
 // Public sign-ups are switched off in Supabase (the household app is
 // invite-only), so agent accounts are created here with the service role.
@@ -14,7 +16,7 @@
 // Agents need a sign-up code so strangers can't fill buyers' cards with fake
 // viewing times: one of the per-agency codes made on /admin (migration 019),
 // or the older single AGENT_SIGNUP_CODE if that's set in Vercel.
-import { supabaseAdmin } from "./_lib/household.js";
+import { requireUser, supabaseAdmin } from "./_lib/household.js";
 import { withCors } from "./_lib/cors.js";
 import { sendConfirmEmail } from "./_lib/confirm-email.js";
 
@@ -81,6 +83,63 @@ async function handleSeatRequest(req, res, body) {
   return res.status(200).json({ success: true, requested: true });
 }
 
+// Someone already signed in (e.g. a buyer) becoming an agent too. Same rule
+// as a new sign-up: they need a live branch code, which takes a seat and
+// decides the agency and branch. Agents can't add their own profile row
+// directly (migration 026), so this is the only way in for them.
+async function handleAddProfile(req, res, body) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const { data: existing } = await supabaseAdmin
+    .from("agents")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (existing) return res.status(200).json({ success: true });
+
+  const code = normaliseCode(body.code);
+  const legacyCode = process.env.AGENT_SIGNUP_CODE;
+  const usesLegacyCode = Boolean(legacyCode) && clean(body.code, 100) === legacyCode;
+  const profile = {
+    name: clean(body.name, 100),
+    agency: clean(body.agency, 100),
+    branch: clean(body.branch, 100) || null,
+    phone: clean(body.phone, 40) || null,
+    email: (user.email || "").toLowerCase(),
+  };
+
+  let claimedCode = null;
+  if (!usesLegacyCode) {
+    const found = await lookUpCode(code);
+    if (!found) return res.status(403).json({ error: CODE_ERROR });
+    if (found.full) return res.status(409).json({ error: fullError(found), full: true });
+    profile.agency = found.agency;
+    if (found.branch) profile.branch = found.branch;
+    const { data: agency, error: claimError } = await supabaseAdmin.rpc("claim_agent_code", { p_code: code });
+    if (claimError || !agency) {
+      if (claimError) console.error("claim_agent_code failed:", claimError);
+      return res.status(409).json({ error: fullError(found), full: true });
+    }
+    claimedCode = code;
+  }
+
+  if (!profile.name || !profile.agency) {
+    if (claimedCode) await supabaseAdmin.rpc("release_agent_code", { p_code: claimedCode });
+    return res.status(400).json({ error: "Please add your name and agency" });
+  }
+
+  const { error } = await supabaseAdmin
+    .from("agents")
+    .insert({ user_id: user.id, ...profile, signup_code: claimedCode });
+  if (error) {
+    console.error("Agent profile insert failed:", error);
+    if (claimedCode) await supabaseAdmin.rpc("release_agent_code", { p_code: claimedCode });
+    return res.status(500).json({ error: "Could not set up your agent profile. Please try again." });
+  }
+  return res.status(200).json({ success: true });
+}
+
 async function handler(req, res) {
   if (req.method === "GET") {
     const found = await lookUpCode(normaliseCode(req.query?.code));
@@ -101,6 +160,7 @@ async function handler(req, res) {
   }
 
   if (body.action === "request_seat") return handleSeatRequest(req, res, body);
+  if (body.action === "add_profile") return handleAddProfile(req, res, body);
 
   const code = normaliseCode(body.code);
   const legacyCode = process.env.AGENT_SIGNUP_CODE;

@@ -15,6 +15,8 @@ import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
 import {
   BOOKING_ERRORS,
   buyerIdentity,
+  cancelledIcs,
+  clearCalendarViewing,
   loadSlot,
   sendBookingEmails,
   setCalendarViewing,
@@ -39,7 +41,7 @@ async function loadListing(listingId) {
   if (!UUID_RE.test(String(listingId || ""))) return null;
   const { data } = await supabaseAdmin
     .from("agent_listings")
-    .select("id, address, price, notes, listing_url, is_active, agents(name, agency, branch, phone)")
+    .select("id, address, price, notes, listing_url, is_active, market_status, agents(name, agency, branch, phone)")
     .eq("id", listingId)
     .maybeSingle();
   return data?.is_active ? data : null;
@@ -85,6 +87,23 @@ async function handleGetListing(req, res) {
   const listing = await loadListing(req.query.listing);
   if (!listing) return res.status(404).json({ error: "This booking link isn't active" });
   const buyer = req.query.b ? await buyerFromToken(listing, req.query.b) : null;
+
+  // Sold or withdrawn: say so instead of offering times.
+  if (listing.market_status === "sold_stc" || listing.market_status === "off_market") {
+    return res.status(200).json({
+      listing: {
+        id: listing.id,
+        address: listing.address,
+        price: listing.price,
+        notes: listing.notes,
+        listingUrl: listing.listing_url,
+        agent: listing.agents,
+        closed: listing.market_status,
+      },
+      buyer: null,
+      slots: [],
+    });
+  }
 
   const { data: slots } = await supabaseAdmin
     .from("viewing_slots")
@@ -268,17 +287,37 @@ async function handleCancel(req, res) {
 
   const address = slot.agent_listings.address;
   const when = slotLabel(slot);
+  // Booked from a match email: it was in their PropertySearch calendar too.
+  await clearCalendarViewing(booking.property_id, slot);
+  // Both sides get the calendar update that removes it.
+  const removal = cancelledIcs(slot, booking.id);
 
-  await sendEmail({
-    to: slot.agents.email,
-    replyTo: booking.buyer_email,
-    subject: `Viewing cancelled: ${address}, ${when}`,
-    html: emailLayout(
-      "Viewing cancelled by the buyer",
-      `<p style="margin:0;">${escapeHtml(booking.buyer_name)} has cancelled their viewing of
-      <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. The space is free again.</p>`
-    ),
-  });
+  await Promise.all([
+    sendEmail({
+      to: slot.agents.email,
+      replyTo: booking.buyer_email,
+      subject: `Viewing cancelled: ${address}, ${when}`,
+      html: emailLayout(
+        "Viewing cancelled by the buyer",
+        `<p style="margin:0;">${escapeHtml(booking.buyer_name)} has cancelled their viewing of
+        <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. The space is free again,
+        and the attached update takes it out of your calendar.</p>`
+      ),
+      ics: removal,
+    }),
+    sendEmail({
+      to: booking.buyer_email,
+      replyTo: slot.agents.email,
+      subject: `Cancelled: ${address}, ${when}`,
+      html: emailLayout(
+        "Your viewing is cancelled",
+        `<p style="margin:0;">Your viewing of <strong>${escapeHtml(address)}</strong> on
+        ${escapeHtml(when)} is cancelled and the agent has been told. The attached update takes
+        it out of your calendar.</p>`
+      ),
+      ics: removal,
+    }),
+  ]);
 
   return res.status(200).json({ success: true });
 }

@@ -7,7 +7,7 @@
 // (migration 012) and removed on sign-out, so a shared phone never receives
 // someone else's alerts.
 import { PushNotifications } from "@capacitor/push-notifications";
-import { isNativeApp } from "./platform";
+import { isNativeApp, liveSiteUrl } from "./platform";
 import { supabase } from "./supabaseClient";
 
 const ENABLED_KEY = "push_enabled";
@@ -122,7 +122,9 @@ export function dismissPushOffer() {
 export function listenForNotificationTaps() {
   if (!isNativeApp) return;
   PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
-    const url = action?.notification?.data?.url;
+    let url = action?.notification?.data?.url;
+    // A full link to our own website counts too: keep just the path.
+    if (typeof url === "string" && url.startsWith(`${liveSiteUrl}/`)) url = url.slice(liveSiteUrl.length);
     // Only our own pages: a path, never another site.
     if (typeof url === "string" && url.startsWith("/") && !url.startsWith("//")) {
       window.location.assign(url);

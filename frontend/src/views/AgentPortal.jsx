@@ -377,23 +377,33 @@ function AgentAuth() {
 }
 
 // Signed in with an existing (e.g. household) account but no agent profile.
+// Needs a branch sign-up code, the same as a new agent account: the server
+// checks it, takes a seat and sets the agency and branch from it.
 function AgentProfileForm({ user, onCreated }) {
-  const [form, setForm] = useState({ name: "", agency: "", branch: "", phone: "" });
+  const [form, setForm] = useState({
+    name: user.user_metadata?.name || "",
+    agency: "",
+    branch: "",
+    phone: "",
+    code: codeFromLink(),
+  });
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const update = (key) => (event) => setForm({ ...form, [key]: event.target.value });
 
   async function submit(event) {
     event.preventDefault();
-    const { error: insertError } = await supabase.from("agents").insert({
-      user_id: user.id,
-      email: user.email,
-      name: form.name.trim(),
-      agency: form.agency.trim(),
-      branch: form.branch.trim() || null,
-      phone: form.phone.trim() || null,
-    });
-    if (insertError) setError(insertError.message);
-    else onCreated();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await postAuthed("/api/agent-signup", { action: "add_profile", ...form });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Could not set up your agent profile");
+      onCreated();
+    } catch (err) {
+      setError(err.message);
+    }
+    setBusy(false);
   }
 
   return (
@@ -408,21 +418,28 @@ function AgentProfileForm({ user, onCreated }) {
               <input required maxLength={100} value={form.name} onChange={update("name")} />
             </label>
             <label>
-              Agency *
-              <input required maxLength={100} value={form.agency} onChange={update("agency")} />
+              Phone (shown to buyers who book)
+              <input type="tel" autoComplete="tel" maxLength={40} value={form.phone} onChange={update("phone")} />
             </label>
             <label>
-              Branch
-              <input maxLength={100} value={form.branch} onChange={update("branch")} />
-            </label>
-            <label>
-              Phone
-              <input type="tel" maxLength={40} value={form.phone} onChange={update("phone")} />
+              Sign-up code *
+              <input
+                required
+                maxLength={40}
+                autoCapitalize="characters"
+                placeholder="e.g. BROOKS-7F3A2"
+                value={form.code}
+                onChange={update("code")}
+              />
+              <span className="field-hint">
+                Your branch's code sets your agency and branch. No code?{" "}
+                <a href="/agents#get-a-code">Ask for one</a>.
+              </span>
             </label>
           </div>
           {error && <p className="booking-error">{error}</p>}
-          <button type="submit" className="primary-button">
-            Save profile
+          <button type="submit" className="primary-button" disabled={busy}>
+            {busy ? "Setting up..." : "Set up agent profile"}
           </button>
         </form>
       </section>
@@ -553,6 +570,9 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
   // "" | "looking" | "filled" | "partial" | "blocked" | "failed"
   const [lookup, setLookup] = useState("");
   const [pasteHint, setPasteHint] = useState("");
+  // Just added a listing: { listing, matches, sent?, sendError? }
+  const [justAdded, setJustAdded] = useState(null);
+  const [sending, setSending] = useState(false);
 
   // Paste the link and the rest fills itself in from the listing's link
   // preview, so the agent only checks it and taps Add.
@@ -614,9 +634,9 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
       listing && row.price && listing.price && row.price < listing.price
         ? { previous_price: listing.price, price_reduced_at: new Date().toISOString() }
         : {};
-    const { error: saveError } = listing
-      ? await supabase.from("agent_listings").update({ ...row, ...cut }).eq("id", listing.id)
-      : await supabase.from("agent_listings").insert({ ...row, agent_id: agentId });
+    const { data: saved, error: saveError } = listing
+      ? await supabase.from("agent_listings").update({ ...row, ...cut }).eq("id", listing.id).select().maybeSingle()
+      : await supabase.from("agent_listings").insert({ ...row, agent_id: agentId }).select().single();
     setBusy(false);
 
     if (saveError) {
@@ -638,8 +658,74 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
     if (!listing) {
       setForm(EMPTY_LISTING);
       setLookup("");
+      // Don't just reset: offer the obvious next step while the match
+      // count is fresh.
+      if (saved) setJustAdded({ listing: saved, matches: matchCount || 0 });
     }
     onSaved();
+  }
+
+  async function sendNow() {
+    setSending(true);
+    try {
+      const response = await postAuthed("/api/send-listing", { listingId: justAdded.listing.id });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Could not send");
+      setJustAdded({ ...justAdded, sent: body.sent || 0 });
+      onSaved();
+    } catch (err) {
+      setJustAdded({ ...justAdded, sendError: err.message });
+    }
+    setSending(false);
+  }
+
+  // After adding: "Added. Send it to the 12 buyers it matches?"
+  if (justAdded) {
+    const { listing: added, matches, sent, sendError } = justAdded;
+    return (
+      <div className="agent-added" role="status">
+        <p className="agent-added-title">
+          ✅ Added <strong>{added.address}</strong>
+        </p>
+        {sent !== undefined ? (
+          <p>
+            {sent
+              ? `Sent to ${sent} buyer${sent === 1 ? "" : "s"}. They can book a viewing in one tap.`
+              : "Everyone who matches has already had it."}
+          </p>
+        ) : matches > 0 ? (
+          <p>
+            {matches} buyer{matches === 1 ? "" : "s"} on PropertySearch{" "}
+            {matches === 1 ? "is" : "are"} looking for a home like this.
+          </p>
+        ) : (
+          <p className="muted">
+            No buyers' searches match it yet. Share its booking link from the card below.
+          </p>
+        )}
+        {sendError && <p className="booking-error">{sendError}</p>}
+        <div className="delete-account-actions">
+          {matches > 0 && sent === undefined && (
+            <button type="button" className="primary-button" disabled={sending} onClick={sendNow}>
+              {sending ? "Sending..." : `Send to ${matches} buyer${matches === 1 ? "" : "s"}`}
+            </button>
+          )}
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setJustAdded(null);
+              document.getElementById(`listing-${added.id}`)?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            See it and its viewing times
+          </button>
+          <button type="button" className="link-button" onClick={() => setJustAdded(null)}>
+            Add another
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const lookupNote = {
@@ -1353,7 +1439,7 @@ function reachedText(result, what) {
 
 // For sale / Under offer / Sold STC / Off market, plus "Reduce price".
 // Both are passed straight on to buyers who saved the home.
-function ListingStatus({ listing, onChanged }) {
+function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [reducing, setReducing] = useState(false);
@@ -1374,14 +1460,38 @@ function ListingStatus({ listing, onChanged }) {
       setBusy(false);
       return;
     }
+    // Weekly-hours times follow the status: gone while sold or off the
+    // market, back when it's on the market again (migration 026).
+    await supabase.rpc("sync_pattern_slots", { p_agent: agentId });
+
+    let note = "";
     try {
       const response = await postAuthed("/api/send-listing", { action: "status_update", listingId: listing.id });
       const result = await response.json().catch(() => ({}));
       const label = MARKET_STATUSES.find((s) => s.value === value).label;
-      setMessage(response.ok ? reachedText(result, label) : result.error || `${label} saved.`);
+      note = response.ok ? reachedText(result, label) : result.error || `${label} saved.`;
     } catch {
-      setMessage("Saved, but buyers' lists couldn't be updated just now.");
+      note = "Saved, but buyers' lists couldn't be updated just now.";
     }
+
+    // Sold or withdrawn with viewings still booked: offer to cancel them
+    // (each buyer is emailed).
+    const closing = value === "sold_stc" || value === "off_market";
+    if (closing && upcomingBookings.length) {
+      const n = upcomingBookings.length;
+      if (window.confirm(`${n} viewing${n === 1 ? " is" : "s are"} still booked on this home. Cancel ${n === 1 ? "it" : "them"} and let the buyer${n === 1 ? "" : "s"} know?`)) {
+        const results = await Promise.all(
+          upcomingBookings.map((b) =>
+            postAuthed("/api/viewings", { action: "cancel", bookingId: b.id })
+              .then((r) => r.ok)
+              .catch(() => false)
+          )
+        );
+        const done = results.filter(Boolean).length;
+        note += ` ${done} viewing${done === 1 ? "" : "s"} cancelled and the buyer${done === 1 ? " has" : "s have"} been told.`;
+      }
+    }
+    setMessage(note);
     setBusy(false);
     onChanged();
   }
@@ -1519,6 +1629,7 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
 
   return (
     <section
+      id={`listing-${listing.id}`}
       className={`card agent-listing status-${status.value} ${listing.is_active ? "" : "paused"}`}
     >
       <div className="agent-listing-head">
@@ -1581,7 +1692,14 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
         />
       )}
 
-      <ListingStatus listing={listing} onChanged={onChanged} />
+      <ListingStatus
+        listing={listing}
+        agentId={agentId}
+        upcomingBookings={slots
+          .filter((slot) => new Date(slot.starts_at) > new Date())
+          .flatMap((slot) => bookingsBySlot[slot.id] || [])}
+        onChanged={onChanged}
+      />
 
       <ListingReach listing={listing} reach={reach} onSent={onChanged} />
 

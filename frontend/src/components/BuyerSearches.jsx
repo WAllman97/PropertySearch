@@ -41,22 +41,42 @@ export function milesText(metres) {
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 
-// First search is pre-filled from the old Rightmove/Zoopla searches
-// (backend/config.yaml) so nothing is lost when scraping is switched off.
-const STARTER = {
-  name: "Family house with a garden",
-  areasText: "SE24, SW11, SW17",
-  min_price: "",
-  max_price: "800000",
-  min_bedrooms: "2",
-  property_types: ["house"],
-  must_have_garden: true,
-  is_active: true,
-  where: "postcodes",
-  center: null,
-  radius_m: RADII[3].metres,
-  polygon: [],
-};
+// A new buyer's first search, guessed from the homes they've already saved
+// (their postcode districts, price and bedrooms), so they only check it and
+// tap Save. With nothing saved yet it starts on "near a place", which is
+// how most people think, rather than postcode districts.
+// -> { initial, guessed }
+async function starterSearch(blank) {
+  const { data } = await supabase
+    .from("properties")
+    .select("postcode, price, bedrooms")
+    .not("status", "in", "(ignored,archived,lost)")
+    .limit(200);
+  const homes = data || [];
+
+  const counts = new Map();
+  for (const home of homes) {
+    const district = String(home.postcode || "").toUpperCase().replace(/\s+/g, "").replace(/[0-9][A-Z]{2}$/, "");
+    if (AREA_RE.test(district)) counts.set(district, (counts.get(district) || 0) + 1);
+  }
+  const districts = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([d]) => d);
+  if (!districts.length) return { initial: { ...blank, where: "circle" }, guessed: false };
+
+  const prices = homes.map((h) => h.price).filter((p) => p > 0);
+  const beds = homes.map((h) => h.bedrooms).filter((b) => b > 0);
+  // A little above the dearest saved home, rounded to £25k.
+  const maxPrice = prices.length ? Math.ceil((Math.max(...prices) * 1.05) / 25000) * 25000 : "";
+  return {
+    initial: {
+      ...blank,
+      where: "postcodes",
+      areasText: districts.join(", "),
+      max_price: maxPrice ? String(maxPrice) : "",
+      min_bedrooms: beds.length ? String(Math.min(...beds)) : "",
+    },
+    guessed: true,
+  };
+}
 
 const BLANK = {
   name: "",
@@ -239,7 +259,9 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
     <form className="settings-form buyer-search-form" onSubmit={submit}>
       {isFirst && (
         <p className="muted">
-          Pre-filled from your current Rightmove and Zoopla searches. Check it and save.
+          {isFirst === "guessed"
+            ? "We've filled this in from the homes you've saved. Check it and tap Save."
+            : "Tell us where and what you're looking for. Agents send you new homes that fit."}
         </p>
       )}
 
@@ -503,6 +525,12 @@ function BuyerSearches({ user }) {
     load();
   }, [load]);
 
+  // First search: guess it from what they've saved.
+  const [starter, setStarter] = useState(null);
+  useEffect(() => {
+    if (searches?.length === 0 && !starter) starterSearch(BLANK).then(setStarter);
+  }, [searches, starter]);
+
   async function save(id, values) {
     const now = new Date().toISOString();
     const { error } = id
@@ -530,11 +558,19 @@ function BuyerSearches({ user }) {
     load();
   }
 
-  if (searches === null) return <p>Loading your searches...</p>;
+  if (searches === null || (searches.length === 0 && !starter && !message.includes("migration"))) {
+    return <p>Loading your searches...</p>;
+  }
 
-  // No searches yet: go straight to the pre-filled form.
+  // No searches yet: go straight to a form guessed from their saved homes.
   if (searches.length === 0 && !message.includes("migration")) {
-    return <SearchForm initial={STARTER} isFirst onSave={(v) => save(null, v)} />;
+    return (
+      <SearchForm
+        initial={starter.initial}
+        isFirst={starter.guessed ? "guessed" : "blank"}
+        onSave={(v) => save(null, v)}
+      />
+    );
   }
 
   return (

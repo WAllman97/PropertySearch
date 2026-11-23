@@ -8,6 +8,8 @@ import ViewingSlots, { useAvailableViewings } from "../components/ViewingSlots";
 import { OfferAcceptedButton, OfferStatus } from "../components/OfferStatus";
 import PropertyTile from "../components/PropertyTile";
 import { daysOnMarket, priceDrop } from "../utils/market";
+import LoadError from "../components/LoadError";
+import { friendlyError } from "../lib/errors";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -97,6 +99,7 @@ function HistoryView() {
   const { byProperty: viewingsByProperty, requestsByProperty, reload: reloadViewings } = useAvailableViewings();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [notes, setNotes] = useState(emptyNotes);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -140,7 +143,9 @@ function HistoryView() {
 
     if (error) {
       console.error("Error loading watchlist:", error);
+      setLoadError(error);
     } else {
+      setLoadError(null);
       setProperties(
         (data || []).sort((a, b) => {
           const scoreA = a.overall_score || 0;
@@ -248,7 +253,7 @@ function HistoryView() {
 
     if (error) {
       console.error("Error updating property:", error);
-      alert(error.message);
+      alert(friendlyError(error));
       return;
     }
 
@@ -477,6 +482,8 @@ function HistoryView() {
       </section>
     );
   }
+
+  if (loadError) return <LoadError error={loadError} onRetry={loadWatchlist} />;
 
   return (
     <section className="card">

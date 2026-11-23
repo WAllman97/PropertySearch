@@ -251,7 +251,14 @@ function PublicViewingPage({ listingId }) {
       </header>
 
       <section className="card">
-        {days.length === 0 ? (
+        {listing.closed ? (
+          <p className="muted">
+            {listing.closed === "sold_stc"
+              ? "Sorry, this home is now sold, subject to contract, so it isn't taking viewings."
+              : "Sorry, this home has been taken off the market."}{" "}
+            Your saved searches will keep sending you new homes that match.
+          </p>
+        ) : days.length === 0 ? (
           <p className="muted">
             No viewing times are free right now.
             {agent.phone ? ` Call ${agent.phone} to arrange one.` : " Please contact the agent."}

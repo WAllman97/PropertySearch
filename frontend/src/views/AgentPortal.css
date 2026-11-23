@@ -610,6 +610,26 @@
   color: var(--primary);
 }
 
+/* After adding a listing: the next step */
+.agent-added {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+}
+
+.agent-added p {
+  margin: 0 0 10px;
+}
+
+.agent-added-title {
+  font-size: 16px;
+}
+
+/* A page that couldn't load its data */
+.load-error h3 {
+  margin: 0 0 6px;
+}
+
 /* Booking page: a known buyer from a "new match" email */
 .booking-as {
   margin: 0 0 12px;
