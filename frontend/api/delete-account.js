@@ -5,8 +5,7 @@
 // Buyers: if a partner is still in the household, only this login goes and
 // the shared list stays with them. If it was the last member, the household
 // and everything in it (properties, notes, price history, commute addresses)
-// is deleted too. The original household (the one the scraper fills) is
-// never deleted from here.
+// is deleted too.
 //
 // Agents: future viewings are cancelled first so every buyer is emailed;
 // then the auth user is deleted, which cascades to the agent profile,
@@ -33,7 +32,7 @@ async function handler(req, res) {
   const [{ data: member }, { data: agent }] = await Promise.all([
     supabaseAdmin
       .from("household_members")
-      .select("household_id, households(is_original)")
+      .select("household_id")
       .eq("user_id", user.id)
       .maybeSingle(),
     supabaseAdmin.from("agents").select("user_id").eq("user_id", user.id).maybeSingle(),
@@ -56,10 +55,6 @@ async function handler(req, res) {
         console.error("Could not hand over buyer profile:", moveError);
         return res.status(500).json({ error: "Could not delete your account. Please try again." });
       }
-    } else if (member.households?.is_original) {
-      return res.status(409).json({
-        error: "This is the main household and can't be deleted in the app. Email us and we'll help.",
-      });
     } else {
       emptyHousehold = member.household_id;
     }

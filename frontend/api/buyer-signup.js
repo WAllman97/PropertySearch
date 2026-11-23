@@ -15,8 +15,7 @@
 // Public sign-ups are switched off in Supabase, so accounts are created here
 // with the service role, unconfirmed: we email a link to confirm the address
 // before they can log in (_lib/confirm-email.js), the same as agents
-// (api/agent-signup.js). New households get the app only: the scraper, its
-// daily email and AI scoring stay with the original household.
+// (api/agent-signup.js).
 import { requireUser, supabaseAdmin } from "./_lib/household.js";
 import { listingKey } from "./_lib/listing.js";
 import { setPreferenceByToken } from "./_lib/email-prefs.js";
@@ -200,14 +199,11 @@ async function handleJoin(req, res, body) {
 
   const { data: member } = await supabaseAdmin
     .from("household_members")
-    .select("household_id, households(is_original)")
+    .select("household_id")
     .eq("user_id", user.id)
     .maybeSingle();
   if (member?.household_id === invite.id) return res.status(200).json({ success: true, moved: 0 });
   if (invite.full) return res.status(409).json({ error: "This household already has the maximum number of people." });
-  if (member?.households?.is_original) {
-    return res.status(409).json({ error: "This account runs the original household, so it can't move." });
-  }
 
   const oldId = member?.household_id || null;
   let moved = 0;

@@ -95,7 +95,7 @@ function PrivacyPage() {
           <li>Vercel: hosting the app</li>
           <li>Resend: sending emails (sent from its servers in Ireland)</li>
           <li>Google Maps: journey times (only the addresses involved)</li>
-          <li>Anthropic: summarising and scoring property listings (listing details only)</li>
+          <li>HM Land Registry: local sold prices (only the postcodes near a saved home)</li>
           <li>Apple: delivering phone notifications</li>
           <li>postcodes.io: finding where places and postcodes are (only the place or postcode)</li>
           <li>OpenStreetMap: the map tiles shown when you draw a search area</li>

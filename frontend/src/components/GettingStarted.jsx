@@ -71,7 +71,6 @@ async function loadProgress() {
 
   return {
     householdId: household.data.id,
-    isOriginal: household.data.is_original,
     done: {
       home: (homes.count || 0) > 0,
       search: (searches.count || 0) > 0,
@@ -100,7 +99,7 @@ function GettingStarted({ refreshKey, onAddHome, onOpenSettings }) {
     };
   }, [refreshKey]);
 
-  if (!progress || hidden || progress.isOriginal) return null;
+  if (!progress || hidden) return null;
 
   const required = STEPS.filter((s) => !s.optional);
   const doneCount = required.filter((s) => progress.done[s.id]).length;

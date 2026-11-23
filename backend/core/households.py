@@ -1,30 +1,11 @@
 """Households (migration 013).
 
-Each household has its own property list. The scraper, its daily email and
-AI scoring only work for the original household; everything else (viewing
-reminders, notifications) goes to whichever household owns the property.
+Each household has its own property list. Viewing reminders and
+notifications go to whichever household owns the property.
 
 The jobs use the service-role key, which bypasses row-level security, so
 every query on household data must filter by household_id itself.
 """
-
-_original_id = None
-
-
-def original_household_id(supabase):
-    """The household the scraper fills. Cached for the run."""
-    global _original_id
-    if _original_id is None:
-        rows = (
-            supabase.table("households").select("id").eq("is_original", True).execute().data
-            or []
-        )
-        if not rows:
-            raise RuntimeError(
-                "No original household: run backend/migrations/013_households.sql first"
-            )
-        _original_id = rows[0]["id"]
-    return _original_id
 
 
 def member_ids(supabase, household_id):

@@ -11,7 +11,7 @@ BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BACKEND_DIR)
 
 from core.emailer import format_viewing_datetime, send_resend_email, send_viewing_reminder
-from core.households import member_emails, original_household_id
+from core.households import member_emails
 from core.push import send_to_household
 
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
@@ -59,7 +59,6 @@ def run_viewing_reminders():
         f"without a reminder."
     )
 
-    original_id = original_household_id(supabase)
 
     for viewing in viewings:
         property_data = viewing.get("properties") or {}
@@ -68,13 +67,11 @@ def run_viewing_reminders():
         household_id = property_data.get("household_id")
 
         try:
-            # The original household keeps its config/recipients.yaml list;
-            # every other household is emailed at its members' logins.
-            recipients = None
-            if household_id != original_id:
-                recipients = member_emails(supabase, household_id)
-                if not recipients:
-                    raise RuntimeError("no member emails for this household")
+            # Every household, the original one included, is emailed at its
+            # members' logins.
+            recipients = member_emails(supabase, household_id)
+            if not recipients:
+                raise RuntimeError("no member emails for this household")
             send_viewing_reminder(viewing, recipients=recipients)
 
             supabase.table("property_notes").update(
