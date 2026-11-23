@@ -8,7 +8,7 @@ A house-hunting app for buyers, with a portal for estate agents, heading for the
 
 - **Buyers** save homes, see a filtered and scored view, book calls and viewings, track offers, and share all of it with a partner.
 - **Agents** publish viewing times, send listings to buyers whose searches match, confirm offers, and are billed per branch.
-- **The owner's household** (the original single-user tool) still gets the daily Rightmove scrape, the daily email and AI scoring. Other app users' homes are never read from portals on a schedule.
+- **No scraping.** The original single-user tool's daily portal scrape, daily email and AI scoring were removed on 23 Nov 2026 ahead of App Store submission. Nothing reads a portal on a schedule; see `docs/DATA_SOURCES.md`.
 
 ## Timeline of what was built
 
@@ -64,16 +64,15 @@ AI triage scoring; the agent call/viewing booking page (`/book/<slug>`); the sec
 |---|---|---|
 | Web app | `frontend/` (React + Vite), Vercel | Also wrapped as the iOS app via Capacitor |
 | API | `frontend/api/*.js` (12 Vercel functions max), shared code in `frontend/api/_lib/` | Service-role Supabase client, so every route checks the household itself |
-| Jobs | `backend/` (Python), GitHub Actions | Scraper and commutes, daily email, viewing reminders, AI scoring, market-data refresh, nightly backup |
-| Database | Supabase (Postgres, row-level security, storage) | Migrations in `backend/migrations/` 001–023 |
+| Jobs | `backend/` (Python), GitHub Actions | Viewing reminders and agent run sheets, Land Registry sold-price comparisons, nightly backup |
+| Database | Supabase (Postgres, row-level security, storage) | Migrations in `backend/migrations/` 001–030 |
 | Email / push | Resend / APNs | |
 
-**Workflows:** `property-scraper.yml` (daily 07:00 UTC), `daily-property-alerts.yml`, `viewing-reminders.yml` (hourly), `ios-testflight.yml` (manual), `nightly-backup.yml`.
+**Workflows:** `viewing-reminders.yml` (hourly), `sold-price-comps.yml` (daily 06:00 UTC), `ios-testflight.yml` (manual), `nightly-backup.yml`.
 
 ## Open items and things to check
 - **Migrations applied?** Confirm 005–023 are applied in Supabase. The commits say 008 was; the rest weren't recorded.
 - **Google Routes:** commutes were failing on a 100-a-day quota and on key permissions (403). Check the Routes API is enabled for the key, there's no website-only restriction, and the quota is raised.
-- **`ANTHROPIC_API_KEY`** in GitHub secrets, for AI scoring.
 - **Vercel:** the live project `property-search-4jcc` needs Root Directory `frontend`, the default build commands, and its environment variables set for Preview as well. The duplicate `property-search` project should be disconnected.
 - **Secrets used by the newer features:**
   - APNs (`APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`): **set** in both GitHub and Vercel. The key is `X74MYGJ3ZQ`, made 19 Nov, and the `.p8` is in OneDrive under Personal Drive → Property Search Keys.

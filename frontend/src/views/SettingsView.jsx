@@ -5,7 +5,6 @@ import BuyerPositionSettings from "../components/BuyerPositionSettings";
 import { DeleteBuyerAccount, HouseholdMembers } from "../components/HouseholdSettings";
 import BuyerSearches from "../components/BuyerSearches";
 import BuyerProfileSettings from "../components/BuyerProfileSettings";
-import NotificationSettings from "../components/NotificationSettings";
 import PushSettings from "../components/PushSettings";
 import { isNativeApp } from "../lib/platform";
 import EmailPreferences from "../components/EmailPreferences";
@@ -155,16 +154,6 @@ function SettingsView({ user, focusSection, onFocused, onLogOut, isAgent = false
         "Add commute locations, choose your preferred travel method, and refresh commute times.",
         <BuyerProfileSettings user={user} />
       )}
-
-      {/* The daily alert email comes from the scraper, which only works
-          for the original household (migration 013). */}
-      {household?.is_original &&
-        section(
-          "email",
-          "Email Notifications",
-          "Choose how often you receive property alerts and add extra recipients, such as your partner.",
-          <NotificationSettings user={user} />
-        )}
 
       {/* Only for accounts that are also estate agents: most buyers never
           need it, so it lives here rather than on every page. */}

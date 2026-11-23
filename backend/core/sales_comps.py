@@ -1,7 +1,7 @@
 """Local sold-price comparisons from HM Land Registry Price Paid Data.
 
-For a listing with a location (Rightmove gives lat/lng and the full
-postcode), find every postcode within ~500m (postcodes.io), pull the sales
+For a saved home with a location (lat/lng, or a postcode to look up),
+find every postcode within ~500m (postcodes.io), pull the sales
 in those postcodes from Land Registry's open SPARQL endpoint, keep the same
 property type, and summarise: median / quartiles / count, the nearest
 recent sales, and how the asking price compares to the median.
@@ -241,138 +241,13 @@ def summarise(sales, distances, property_type, asking_price, today=None):
     return comps
 
 
-MIN_MATCHED_SALES = 5   # bedroom-matched sales needed before widening
-NEAREST_RADIUS_M = 200  # use only these when there are enough of them
-
-
-FLAT_ADDRESS_RE = re.compile(
-    r"^\s*(flat|room|apartment|maisonette|unit|studio|basement|ground floor|first floor|"
-    r"second floor|top floor|upper|lower)\b|^\s*\d+[a-z]\b",
-    re.IGNORECASE,
-)
-
-
-def _is_flat_sale(sale):
-    return (sale.get("tenure") or "").startswith("leasehold") or bool(
-        FLAT_ADDRESS_RE.search(sale.get("address") or "")
-    )
-
-
-def _row_text(row):
-    return " ".join(filter(None, [row.get("title"), row.get("address")]))
-
-
-def _bedrooms(value, text=""):
-    try:
-        beds = int(value)
-    except (TypeError, ValueError):
-        # Older rows have no bedrooms column value but the Rightmove title
-        # says "2 bedroom end of terrace house for sale in ...".
-        match = re.search(r"\b(\d{1,2})\s*bed", text or "", flags=re.IGNORECASE)
-        if not match:
-            return None
-        beds = int(match.group(1))
-    return beds if 0 <= beds <= 10 else None
-
-
-def summarise_matched(sales, property_type, bedrooms, asking_price, radius_m, years):
-    """Pure: Rightmove sold sales (already near, right type) -> comps dict
-    for same-bedroom sales; falls back to +/-1 bedroom when too few."""
-    if property_type == "house":
-        sales = [s for s in sales if s["type"] != "flat"]
-    elif property_type in LR_TYPES:
-        sales = [s for s in sales if s["type"] == property_type]
-
-    if property_type and property_type != "flat":
-        # Rightmove types sales by building, so flats in a converted
-        # terrace come back as "terraced". They're not house comparables.
-        sales = [s for s in sales if not _is_flat_sale(s)]
-
-    exact = [s for s in sales if s.get("bedrooms") == bedrooms]
-    chosen, beds_basis = exact, f"{bedrooms}"
-
-    # Prefer the immediate neighbourhood when it has enough sales: housing
-    # stock changes street by street (an estate vs Victorian terraces), and
-    # a quarter-mile median can mix the two.
-    nearest = [s for s in exact if s.get("distance_m") is not None and s["distance_m"] <= NEAREST_RADIUS_M]
-    if len(nearest) >= MIN_MATCHED_SALES:
-        chosen, radius_m = nearest, NEAREST_RADIUS_M
-
-    if len(exact) < MIN_MATCHED_SALES:
-        near = [s for s in sales if s.get("bedrooms") is not None and abs(s["bedrooms"] - bedrooms) <= 1]
-        if len(near) > len(exact):
-            chosen, beds_basis = near, f"{max(bedrooms - 1, 0)}–{bedrooms + 1}"
-
-    prices = sorted(s["price"] for s in chosen)
-    comps = {
-        "method": "bedrooms",
-        "count": len(prices),
-        "bedrooms_basis": beds_basis,
-        "window_months": years * 12,
-        "radius_m": radius_m,
-        "property_type": property_type,
-        "type_basis": property_type if property_type in LR_TYPES else "all",
-        "low_confidence": len(prices) < MIN_MATCHED_SALES,
-        "median": round(statistics.median(prices)) if prices else None,
-        "p25": _quantile(prices, 0.25),
-        "p75": _quantile(prices, 0.75),
-        "latest_sale_date": max((s["date"] for s in chosen), default=None),
-        "sales": sorted(
-            chosen,
-            key=lambda s: (
-                s["distance_m"] if s.get("distance_m") is not None else 10**6,
-                -int(s["date"].replace("-", "")),
-            ),
-        )[:8],
-        "source": "Rightmove sold prices (HM Land Registry data)",
-        "computed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if asking_price and comps["median"]:
-        comps["asking_vs_median_pct"] = round((asking_price / comps["median"] - 1) * 100, 1)
-    return comps
-
-
-def compute_matched_comps(property_row, postcode, origin):
-    """Same type + same bedrooms from Rightmove's sold search: a quarter
-    mile first, half a mile if that's too thin."""
-    from core import rightmove_sold
-
-    property_type = property_row.get("property_type")
-    bedrooms = _bedrooms(property_row.get("bedrooms"), _row_text(property_row))
-    price = property_row.get("price")
-
-    comps = None
-    for radius_miles, max_pages in ((0.25, 3), (0.5, 4)):
-        sales = rightmove_sold.fetch_sold(
-            postcode, property_type, years=2, origin=origin,
-            radius_miles=radius_miles, max_pages=max_pages,
-        )
-        comps = summarise_matched(sales, property_type, bedrooms, price, round(radius_miles * 1609), 2)
-        if comps["count"] >= MIN_MATCHED_SALES and comps["bedrooms_basis"] == str(bedrooms):
-            break
-    return comps
-
-
-def compute_comps(property_row, use_portal=False):
+def compute_comps(property_row):
     """Returns a comps dict, or None when the property has no usable location.
 
-    Land Registry by type (open data, Open Government Licence) for everyone,
-    flagged in the UI as not size-matched. Only for the original household
-    (use_portal=True), the owner's personal tool alongside the daily
-    scrape, are Rightmove's sold prices tried first, matched on type AND
-    bedrooms. Never for app users: PropertySearch doesn't crawl a portal on
-    other people's behalf (docs/DATA_SOURCES.md)."""
+    Land Registry by type (open data, Open Government Licence), flagged in
+    the UI as not size-matched. No portal is read (docs/DATA_SOURCES.md)."""
     latitude, longitude = property_row.get("latitude"), property_row.get("longitude")
     postcode = property_row.get("postcode") or find_postcode(property_row.get("address"))
-
-    if use_portal and postcode and _bedrooms(property_row.get("bedrooms"), _row_text(property_row)) is not None:
-        try:
-            comps = compute_matched_comps(property_row, postcode, (latitude, longitude))
-            if comps and comps["count"]:
-                comps["postcode"] = postcode
-                return comps
-        except Exception as error:
-            print(f"Rightmove sold search failed for {postcode}, using Land Registry: {error}")
 
     if latitude is None and postcode:
         located = postcode_location(postcode)
@@ -407,7 +282,7 @@ def _days_since(value):
 def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
     result = (
         supabase.table("properties")
-        .select("id,household_id,address,title,price,bedrooms,postcode,latitude,longitude,property_type,comps_updated_at,status")
+        .select("id,address,title,price,bedrooms,postcode,latitude,longitude,property_type,comps_updated_at,status")
         .or_("status.is.null,status.not.in.(" + ",".join(INACTIVE_STATUSES) + ")")
         .order("comps_updated_at", desc=False, nullsfirst=True)
         .limit(500)
@@ -415,8 +290,6 @@ def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
     )
 
     stats = {"computed": 0, "no_location": 0, "failed": 0}
-    from core.households import original_household_id
-    original = original_household_id(supabase)
 
     for row in result.data or []:
         if stats["computed"] >= limit:
@@ -431,7 +304,7 @@ def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
             continue
 
         try:
-            comps = compute_comps(row, use_portal=row.get("household_id") == original)
+            comps = compute_comps(row)
         except Exception as error:
             stats["failed"] += 1
             print(f"Sold-price comps failed for {row.get('address')}: {error}")

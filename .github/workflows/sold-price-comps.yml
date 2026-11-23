@@ -1,0 +1,40 @@
+name: Sold-price comparisons
+
+# Daily: local sold prices for saved homes, from HM Land Registry open data
+# (backend/core/sales_comps.py). No property portal is read.
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Recompute every home, even ones done this month"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily
+
+jobs:
+  comps:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compute comparisons
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python jobs/refresh_market_data.py ${{ inputs.force && '--force' || '' }}

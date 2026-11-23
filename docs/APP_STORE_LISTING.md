@@ -97,9 +97,9 @@ helps people use it, is fine.
 
 ## Listing data and portals (before submitting)
 
-- Buyers' homes are never re-read from portals on a schedule. Only the
-  owner's original household keeps the daily search scrape and price
-  checks (backend), as a personal tool.
+- Nothing reads a portal on a schedule: the personal search scrape and
+  price checks were removed on 23 Nov 2026 (docs/DATA_SOURCES.md). Sold
+  prices come from HM Land Registry open data.
 - Save-a-link reads only the link-preview tags of the one page a buyer
   pastes (`frontend/api/_lib/listing-page.js`).
 - Agents on PropertySearch are the licensed source: their details and

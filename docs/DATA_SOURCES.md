@@ -28,20 +28,13 @@ Controls (Vercel environment variables, no code change needed):
   default it says who we are (`PropertySearchLinkPreview/1.0 (+…/support)`),
   like any messaging app, rather than posing as a browser.
 
-## The owner's personal tool only (the "original household")
+## No scrapers
 
-These predate the app, run from GitHub Actions for one household, and are
-not offered to anyone else. Each checks `is_original` (migration 013):
-
-| What | Source | Where |
-|---|---|---|
-| Daily new-listing search | Rightmove, Zoopla and OnTheMarket search pages | `backend/main.py`, `backend/scrapers/` |
-| Daily price and status re-check of saved homes | Rightmove listing pages | `backend/core/listing_tracker.py` |
-| Bedroom-matched sold prices | Rightmove's sold-price search | `backend/core/rightmove_sold.py`, used only when `compute_comps(..., use_portal=True)` |
-| Daily alert email and AI scoring | The above | `backend/jobs/send_daily_property_alerts.py`, `score_properties.py` |
-
-Before PropertySearch is sold to agents, decide whether to switch these off
-too, so the company runs no scraper at all. Nothing in the app needs them.
+The original single-user tool's scrapers were removed on 23 Nov 2026, before
+App Store submission: the daily Rightmove/Zoopla/OnTheMarket search, the
+daily re-check of saved Rightmove homes, Rightmove's sold-price search, and
+the daily alert email and AI scoring built on them. They're in git history
+before that date if ever needed for reference. The company runs no scraper.
 
 ## How the app gets better data without scraping
 
@@ -58,8 +51,11 @@ too, so the company runs no scraper at all. Nothing in the app needs them.
 
 ## Changes made for this (23 Nov 2026)
 
-- Sold-price comparisons for app users switched to Land Registry only; the
-  Rightmove sold search is limited to the original household. Comparisons
-  already stored stay until their next refresh.
+- Sold-price comparisons switched to Land Registry only, run by their own
+  daily job (`.github/workflows/sold-price-comps.yml`). Comparisons already
+  stored stay until their next monthly refresh (or run the job by hand with
+  "force").
 - Link previews stopped posing as Chrome; added the `PORTAL_PREVIEWS`
   off switch.
+- The personal scrapers, their daily email and AI scoring removed, with the
+  scraper-only "Email Notifications" settings card.
