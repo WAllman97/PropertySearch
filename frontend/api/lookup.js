@@ -1,5 +1,6 @@
 // Lookups, all POST, signed in:
-//   { action: "listing", url }           details for a pasted listing link (buyers)
+//   { action: "listing", url }           details for a pasted listing link (buyers;
+//                                        add for: "agent" from the agent portal)
 //   { action: "places", q }              place-name search for distance searches
 //   { action: "postcode", postcode }     where a postcode is, cached for matching
 //

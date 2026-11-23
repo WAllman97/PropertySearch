@@ -76,10 +76,10 @@ AI triage scoring; the agent call/viewing booking page (`/book/<slug>`); the sec
 - **`ANTHROPIC_API_KEY`** in GitHub secrets, for AI scoring.
 - **Vercel:** the live project `property-search-4jcc` needs Root Directory `frontend`, the default build commands, and its environment variables set for Preview as well. The duplicate `property-search` project should be disconnected.
 - **Secrets used by the newer features:**
-  - APNs: `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`
-  - backups: `SUPABASE_DB_URL`, `BACKUP_PASSPHRASE`
-  - TestFlight: the App Store Connect API key
-  - optional: `AGENT_SIGNUP_CODE`
+  - APNs (`APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`): **set** in both GitHub and Vercel. The key is `X74MYGJ3ZQ`, made 19 Nov, and the `.p8` is in OneDrive under Personal Drive → Property Search Keys.
+  - TestFlight: the App Store Connect API key secrets are **set** (22 Nov), and the GitHub workflow is the normal way to build.
+  - Still to check: backups (`SUPABASE_DB_URL`, `BACKUP_PASSPHRASE`), and optionally `AGENT_SIGNUP_CODE`
+- **iPhone app:** it runs on Will's iPhone, the first TestFlight upload (from a borrowed Mac) went through on 22 Nov, and the share extension is still to be tested. Still to do: an external TestFlight group for the agent demo, and the App Store submission.
 - **Sign-ups:** these are now deliberately open (households plus email confirmation), which replaces the earlier advice to switch them off.
 - **Repo location:** the repo lives in a OneDrive/SharePoint-synced folder. Syncing `.git` this way can corrupt it, so move it out and use GitHub to move work between computers.
 - **"Cash rec – refresh" scheduled task:** it creates a new Claude session every 5 minutes and floods the session list. Change it, and archive the old sessions (6 of about 487 done).
