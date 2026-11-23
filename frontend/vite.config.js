@@ -89,8 +89,55 @@ function loadEnvFile(file) {
   return out
 }
 
+// Universal links: tell iPhones that links to this site (booking links in
+// emails, viewing pages...) should open the PropertySearch app when it's
+// installed. Apple fetches /.well-known/apple-app-site-association from the
+// site; it names the app as "<Team ID>.<bundle ID>". The Team ID comes from
+// APNS_TEAM_ID (already set in Vercel for push), so nothing is hard-coded.
+// The app side is the associated-domains entitlement in
+// ios/App/App/App.entitlements; links arrive in src/lib/sharedLinks.js.
+const BUNDLE_ID = 'com.wallman97.propertysearch'
+
+function appleAppSiteAssociation() {
+  return {
+    name: 'apple-app-site-association',
+    apply: 'build',
+    generateBundle() {
+      const teamId = (process.env.APPLE_TEAM_ID || process.env.APNS_TEAM_ID || '').trim()
+      if (!/^[A-Z0-9]{10}$/.test(teamId)) {
+        this.warn('APNS_TEAM_ID not set: skipping apple-app-site-association (links open in Safari)')
+        return
+      }
+      const appID = `${teamId}.${BUNDLE_ID}`
+      this.emitFile({
+        type: 'asset',
+        fileName: '.well-known/apple-app-site-association',
+        source: JSON.stringify(
+          {
+            applinks: {
+              apps: [],
+              details: [
+                {
+                  appIDs: [appID],
+                  // Everything except the API opens in the app.
+                  components: [{ '/': '/api/*', exclude: true }, { '/': '*' }],
+                  // Older iOS versions read this instead.
+                  appID,
+                  paths: ['NOT /api/*', '*'],
+                },
+              ],
+            },
+          },
+          null,
+          2
+        ),
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), vercelApiDev()],
+  plugins: [react(), vercelApiDev(), appleAppSiteAssociation()],
   server: {
     port: 5173,
     open: false,

@@ -6,5 +6,13 @@
 	     automatically when you archive for TestFlight / the App Store. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Universal links: links to the website (e.g. "Book a viewing" in
+	     emails) open the app instead of Safari. The site publishes the
+	     matching /.well-known/apple-app-site-association (vite.config.js).
+	     Add any custom domain here too, as another applinks: entry. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:property-search-4jcc.vercel.app</string>
+	</array>
 </dict>
 </plist>

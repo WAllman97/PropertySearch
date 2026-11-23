@@ -10,6 +10,9 @@ const LIVE_SITE_URL = (
   import.meta.env.VITE_PUBLIC_SITE_URL || "https://property-search-4jcc.vercel.app"
 ).replace(/\/$/, "");
 
+// The live website, also when running in the app.
+export const liveSiteUrl = LIVE_SITE_URL;
+
 // Base for links people open outside the app (share links, email redirects).
 export const siteUrl = isNativeApp ? LIVE_SITE_URL : window.location.origin;
 

@@ -1,11 +1,16 @@
-// A property link handed to the app from outside, to open "Add Property"
-// with it already filled in:
-//   * the iPhone share sheet: Share → PropertySearch opens
-//     propertysearch://add?url=<listing link> (ios/App/ShareExtension)
-//   * the website: /?add=<listing link> (bookmarks, other apps)
-// The link waits here until the Properties view (after log-in) takes it.
+// Links handed to the app from outside:
+//   * a property link to open "Add Property" with it already filled in:
+//     - the iPhone share sheet: Share → PropertySearch opens
+//       propertysearch://add?url=<listing link> (ios/App/ShareExtension)
+//     - the website: /?add=<listing link> (bookmarks, other apps)
+//     The link waits here until the Properties view (after log-in) takes it.
+//   * a link to our own website that iOS opened in the app (universal
+//     links), e.g. "Book a viewing" in an email: shows that page in the app.
 import { App as CapApp } from "@capacitor/app";
-import { isNativeApp } from "./platform";
+import { isNativeApp, liveSiteUrl } from "./platform";
+
+// Our website's host: links to it open here (universal links).
+const siteHost = new URL(liveSiteUrl).host;
 
 let pending = null;
 const listeners = new Set();
@@ -23,11 +28,27 @@ function offer(link) {
   listeners.forEach((fn) => fn(clean));
 }
 
+// A universal link: a link to our own website (e.g. "Book a viewing" in an
+// email) that iOS opened in the app instead of Safari. Show the same page
+// inside the app. The app's pages are routed by path, like the website.
+function openSitePage(parsed) {
+  const add = parsed.searchParams.get("add");
+  if (add) {
+    offer(add);
+    return;
+  }
+  const target = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (target !== here) window.location.assign(target);
+}
+
 function fromAppUrl(url) {
   try {
     const parsed = new URL(url);
     if (parsed.protocol === "propertysearch:" && (parsed.host === "add" || parsed.pathname.replace(/\//g, "") === "add")) {
       offer(parsed.searchParams.get("url"));
+    } else if (parsed.protocol === "https:" && parsed.host === siteHost) {
+      openSitePage(parsed);
     }
   } catch {
     // Not a URL we understand: ignore.
