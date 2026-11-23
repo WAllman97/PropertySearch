@@ -15,12 +15,13 @@ import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
 import { listingKey } from "./_lib/listing.js";
 import {
   BOOKING_ERRORS,
-  agentLabel,
   buyerIdentity,
   cancelSlotAndNotify,
+  cancelledIcs,
   clearCalendarViewing,
   loadSlot,
   sendBookingEmails,
+  sendCancelledToBuyer,
   setCalendarViewing,
   slotLabel,
 } from "./_lib/viewings.js";
@@ -148,29 +149,51 @@ async function handleCancel(req, res) {
   const when = slotLabel(slot);
   const agent = slot.agents;
 
+  // Both sides get the calendar update that removes the viewing.
+  const removal = cancelledIcs(slot, booking.id);
+
   if (by === "buyer") {
-    await sendEmail({
-      to: agent.email,
-      replyTo: booking.buyer_email,
-      subject: `Viewing cancelled: ${address}, ${when}`,
-      html: emailLayout(
-        "Viewing cancelled by the buyer",
-        `<p style="margin:0;">${escapeHtml(booking.buyer_name)} has cancelled their viewing of
-        <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. The space is free again.</p>`
-      ),
-    });
+    await Promise.all([
+      sendEmail({
+        to: agent.email,
+        replyTo: booking.buyer_email,
+        subject: `Viewing cancelled: ${address}, ${when}`,
+        html: emailLayout(
+          "Viewing cancelled by the buyer",
+          `<p style="margin:0;">${escapeHtml(booking.buyer_name)} has cancelled their viewing of
+          <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. The space is free again,
+          and the attached update takes it out of your calendar.</p>`
+        ),
+        ics: removal,
+      }),
+      sendEmail({
+        to: booking.buyer_email,
+        replyTo: agent.email,
+        subject: `Cancelled: ${address}, ${when}`,
+        html: emailLayout(
+          "Your viewing is cancelled",
+          `<p style="margin:0;">Your viewing of <strong>${escapeHtml(address)}</strong> on
+          ${escapeHtml(when)} is cancelled and the agent has been told. The attached update takes
+          it out of your calendar.</p>`
+        ),
+        ics: removal,
+      }),
+    ]);
   } else {
-    await sendEmail({
-      to: booking.buyer_email,
-      replyTo: agent.email,
-      subject: `Viewing cancelled: ${address}, ${when}`,
-      html: emailLayout(
-        "Your viewing has been cancelled",
-        `<p style="margin:0;">${escapeHtml(agentLabel(agent))} has cancelled your viewing of
-        <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. You can pick another
-        time in PropertySearch, or reply to this email to contact the agent.</p>`
-      ),
-    });
+    await Promise.all([
+      sendCancelledToBuyer({ slot, booking, base: appBaseUrl(req) }),
+      sendEmail({
+        to: agent.email,
+        subject: `Removed from your diary: ${address}, ${when}`,
+        html: emailLayout(
+          "Viewing cancelled",
+          `<p style="margin:0;">You cancelled ${escapeHtml(booking.buyer_name)}'s viewing of
+          <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. They've been told, and
+          the attached update takes it out of your calendar.</p>`
+        ),
+        ics: removal,
+      }),
+    ]);
   }
 
   return res.status(200).json({ success: true });
@@ -192,7 +215,7 @@ async function handleCancelSlot(req, res) {
     return res.status(200).json({ success: true });
   }
 
-  const cancelledBookings = await cancelSlotAndNotify(slot);
+  const cancelledBookings = await cancelSlotAndNotify(slot, appBaseUrl(req));
   return res.status(200).json({ success: true, cancelledBookings });
 }
 

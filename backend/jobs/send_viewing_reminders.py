@@ -101,5 +101,42 @@ def run_viewing_reminders():
             print(f"Push failed for {address} @ {when}: {error}")
 
 
+def mark_past_viewings_viewed():
+    """Move homes from "Viewing booked" to "Viewed" once the viewing is over.
+
+    Saves the buyer a tap; the Dashboard then asks how it went. Looks back a
+    few days only, so a missed run catches up without rescanning history.
+    """
+    now = datetime.now(timezone.utc)
+    result = (
+        supabase
+        .table("property_notes")
+        .select("property_id, viewing_datetime, properties(status)")
+        .gte("viewing_datetime", (now - timedelta(days=3)).isoformat())
+        .lte("viewing_datetime", (now - timedelta(hours=1)).isoformat())
+        .execute()
+    )
+    ids = [
+        row["property_id"]
+        for row in (result.data or [])
+        if (row.get("properties") or {}).get("status") == "viewing_booked"
+    ]
+    if not ids:
+        return
+    (
+        supabase.table("properties")
+        .update({"status": "viewed"})
+        .in_("id", ids)
+        .eq("status", "viewing_booked")
+        .execute()
+    )
+    print(f"Marked {len(ids)} home(s) as viewed.")
+
+
 if __name__ == "__main__":
+    try:
+        mark_past_viewings_viewed()
+    except Exception as error:
+        # Never let this stop the reminders.
+        print(f"Marking past viewings failed: {error}")
     run_viewing_reminders()

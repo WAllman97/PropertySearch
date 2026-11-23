@@ -175,7 +175,7 @@ async function confirm(request, start, req) {
     sendToUsers(ids, {
       title: "Viewing confirmed",
       body: `${address}, ${label}`,
-      url: `${base}/?view=calendar`,
+      url: "/?view=calendar",
     }),
   ]);
   return true;
@@ -436,7 +436,7 @@ export async function handleRespondRequest(req, res) {
           ),
         })
       ),
-      sendToUsers(ids, { title: "The agent suggested a time", body: `${address}: ${label}`, url: `${base}/?view=history` }),
+      sendToUsers(ids, { title: "The agent suggested a time", body: `${address}: ${label}`, url: "/?view=history" }),
     ]);
     return res.status(200).json({ success: true, status: "proposed" });
   }

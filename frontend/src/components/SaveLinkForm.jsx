@@ -131,11 +131,10 @@ function SaveLinkForm({ onSaved, initialUrl = null }) {
       if (notesError) console.error("Could not save the agent:", notesError);
     }
 
-    try {
-      await postAuthed("/api/calculate-commute", { propertyId: data.id });
-    } catch (err) {
-      console.error("Commute calculation failed:", err);
-    }
+    // Work out commutes in the background: no need to make them wait.
+    postAuthed("/api/calculate-commute", { propertyId: data.id }).catch((err) =>
+      console.error("Commute calculation failed:", err)
+    );
 
     setBusy(false);
     setUrl("");

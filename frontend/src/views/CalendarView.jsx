@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
 import BookingRequests from "../components/BookingRequests";
+import LoadError from "../components/LoadError";
+import { friendlyError } from "../lib/errors";
 
 function getMonthStart(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -156,6 +158,7 @@ function CalendarView() {
   const [viewings, setViewings] = useState([]);
   const [bookingRequests, setBookingRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [editingViewing, setEditingViewing] = useState(null);
   const [selectedViewing, setSelectedViewing] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -207,7 +210,9 @@ function CalendarView() {
 
     if (error) {
       console.error("Error loading viewings:", error);
+      setLoadError(error);
     } else {
+      setLoadError(null);
       setViewings(data || []);
     }
 
@@ -286,7 +291,7 @@ function CalendarView() {
       .eq("id", editingViewing.id);
 
     if (error) {
-      alert(error.message);
+      alert(friendlyError(error));
       return;
     }
 
@@ -302,6 +307,8 @@ function CalendarView() {
       </section>
     );
   }
+
+  if (loadError) return <LoadError error={loadError} onRetry={() => loadViewings()} />;
 
   return (
     <section className="card">

@@ -22,6 +22,51 @@ export async function resendConfirmation({ email, password, next = "/" }) {
 export function CheckYourEmail({ email, password, next = "/", afterLogin = false, onBack }) {
   const [state, setState] = useState("idle"); // idle | sending | sent | error
   const [note, setNote] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  // Try logging in with the details they just typed. Works as soon as the
+  // email is confirmed, wherever they tapped the link (another browser, a
+  // laptop), and signing in moves the app on by itself. -> true if in.
+  async function tryLogIn() {
+    if (!email || !password) return false;
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    return !error;
+  }
+
+  // Check when they come back to this screen (after tapping the link in
+  // their mail app) and every 15 seconds for 10 minutes. Gentle enough for
+  // Supabase's log-in rate limit.
+  useEffect(() => {
+    if (!password) return undefined;
+    let stopped = false;
+    const check = () => {
+      if (!stopped && document.visibilityState === "visible") tryLogIn();
+    };
+    const timer = setInterval(check, 15000);
+    const stop = setTimeout(() => clearInterval(timer), 10 * 60 * 1000);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      clearTimeout(stop);
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+    // Only for these details.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, password]);
+
+  async function continueNow() {
+    setChecking(true);
+    setNote("");
+    const ok = await tryLogIn();
+    setChecking(false);
+    if (!ok) {
+      setState("idle");
+      setNote("Not confirmed yet. Tap the link in the email, then come back here.");
+    }
+  }
 
   async function resend() {
     setState("sending");
@@ -48,8 +93,16 @@ export function CheckYourEmail({ email, password, next = "/", afterLogin = false
         <strong>{email}</strong>. Tap it to confirm your email and{" "}
         {afterLogin ? "you'll be logged in." : "finish setting up your account."}
       </p>
-      <p className="muted">The link expires in an hour. Can't find it? Check your spam or junk folder.</p>
+      <p className="muted">
+        Once you've tapped it, this screen moves on by itself. The link expires in an hour. Can't
+        find it? Check your spam or junk folder.
+      </p>
       <div className="check-email-actions">
+        {password && (
+          <button type="button" className="primary-button" disabled={checking} onClick={continueNow}>
+            {checking ? "Checking..." : "I've confirmed, continue"}
+          </button>
+        )}
         <button
           type="button"
           className="secondary-button"

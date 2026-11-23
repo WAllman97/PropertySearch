@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { isProceedable } from "../components/BuyerPositionSettings";
 import { proofLabel } from "../components/PositionProof";
+import LoadError from "../components/LoadError";
 import "./DashboardView.css";
 
 // The buyer's "what needs my attention" page: things to act on, what's coming
@@ -38,7 +39,7 @@ async function loadEverything() {
   const weekAgo = new Date(now - 7 * DAY).toISOString();
   const weekAhead = new Date(now.getTime() + 7 * DAY).toISOString();
 
-  const [homes, viewings, requests, offers, position] = await Promise.all([
+  const [homes, viewings, requests, offers, position, recent] = await Promise.all([
     supabase
       .from("properties")
       .select("id, address, title, price, initial_price, status, listing_status, last_price_change_at"),
@@ -56,7 +57,17 @@ async function loadEverything() {
       .order("starts_at"),
     supabase.from("offers").select("id, property_id, amount, status, reported_at").neq("status", "withdrawn"),
     supabase.from("buyer_positions").select("*").maybeSingle(),
+    // Viewings in the last fortnight, for "How did it go?".
+    supabase
+      .from("property_notes")
+      .select("id, viewing_datetime, positives, negatives, general_notes, properties ( id, address, title, status )")
+      .gte("viewing_datetime", new Date(now - 14 * DAY).toISOString())
+      .lt("viewing_datetime", now.toISOString())
+      .order("viewing_datetime", { ascending: false }),
   ]);
+  // A failed load should say so, not look like an empty dashboard.
+  const failed = [homes, viewings, requests, offers].find((r) => r.error);
+  if (failed) throw failed.error;
 
   const allHomes = homes.data || [];
   const changed = allHomes.filter(
@@ -88,6 +99,15 @@ async function loadEverything() {
     requests: requests.data || [],
     offers: offers.data || [],
     position: position.data || null,
+    // Been to see it, nothing written down yet.
+    toReview: (recent.data || []).filter(
+      (v) =>
+        v.properties &&
+        ["viewing_booked", "viewed"].includes(v.properties.status) &&
+        !v.positives &&
+        !v.negatives &&
+        !v.general_notes
+    ),
   };
 }
 
@@ -108,19 +128,23 @@ function DashboardView({ onNavigate }) {
   // Last tidy-up, so it can be undone: [{ id, status }] as they were before.
   const [undo, setUndo] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
   const load = useCallback(() => {
+    setLoadError(null);
     loadEverything()
       .then(setData)
       .catch((error) => {
         console.error("Error loading dashboard:", error);
-        setData({ homes: [], drops: [], viewings: [], requests: [], offers: [], position: null });
+        setLoadError(error);
       });
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  if (loadError && !data) return <LoadError error={loadError} onRetry={load} />;
 
   if (!data) {
     return (
@@ -147,6 +171,22 @@ function DashboardView({ onNavigate }) {
       }`,
       action: "Answer",
       onClick: go("calendar"),
+    });
+  }
+  // Been to a viewing and written nothing down: ask while it's fresh.
+  for (const v of data.toReview || []) {
+    const home = v.properties;
+    needs.push({
+      key: `review-${v.id}`,
+      tone: "act",
+      text: `How did ${place(home)} go? Jot down what you liked while it's fresh`,
+      action: "Add notes",
+      onClick: async () => {
+        if (home.status === "viewing_booked") {
+          await supabase.from("properties").update({ status: "viewed" }).eq("id", home.id);
+        }
+        onNavigate?.("history");
+      },
     });
   }
   for (const o of data.offers) {

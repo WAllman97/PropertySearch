@@ -9,6 +9,7 @@ export const BOOKING_ERRORS = {
   SLOT_PAST: [410, "That time has already passed."],
   SLOT_FULL: [409, "Sorry, that time has just been taken. Please pick another."],
   ALREADY_BOOKED: [409, "You already have a viewing booked for this property."],
+  LISTING_CLOSED: [410, "Sorry, this home is no longer taking viewings (it's sold or off the market)."],
 };
 
 export function slotLabel(slot) {
@@ -157,6 +158,15 @@ export async function setCalendarViewing(propertyId, slot, agent) {
     { onConflict: "property_id" }
   );
   if (error) console.error("Could not add viewing to calendar:", error);
+
+  // Move the home along to "Viewing booked", so the buyer doesn't have to.
+  // Only from the early stages: never undo "Viewed" or an offer.
+  const { error: stageError } = await supabaseAdmin
+    .from("properties")
+    .update({ status: "viewing_booked" })
+    .eq("id", propertyId)
+    .or("status.is.null,status.in.(new,favourite)");
+  if (stageError) console.error("Could not set Viewing booked:", stageError);
 }
 
 // Take a booked viewing back out of the household calendar.
@@ -170,10 +180,71 @@ export async function clearCalendarViewing(propertyId, slot) {
   if (error) console.error("Could not clear calendar viewing:", error);
 }
 
+// The calendar update that removes a cancelled viewing (same event as the
+// invite sent at booking, whose UID is the booking id).
+export function cancelledIcs(slot, bookingId) {
+  return buildIcs({
+    uid: bookingId,
+    start: new Date(slot.starts_at),
+    end: new Date(slot.ends_at),
+    summary: `Cancelled: viewing at ${slot.agent_listings.address}`,
+    description: "This viewing has been cancelled.",
+    location: slot.agent_listings.address,
+    cancelled: true,
+  });
+}
+
+// "Pick another time": the listing's booking page, with the buyer's own
+// one-tap link if the agent sent them this home (migration 025).
+async function rebookUrl(slot, booking, base) {
+  let token = null;
+  if (booking.buyer_id) {
+    const { data } = await supabaseAdmin
+      .from("listing_sends")
+      .select("book_token")
+      .eq("listing_id", slot.listing_id)
+      .eq("user_id", booking.buyer_id)
+      .maybeSingle();
+    token = data?.book_token || null;
+  }
+  return `${base}/viewings/${slot.listing_id}${token ? `?b=${token}` : ""}`;
+}
+
+// The agent cancelled a buyer's viewing: tell them, take it out of their
+// calendar, and give them one tap to pick another time.
+export async function sendCancelledToBuyer({ slot, booking, base }) {
+  const address = slot.agent_listings.address;
+  const when = slotLabel(slot);
+  const agent = slot.agents;
+  const status = slot.agent_listings.market_status;
+  const stillOn = !status || status === "available" || status === "under_offer";
+  const url = stillOn && base ? await rebookUrl(slot, booking, base) : null;
+
+  return sendEmail({
+    to: booking.buyer_email,
+    replyTo: agent.email,
+    subject: `Viewing cancelled: ${address}, ${when}`,
+    html: emailLayout(
+      "Your viewing has been cancelled",
+      `<p style="margin:0 0 16px;">${escapeHtml(agentLabel(agent))} has cancelled the viewing of
+      <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}.${
+        stillOn ? "" : " The home is no longer on the market."
+      } The attached update takes it out of your calendar.</p>
+      ${
+        url
+          ? `<p style="margin:0 0 16px;"><a href="${escapeHtml(url)}" style="background:#223a33;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">Pick another time</a></p>`
+          : ""
+      }
+      <p style="margin:0;color:#6b7280;font-size:13px;">Reply to this email to contact the agent.</p>`
+    ),
+    ics: cancelledIcs(slot, booking.id),
+  });
+}
+
 // The agent withdraws a time: cancel it and every booking on it, and tell
 // each buyer. Used by "Cancel time" and by agent account deletion.
 // Returns how many bookings were cancelled.
-export async function cancelSlotAndNotify(slot) {
+export async function cancelSlotAndNotify(slot, base, { notifyAgent = true } = {}) {
   const now = new Date().toISOString();
 
   await supabaseAdmin.from("viewing_slots").update({ cancelled_at: now }).eq("id", slot.id);
@@ -192,18 +263,25 @@ export async function cancelSlotAndNotify(slot) {
   await Promise.all(
     (cancelled || []).map(async (booking) => {
       await clearCalendarViewing(booking.property_id, slot);
-      await sendEmail({
-        to: booking.buyer_email,
-        replyTo: agent.email,
-        subject: `Viewing cancelled: ${address}, ${when}`,
-        html: emailLayout(
-          "Your viewing has been cancelled",
-          `<p style="margin:0;">${escapeHtml(agentLabel(agent))} has cancelled the viewing of
-          <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. You can pick another
-          time in PropertySearch, or reply to this email to contact the agent.</p>`
-        ),
-      });
+      await sendCancelledToBuyer({ slot, booking, base });
     })
+  );
+  // The agent's own diary entries go too (not when they're deleting their
+  // account: there's no diary to keep tidy).
+  await Promise.all(
+    (notifyAgent ? cancelled || [] : []).map((booking) =>
+      sendEmail({
+        to: agent.email,
+        subject: `Removed from your diary: ${address}, ${when}`,
+        html: emailLayout(
+          "Viewing cancelled",
+          `<p style="margin:0;">You cancelled ${escapeHtml(booking.buyer_name)}'s viewing of
+          <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. The attached update
+          removes it from your calendar.</p>`
+        ),
+        ics: cancelledIcs(slot, booking.id),
+      })
+    )
   );
 
   return cancelled?.length || 0;

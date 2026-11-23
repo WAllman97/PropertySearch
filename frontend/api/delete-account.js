@@ -13,6 +13,7 @@
 // listings, times and bookings (migration 006).
 import { householdMemberIds, requireUser, supabaseAdmin } from "./_lib/household.js";
 import { cancelSlotAndNotify, loadSlot } from "./_lib/viewings.js";
+import { appBaseUrl } from "./_lib/booking.js";
 import { withCors } from "./_lib/cors.js";
 
 export default withCors(handler);
@@ -74,7 +75,7 @@ async function handler(req, res) {
 
     for (const { id } of slots || []) {
       const slot = await loadSlot(id);
-      if (slot) await cancelSlotAndNotify(slot);
+      if (slot) await cancelSlotAndNotify(slot, appBaseUrl(req), { notifyAgent: false });
     }
   }
 

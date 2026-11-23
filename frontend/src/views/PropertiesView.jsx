@@ -10,6 +10,8 @@ import SaveLinkForm from "../components/SaveLinkForm";
 import { onSharedLink, takeSharedLink } from "../lib/sharedLinks";
 import GettingStarted from "../components/GettingStarted";
 import PropertyTile from "../components/PropertyTile";
+import LoadError from "../components/LoadError";
+import { friendlyError } from "../lib/errors";
 import { applyMarketView } from "../utils/market";
 
 function getPropertyAgeDays(property) {
@@ -36,10 +38,11 @@ function getAgeClass(days) {
   return "age-old";
 }
 
-function PropertiesView({ onOpenSettings }) {
+function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
   const { byProperty: viewingsByProperty, requestsByProperty, reload: reloadViewings } = useAvailableViewings();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   // A link shared to the app (Share → PropertySearch, or /?add=) to fill in.
   const [addLink, setAddLink] = useState(null);
@@ -62,6 +65,10 @@ function PropertiesView({ onOpenSettings }) {
   const [openId, setOpenId] = useState(null);
   // "Added to Watchlist" note with Undo after a one-tap favourite.
   const [favNote, setFavNote] = useState(null);
+  // "Saved to your Watchlist" after adding a home by its link, and a count
+  // of saves so the getting-started checklist re-checks itself.
+  const [savedNote, setSavedNote] = useState(null);
+  const [saves, setSaves] = useState(0);
 
   const [shareProperty, setShareProperty] = useState(null);
   const [shareEmail, setShareEmail] = useState(
@@ -86,7 +93,9 @@ function PropertiesView({ onOpenSettings }) {
 
     if (error) {
       console.error("Error loading properties:", error);
+      setLoadError(error);
     } else {
+      setLoadError(null);
       setProperties(data || []);
     }
 
@@ -110,12 +119,12 @@ function PropertiesView({ onOpenSettings }) {
 
     if (error) {
       console.error("Error updating property:", error);
-      alert(error.message);
+      alert(friendlyError(error));
       return;
     }
 
     if (!data || data.length === 0) {
-      alert("No rows updated. Check listing_id.");
+      alert("That home couldn't be updated. Please refresh and try again.");
       return;
     }
 
@@ -139,7 +148,7 @@ function PropertiesView({ onOpenSettings }) {
       .update({ status: "favourite" })
       .eq("id", property.id);
     if (error) {
-      alert(error.message);
+      alert(friendlyError(error));
       return;
     }
     setProperties((current) => current.filter((p) => p.id !== property.id));
@@ -155,7 +164,7 @@ function PropertiesView({ onOpenSettings }) {
       .update({ status: property.status || "new" })
       .eq("id", property.id);
     if (error) {
-      alert(error.message);
+      alert(friendlyError(error));
       return;
     }
     await loadProperties();
@@ -167,6 +176,12 @@ function PropertiesView({ onOpenSettings }) {
     const timer = setTimeout(() => setFavNote(null), 6000);
     return () => clearTimeout(timer);
   }, [favNote]);
+
+  useEffect(() => {
+    if (!savedNote) return undefined;
+    const timer = setTimeout(() => setSavedNote(null), 8000);
+    return () => clearTimeout(timer);
+  }, [savedNote]);
 
   function openShareModal(property) {
     setShareProperty(property);
@@ -228,10 +243,12 @@ function PropertiesView({ onOpenSettings }) {
     );
   }
 
+  if (loadError) return <LoadError error={loadError} onRetry={loadProperties} />;
+
   return (
     <>
     <GettingStarted
-      refreshKey={properties.length}
+      refreshKey={`${properties.length}:${saves}`}
       onAddHome={() => setShowAddModal(true)}
       onOpenSettings={onOpenSettings}
     />
@@ -277,9 +294,13 @@ function PropertiesView({ onOpenSettings }) {
             <SaveLinkForm
               key={addLink || "blank"}
               initialUrl={addLink}
-              onSaved={async () => {
+              onSaved={async (saved) => {
                 setShowAddModal(false);
                 setAddLink(null);
+                // Saved homes go to the Watchlist, not this list: say so,
+                // with a way to go and see it.
+                setSavedNote(saved || {});
+                setSaves((n) => n + 1);
                 await loadProperties();
               }}
             />
@@ -489,6 +510,17 @@ function PropertiesView({ onOpenSettings }) {
         <button type="button" className="link-button" onClick={undoFavourite}>
           Undo
         </button>
+      </div>
+    )}
+
+    {savedNote && !favNote && (
+      <div className="toast" role="status">
+        <span>✅ Saved{savedNote.address ? `: ${savedNote.address}` : ""}. It's in your Watchlist.</span>
+        {onOpenWatchlist && (
+          <button type="button" className="link-button" onClick={onOpenWatchlist}>
+            View
+          </button>
+        )}
       </div>
     )}
     </>
