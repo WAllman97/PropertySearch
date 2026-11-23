@@ -1,7 +1,9 @@
 // Public booking for an agent's share link: /viewings/<listing id>. No login.
-//   GET  ?listing=<id>                 listing, agent and open times
+//   GET  ?listing=<id>[&b=<token>]     listing, agent and open times; with the
+//                                      private token from a "new match" email,
+//                                      also that buyer's details to fill in
 //   GET  ?cancel=<token>               a guest booking, for the cancel page
-//   POST { action: "book", listingId, slotId, name, email, phone }
+//   POST { action: "book", listingId, slotId, name, email, phone, b? }
 //   POST { action: "cancel", token }   guest cancels with the link in their email
 //
 // Only what an agent already advertises is exposed (address, price, their
@@ -10,7 +12,15 @@
 import { supabaseAdmin } from "./_lib/household.js";
 import { appBaseUrl } from "./_lib/booking.js";
 import { emailLayout, escapeHtml, sendEmail } from "./_lib/email.js";
-import { BOOKING_ERRORS, loadSlot, sendBookingEmails, slotLabel } from "./_lib/viewings.js";
+import {
+  BOOKING_ERRORS,
+  buyerIdentity,
+  loadSlot,
+  sendBookingEmails,
+  setCalendarViewing,
+  slotLabel,
+} from "./_lib/viewings.js";
+import { listingKey } from "./_lib/listing.js";
 import { withCors } from "./_lib/cors.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,9 +45,46 @@ async function loadListing(listingId) {
   return data?.is_active ? data : null;
 }
 
+// The buyer a "new match" email went to, from the private ?b=<token> on its
+// booking link (migration 025). Only valid for that one listing.
+// -> { user, identity, propertyId } or null.
+async function buyerFromToken(listing, token) {
+  if (!UUID_RE.test(String(token || ""))) return null;
+  const { data: send, error } = await supabaseAdmin
+    .from("listing_sends")
+    .select("user_id")
+    .eq("listing_id", listing.id)
+    .eq("book_token", token)
+    .maybeSingle();
+  if (error || !send) return null;
+
+  const [{ data: found }, { data: member }] = await Promise.all([
+    supabaseAdmin.auth.admin.getUserById(send.user_id),
+    supabaseAdmin.from("household_members").select("household_id").eq("user_id", send.user_id).maybeSingle(),
+  ]);
+  const user = found?.user;
+  if (!user?.email) return null;
+
+  // Their household's saved copy of this home (added when the listing was
+  // sent), so the viewing lands in their PropertySearch calendar.
+  let propertyId = null;
+  const key = listingKey(listing.listing_url);
+  if (member && key) {
+    const { data: saved } = await supabaseAdmin
+      .from("properties")
+      .select("id, listing_url")
+      .eq("household_id", member.household_id)
+      .ilike("listing_url", `%${key.split(":")[1]}%`);
+    propertyId = (saved || []).find((p) => listingKey(p.listing_url) === key)?.id || null;
+  }
+
+  return { user, identity: await buyerIdentity(user), propertyId };
+}
+
 async function handleGetListing(req, res) {
   const listing = await loadListing(req.query.listing);
   if (!listing) return res.status(404).json({ error: "This booking link isn't active" });
+  const buyer = req.query.b ? await buyerFromToken(listing, req.query.b) : null;
 
   const { data: slots } = await supabaseAdmin
     .from("viewing_slots")
@@ -75,6 +122,10 @@ async function handleGetListing(req, res) {
       listingUrl: listing.listing_url,
       agent: listing.agents,
     },
+    // Filled in for the buyer the email went to, so they just pick a time.
+    buyer: buyer
+      ? { name: buyer.identity.name, email: buyer.user.email, phone: buyer.identity.phone }
+      : null,
     slots: (slots || [])
       .map((s) => ({
         id: s.id,
@@ -119,9 +170,14 @@ async function handleBook(req, res) {
   // Honeypot: real users never see or fill this field.
   if (body.website) return res.status(200).json({ success: true });
 
-  const name = clean(body.name, 100);
-  const email = clean(body.email, 254);
-  const phone = clean(body.phone, 40);
+  // From their "new match" email: we know who they are.
+  const tokenListing = body.b ? await loadListing(body.listingId) : null;
+  const buyer = tokenListing ? await buyerFromToken(tokenListing, body.b) : null;
+
+  const name = buyer ? clean(body.name, 100) || buyer.identity.name : clean(body.name, 100);
+  // A known buyer always books under their account email.
+  const email = buyer ? buyer.user.email : clean(body.email, 254);
+  const phone = clean(body.phone, 40) || (buyer ? buyer.identity.phone : "");
 
   if (name === null || email === null || phone === null) {
     return res.status(400).json({ error: "Please check your details" });
@@ -154,11 +210,11 @@ async function handleBook(req, res) {
 
   const { data: bookingId, error } = await supabaseAdmin.rpc("book_viewing", {
     p_slot: slot.id,
-    p_buyer: null,
+    p_buyer: buyer?.user.id ?? null,
     p_name: name,
     p_email: email.toLowerCase(),
     p_phone: phone,
-    p_property: null,
+    p_property: buyer?.propertyId ?? null,
   });
 
   if (error) {
@@ -179,13 +235,15 @@ async function handleBook(req, res) {
 
   const base = appBaseUrl(req);
   const cancelUrl = `${base}/viewings/${listing.id}?cancel=${booking.cancel_token}`;
+  const inCalendar = Boolean(buyer?.propertyId);
+  if (inCalendar) await setCalendarViewing(buyer.propertyId, slot, slot.agents);
 
   await sendBookingEmails({
     slot,
     bookingId,
     buyer: { name, email, phone },
     base,
-    inCalendar: false,
+    inCalendar,
     cancelUrl,
   });
 

@@ -16,10 +16,12 @@ import { listingKey } from "./_lib/listing.js";
 import {
   BOOKING_ERRORS,
   agentLabel,
+  buyerIdentity,
   cancelSlotAndNotify,
   clearCalendarViewing,
   loadSlot,
   sendBookingEmails,
+  setCalendarViewing,
   slotLabel,
 } from "./_lib/viewings.js";
 import { withCors } from "./_lib/cors.js";
@@ -33,37 +35,6 @@ import {
 } from "./_lib/viewing-requests.js";
 
 const MAX_BOOKINGS_PER_DAY = 20;
-
-async function buyerIdentity(user) {
-  const { data: page } = await supabaseAdmin
-    .from("booking_pages")
-    .select("display_name, phone")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const meta = user.user_metadata || {};
-  return {
-    name: page?.display_name || meta.full_name || meta.name || user.email.split("@")[0],
-    phone: page?.phone || "",
-  };
-}
-
-// Put the viewing in the household calendar, or take it out again.
-async function setCalendarViewing(propertyId, slot, agent) {
-  if (!propertyId) return;
-  const { error } = await supabaseAdmin.from("property_notes").upsert(
-    {
-      property_id: propertyId,
-      viewing_datetime: slot.starts_at,
-      estate_agent: agentLabel(agent),
-      estate_agent_email: agent.email,
-      estate_agent_phone: agent.phone,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "property_id" }
-  );
-  if (error) console.error("Could not add viewing to calendar:", error);
-}
 
 async function handleBook(req, res) {
   const user = await requireHouseholdUser(req, res);
