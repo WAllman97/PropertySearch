@@ -1336,3 +1336,42 @@
   background: #e8efe9;
   color: #223a33;
 }
+
+/* Time PropertySearch saved this agent (migration 030) */
+.agent-time-saved {
+  padding: 12px 16px;
+}
+
+.agent-time-saved-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-time-saved-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 6px;
+}
+
+.agent-time-saved-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid #eef0ec;
+}
+
+.agent-time-saved .small {
+  font-size: 12px;
+  margin: 0;
+}
