@@ -369,6 +369,8 @@ function AgentAuth() {
 
       <p className="muted agent-auth-foot">
         New to PropertySearch? <a href="/agents">See how it works for agents</a>.
+        <br />
+        Buying a home? <a href="/">Log in to the buyer app</a>.
       </p>
     </div>
   );
@@ -1975,6 +1977,7 @@ function DeleteAccount() {
 function AgentPortal() {
   const [user, setUser] = useState(undefined);
   const [agent, setAgent] = useState(undefined);
+  const [isBuyer, setIsBuyer] = useState(false);
   // Arrived from a password-reset email: ask for the new password first.
   const [settingPassword, setSettingPassword] = useState(arrivedFromPasswordReset);
   const [passwordChanged, setPasswordChanged] = useState(false);
@@ -1995,8 +1998,13 @@ function AgentPortal() {
       setAgent(null);
       return;
     }
-    const { data } = await supabase.from("agents").select("*").eq("user_id", user.id).maybeSingle();
+    const [{ data }, { data: member }] = await Promise.all([
+      supabase.from("agents").select("*").eq("user_id", user.id).maybeSingle(),
+      supabase.rpc("is_household_member"),
+    ]);
     setAgent(data || null);
+    // Also a buyer (same login): offer a way back to the buyer app.
+    setIsBuyer(member === true);
   }, [user]);
 
   useEffect(() => {
@@ -2010,15 +2018,22 @@ function AgentPortal() {
           <p className="eyebrow">PropertySearch for agents</p>
           <h1>{agent ? agent.name : "Viewing bookings"}</h1>
         </div>
-        {user && (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => supabase.auth.signOut({ scope: "local" })}
-          >
-            Log Out
-          </button>
-        )}
+        <div className="agent-header-actions">
+          {user && isBuyer && (
+            <a className="secondary-button" href="/">
+              ← Buyer app
+            </a>
+          )}
+          {user && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => supabase.auth.signOut({ scope: "local" })}
+            >
+              Log Out
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="app-main">

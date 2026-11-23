@@ -105,6 +105,7 @@ function MainApp() {
   const [user, setUser] = useState(null);
   const [settingPassword, setSettingPassword] = useState(arrivedFromPasswordReset);
   const [passwordChanged, setPasswordChanged] = useState(false);
+  const [isAgent, setIsAgent] = useState(false);
   const [invite] = useState(getInviteCode);
   // Settings card to scroll to when another view links there.
   const [settingsFocus, setSettingsFocus] = useState(null);
@@ -143,6 +144,8 @@ function MainApp() {
         supabase.from("agents").select("user_id").eq("user_id", user.id).maybeSingle(),
       ]);
       if (agent && isMember === false) window.location.replace("/agent");
+      // Buyer who is also an agent: offer a way across to the agent area.
+      setIsAgent(Boolean(agent));
     })();
   }, [user]);
 
@@ -173,6 +176,12 @@ function MainApp() {
           <p className="eyebrow">PropertySearch</p>
           <h1>Home-buying command centre</h1>
         </div>
+
+        {signedIn && isAgent && (
+          <a className="secondary-button header-switch" href="/agent">
+            Agent area →
+          </a>
+        )}
 
         {/* On a phone this lives at the bottom of Settings instead. */}
         {signedIn && (

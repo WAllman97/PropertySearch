@@ -610,6 +610,24 @@
   color: var(--primary);
 }
 
+/* Header: switch to the buyer app, log out */
+.agent-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-header-actions a,
+.header-switch {
+  text-decoration: none;
+}
+
+/* Buyer app header: sits left of Log Out (hidden on phones, so keep a gap). */
+.header-switch {
+  margin-left: auto;
+  margin-right: 8px;
+}
+
 .agent-forgot {
   display: block;
   margin: 10px auto 0;
