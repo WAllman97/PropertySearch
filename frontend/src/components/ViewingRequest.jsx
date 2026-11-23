@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
+import { liveSiteUrl } from "../lib/platform";
 
 // Ask the agent for a viewing when they aren't on PropertySearch (migration
 // 023): pick up to three times, we email the agent a link to confirm one,
@@ -44,6 +45,8 @@ function RequestForm({ property, onSent, onCancel }) {
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // No agent email: the ready message for the buyer to send themselves.
+  const [share, setShare] = useState(null); // { url, text, copied? }
 
   // Fill in the agent from the home's notes.
   useEffect(() => {
@@ -100,24 +103,79 @@ function RequestForm({ property, onSent, onCancel }) {
       setError(result.error || "Could not send the request");
       return;
     }
+    if (result.shareText) {
+      setShare({ url: result.shareUrl, text: result.shareText });
+      return;
+    }
     onSent();
+  }
+
+  async function shareIt() {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: share.text });
+        return;
+      }
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+    }
+    copyIt();
+  }
+
+  async function copyIt() {
+    try {
+      await navigator.clipboard.writeText(share.text);
+      setShare({ ...share, copied: true });
+    } catch {
+      setError("Couldn't copy. Press and hold the message to copy it.");
+    }
+  }
+
+  // Sent without an email: hand it over to the buyer to send.
+  if (share) {
+    return (
+      <div className="viewing-request-form viewing-request-share">
+        <p>
+          <strong>Your request is ready. Send it to the agent:</strong> paste it into the listing's
+          "Email agent" form, or send it by WhatsApp or text. They confirm a time in one tap, and it
+          goes in your calendar.
+        </p>
+        <textarea readOnly rows={6} value={share.text} onFocus={(e) => e.target.select()} />
+        <div className="viewing-request-actions">
+          <button type="button" className="primary-button" onClick={shareIt}>
+            Share
+          </button>
+          <button type="button" className="secondary-button" onClick={copyIt}>
+            {share.copied ? "Copied" : "Copy message"}
+          </button>
+          {property.listing_url && (
+            <a className="link-button" href={property.listing_url} target="_blank" rel="noreferrer">
+              Open the listing
+            </a>
+          )}
+          <button type="button" className="link-button" onClick={onSent}>
+            Done
+          </button>
+        </div>
+        {error && <p className="booking-error">{error}</p>}
+      </div>
+    );
   }
 
   return (
     <form className="viewing-request-form" onSubmit={submit}>
       <p className="viewing-note">
-        We email the agent your times. They confirm one with a tap, or suggest another, and it goes in
-        your calendar. They see your name, email and phone, and your buying position if you share it
-        with agents.
+        The agent gets your times and confirms one with a tap, or suggests another, and it goes in your
+        calendar. They see your name, email and phone, and your buying position if you share it with
+        agents.
       </p>
       <div className="viewing-request-grid">
         <label>
-          Agent's email *
+          Agent's email (if you have it)
           <input
             type="email"
-            required
             maxLength={254}
-            placeholder="On the listing, or from their emails"
+            placeholder="Leave blank and we'll give you a message to send"
             value={form.agentEmail}
             onChange={set("agentEmail")}
           />
@@ -153,7 +211,7 @@ function RequestForm({ property, onSent, onCancel }) {
         </label>
         <label>
           Your phone (for the agent)
-          <input type="tel" maxLength={40} value={form.phone} onChange={set("phone")} />
+          <input type="tel" autoComplete="tel" maxLength={40} value={form.phone} onChange={set("phone")} />
         </label>
       </div>
       <label className="viewing-request-message">
@@ -168,7 +226,7 @@ function RequestForm({ property, onSent, onCancel }) {
       </label>
       <div className="viewing-request-actions">
         <button type="submit" className="primary-button" disabled={busy}>
-          {busy ? "Sending..." : "Send request"}
+          {busy ? "Sending..." : form.agentEmail.trim() ? "Send request" : "Create request"}
         </button>
         <button type="button" className="link-button" onClick={onCancel}>
           Cancel
@@ -183,7 +241,7 @@ function ViewingRequest({ property, request, onChanged }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const agent = request?.agent_name || request?.agent_email;
+  const agent = request?.agent_name || request?.agent_email || "the agent";
 
   async function act(body, confirmText) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -209,6 +267,24 @@ function ViewingRequest({ property, request, onChanged }) {
               <span className="request-chip waiting">Waiting for the agent</span> Sent to {agent}:{" "}
               {request.options.map(when).join(" · ")}
             </span>
+            {/* Sent by the buyer themselves: let them send the link again. */}
+            {!request.agent_email && request.token && (
+              <button
+                type="button"
+                className="link-button"
+                onClick={async () => {
+                  const text = `I'd like to view ${property.address}. You can confirm a time in one tap here: ${liveSiteUrl}/request/${request.token}`;
+                  try {
+                    if (navigator.share) await navigator.share({ text });
+                    else await navigator.clipboard.writeText(text);
+                  } catch {
+                    // Cancelled the share sheet: nothing to do.
+                  }
+                }}
+              >
+                Send again
+              </button>
+            )}
             <button
               type="button"
               className="link-button"

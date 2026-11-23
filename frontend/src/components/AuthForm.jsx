@@ -121,8 +121,11 @@ function AuthForm({ invite = null }) {
     // PASSWORD_RECOVERY event and shows the "set a new password" screen.
     // This URL must be listed under Authentication -> URL Configuration ->
     // Redirect URLs in Supabase, otherwise the Site URL is used instead.
+    // The email template (docs/email-templates/reset-password.html) links to
+    // this address plus the one-time code, straight to our site, so the reset
+    // opens and finishes in the iPhone app (views/ResetPasswordPage.jsx).
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: siteUrl,
+      redirectTo: `${siteUrl}/reset/buyer`,
     });
 
     setLoading(false);

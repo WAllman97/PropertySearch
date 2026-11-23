@@ -14,6 +14,7 @@ import { emailLayout, escapeHtml, sendEmail } from "./email.js";
 import { listingKey } from "./listing.js";
 import { agentLabel, detailRow } from "./viewings.js";
 import { sendToUsers } from "./push.js";
+import { emailPrefs, unsubscribeFooter, unsubscribeLinks } from "./email-prefs.js";
 
 // Homes the household has written off: keep them in step, but no alert.
 const DISMISSED = ["ignored", "archived", "lost"];
@@ -21,9 +22,16 @@ const MAX_UPDATES_PER_DAY = 40;
 
 const pounds = (n) => `£${Number(n).toLocaleString("en-GB")}`;
 
-async function memberEmails(ids) {
-  const users = await Promise.all(ids.map((id) => supabaseAdmin.auth.admin.getUserById(id)));
-  return users.map((u) => u.data?.user?.email).filter(Boolean);
+// Each member's email and their price-cut email setting (migration 028).
+async function memberRecipients(ids) {
+  const [users, prefs] = await Promise.all([
+    Promise.all(ids.map((id) => supabaseAdmin.auth.admin.getUserById(id))),
+    emailPrefs(ids),
+  ]);
+  return users
+    .map((u) => u.data?.user)
+    .filter((u) => u?.email && prefs.get(u.id)?.price_drops !== false)
+    .map((u) => ({ email: u.email, token: prefs.get(u.id)?.token || null }));
 }
 
 export async function handlePriceUpdate(req, res, listing, agentId) {
@@ -63,7 +71,7 @@ export async function handlePriceUpdate(req, res, listing, agentId) {
   await Promise.all(
     [...cutsByHousehold.entries()].map(async ([householdId, cuts]) => {
       const ids = await householdMemberIds(householdId);
-      const emails = await memberEmails(ids);
+      const recipients = await memberRecipients(ids);
       const cut = cuts[0];
       // Homes still "new" are on the Properties tab; the rest on the Watchlist.
       const view = !cut.status || cut.status === "new" ? "properties" : "history";
@@ -76,9 +84,11 @@ export async function handlePriceUpdate(req, res, listing, agentId) {
           body: `${place}: now ${pounds(price)} (down ${pounds(drop)})`,
           url: `/?view=${view}`,
         }),
-        ...emails.map((to) =>
-          sendEmail({
+        ...recipients.map(({ email: to, token }) => {
+          const unsubscribe = unsubscribeLinks(base, token, "price_drops");
+          return sendEmail({
             to,
+            unsubscribe,
             replyTo: listing.agents?.email,
             subject: `Price reduced: ${place}, now ${pounds(price)}`,
             html: emailLayout(
@@ -91,10 +101,11 @@ export async function handlePriceUpdate(req, res, listing, agentId) {
                 ${detailRow("Agent", escapeHtml(agent))}
               </table>
               <p style="margin:0;"><a href="${escapeHtml(base)}/?view=${view}" style="color:#223a33;font-weight:bold;">Open it in PropertySearch</a>.
-              The agent's viewing times are there if you'd like another look. Reply to this email to reach the agent.</p>`
+              The agent's viewing times are there if you'd like another look. Reply to this email to reach the agent.</p>
+              ${unsubscribeFooter(unsubscribe, "price_drops")}`
             ),
-          })
-        ),
+          });
+        }),
       ]);
     })
   );

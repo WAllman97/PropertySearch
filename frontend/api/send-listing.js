@@ -22,6 +22,7 @@ import { withCors } from "./_lib/cors.js";
 import { locatePostcode } from "./_lib/geo.js";
 import { handlePriceUpdate } from "./_lib/agent-price.js";
 import { handleStatusUpdate } from "./_lib/agent-status.js";
+import { emailPrefs, unsubscribeFooter, unsubscribeLinks } from "./_lib/email-prefs.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SENDS_PER_DAY = 30;
@@ -85,7 +86,7 @@ function bookingPath(listing, token) {
   return `/viewings/${listing.id}${token ? `?b=${token}` : ""}`;
 }
 
-function listingEmail(listing, agent, base, inList, token) {
+function listingEmail(listing, agent, base, inList, token, unsubscribe) {
   const facts = [
     listing.bedrooms ? `${listing.bedrooms} bed` : "",
     listing.property_type || "",
@@ -116,7 +117,8 @@ function listingEmail(listing, agent, base, inList, token) {
       inList
         ? "It's been added to your PropertySearch list. "
         : ""
-    }You're getting this because it fits one of your saved searches. Change them in PropertySearch → Settings.</p>`
+    }You're getting this because it fits one of your saved searches. Change them in PropertySearch → Settings.</p>
+    ${unsubscribeFooter(unsubscribe, "matches")}`
   );
 }
 
@@ -252,9 +254,14 @@ async function deliverListing(listing, matchedIds, base) {
     )
   ).then((results) => ({ sent: results.reduce((n, r) => n + (r?.sent || 0), 0) }));
 
+  const prefs = await emailPrefs(recipients);
   await Promise.all(
     recipients.map(async (id) => {
       const inList = Boolean(households.get(householdOf.get(id))?.property);
+      // Unsubscribed from these emails: the push and the app still have it.
+      const pref = prefs.get(id);
+      if (pref && !pref.matches) return;
+      const unsubscribe = unsubscribeLinks(base, pref?.token, "matches");
 
       const { data } = await supabaseAdmin.auth.admin.getUserById(id);
       const email = data?.user?.email;
@@ -264,7 +271,8 @@ async function deliverListing(listing, matchedIds, base) {
         to: email,
         replyTo: listing.agents.email,
         subject: `New match: ${listing.address}${listing.price ? `, ${priceText(listing.price)}` : ""}`,
-        html: listingEmail(listing, listing.agents, base, inList, tokenOf.get(id)),
+        html: listingEmail(listing, listing.agents, base, inList, tokenOf.get(id), unsubscribe),
+        unsubscribe,
       });
       emailed += 1;
     })

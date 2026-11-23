@@ -7,6 +7,9 @@ import SuggestedTimePage from "./views/SuggestedTimePage";
 import { arrivedFromPasswordReset, supabase } from "./lib/supabaseClient";
 import AuthForm, { SEEN_ACCOUNT_KEY } from "./components/AuthForm";
 import SetNewPasswordForm from "./components/SetNewPasswordForm";
+import JoinHousehold from "./components/JoinHousehold";
+import ResetPasswordPage from "./views/ResetPasswordPage";
+import UnsubscribePage from "./views/UnsubscribePage";
 
 import DashboardView from "./views/DashboardView";
 import HistoryView from "./views/HistoryView";
@@ -82,9 +85,27 @@ function App() {
     return <SuggestedTimePage token={suggestedMatch[1]} />;
   }
 
+  // The link in a password-reset email (straight to our site, so it opens
+  // the iPhone app): /reset/buyer or /reset/agent.
+  const resetMatch = window.location.pathname.match(/^\/reset\/(buyer|agent)\/?$/);
+  if (resetMatch) {
+    return <ResetPasswordPage who={resetMatch[1]} />;
+  }
+  // Sent from the Supabase dashboard ("Send password recovery"): the Site URL
+  // with the code on the end.
+  const query = new URLSearchParams(window.location.search);
+  if (query.get("type") === "recovery" && query.get("token_hash")) {
+    return <ResetPasswordPage who="buyer" />;
+  }
+
   // The link in the "confirm your email" message sent at sign-up.
   if (/^\/confirm\/?$/.test(window.location.pathname)) {
     return <ConfirmEmailPage />;
+  }
+
+  // The unsubscribe link in "new match" and price-cut emails.
+  if (/^\/unsubscribe\/?$/.test(window.location.pathname)) {
+    return <UnsubscribePage />;
   }
 
   if (/^\/privacy\/?$/.test(window.location.pathname)) {
@@ -121,6 +142,8 @@ function MainApp() {
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [isAgent, setIsAgent] = useState(false);
   const [invite] = useState(getInviteCode);
+  // Signed in already and opened a partner's invite: offer to join.
+  const [showJoin, setShowJoin] = useState(() => Boolean(getInviteCode()));
   // Settings card to scroll to when another view links there.
   const [settingsFocus, setSettingsFocus] = useState(null);
 
@@ -268,11 +291,8 @@ function MainApp() {
           <AuthForm invite={invite} />
         ) : (
           <>
-            {invite && getInviteCode() && (
-              <p className="auth-banner" role="status">
-                You're already signed in, so this invite link doesn't apply. To join that
-                household instead, log out and sign up with a different email.
-              </p>
+            {invite && showJoin && (
+              <JoinHousehold invite={invite} onDone={() => setShowJoin(false)} />
             )}
             {activeView === "properties" && (
               <PropertiesView
