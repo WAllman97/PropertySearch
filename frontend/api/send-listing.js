@@ -77,7 +77,13 @@ async function addToHouseholdList(listing, householdId) {
   return { property: data, dismissed: false };
 }
 
-function listingEmail(listing, agent, base, inList) {
+// The booking page for this buyer: their private token fills in their
+// details, so booking is pick a time and tap Book (migration 025).
+function bookingPath(listing, token) {
+  return `/viewings/${listing.id}${token ? `?b=${token}` : ""}`;
+}
+
+function listingEmail(listing, agent, base, inList, token) {
   const facts = [
     listing.bedrooms ? `${listing.bedrooms} bed` : "",
     listing.property_type || "",
@@ -101,7 +107,7 @@ function listingEmail(listing, agent, base, inList) {
       ${detailRow("Note", escapeHtml(listing.notes))}
     </table>
     <p style="margin:0 0 16px;">
-      <a href="${escapeHtml(base)}/viewings/${listing.id}" style="background:#223a33;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">See viewing times</a>
+      <a href="${escapeHtml(base)}${bookingPath(listing, token)}" style="background:#223a33;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">Book a viewing</a>
       &nbsp; <a href="${escapeHtml(listing.listing_url)}" style="color:#223a33;">Full listing</a>
     </p>
     <p style="margin:0;color:#6b7280;font-size:13px;">${
@@ -182,13 +188,16 @@ async function handler(req, res) {
       matchedIds.map((id) => ({ listing_id: listing.id, user_id: id })),
       { onConflict: "listing_id,user_id", ignoreDuplicates: true }
     )
-    .select("user_id");
+    .select("*");
   if (claimError) {
     console.error("listing_sends insert failed:", claimError);
     return res.status(500).json({ error: "Could not send the listing" });
   }
 
   const newIds = (claimed || []).map((c) => c.user_id);
+  // Each buyer's private booking token ("*" above, so this still works
+  // before migration 025 adds the column: the link just has no token).
+  const tokenOf = new Map((claimed || []).map((c) => [c.user_id, c.book_token || null]));
   if (!newIds.length) {
     return res.status(200).json({ success: true, matched: matchedIds.length, sent: 0 });
   }
@@ -210,21 +219,27 @@ async function handler(req, res) {
   // They marked this property as not for them: respect that, quietly.
   const recipients = newIds.filter((id) => !households.get(householdOf.get(id))?.dismissed);
 
-  const push = sendToUsers(recipients, {
-    title: `New match: ${listing.address}`,
-    body: [
-      priceText(listing.price),
-      listing.bedrooms ? `${listing.bedrooms} bed` : "",
-      listing.property_type || "",
-      "Tap to see viewing times",
-    ]
-      .filter(Boolean)
-      .join(" · "),
-    url: `/viewings/${listing.id}`,
-  }).catch((error) => {
-    console.error("Listing push failed:", error);
-    return { sent: 0 };
-  });
+  const pushBody = [
+    priceText(listing.price),
+    listing.bedrooms ? `${listing.bedrooms} bed` : "",
+    listing.property_type || "",
+    "Tap to book a viewing",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // One each, so every buyer's tap opens their own pre-filled booking page.
+  const push = Promise.all(
+    recipients.map((id) =>
+      sendToUsers([id], {
+        title: `New match: ${listing.address}`,
+        body: pushBody,
+        url: bookingPath(listing, tokenOf.get(id)),
+      }).catch((error) => {
+        console.error("Listing push failed:", error);
+        return { sent: 0 };
+      })
+    )
+  ).then((results) => ({ sent: results.reduce((n, r) => n + (r?.sent || 0), 0) }));
 
   await Promise.all(
     recipients.map(async (id) => {
@@ -238,7 +253,7 @@ async function handler(req, res) {
         to: email,
         replyTo: listing.agents.email,
         subject: `New match: ${listing.address}${listing.price ? `, ${priceText(listing.price)}` : ""}`,
-        html: listingEmail(listing, listing.agents, base, inList),
+        html: listingEmail(listing, listing.agents, base, inList, tokenOf.get(id)),
       });
       emailed += 1;
     })

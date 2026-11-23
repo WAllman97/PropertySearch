@@ -610,6 +610,15 @@
   color: var(--primary);
 }
 
+/* Booking page: a known buyer from a "new match" email */
+.booking-as {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  font-size: 14px;
+}
+
 /* Header: switch to the buyer app, log out */
 .agent-header-actions {
   display: flex;

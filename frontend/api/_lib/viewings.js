@@ -107,7 +107,11 @@ export async function sendBookingEmails({ slot, bookingId, buyer, base, inCalend
         </table>
         <p style="margin:0;">${
           inCalendar
-            ? "It's in your PropertySearch calendar, and you'll get a reminder the day before."
+            ? `It's in your PropertySearch calendar, and you'll get a reminder the day before.${
+                cancelUrl
+                  ? ` Can't make it? <a href="${escapeHtml(cancelUrl)}" style="color:#223a33;font-weight:bold;">Cancel this viewing</a>.`
+                  : ""
+              }`
             : `The calendar invite is attached. Can't make it?
                <a href="${escapeHtml(cancelUrl)}" style="color:#223a33;font-weight:bold;">Cancel this viewing</a>
                so someone else can have the time.`
@@ -120,6 +124,39 @@ export async function sendBookingEmails({ slot, bookingId, buyer, base, inCalend
       ].filter(Boolean).join("\n")),
     }),
   ]);
+}
+
+// The name and phone a buyer books under: their booking page details, else
+// what they signed up with.
+export async function buyerIdentity(user) {
+  const { data: page } = await supabaseAdmin
+    .from("booking_pages")
+    .select("display_name, phone")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const meta = user.user_metadata || {};
+  return {
+    name: page?.display_name || meta.full_name || meta.name || user.email.split("@")[0],
+    phone: page?.phone || meta.phone || "",
+  };
+}
+
+// Put a booked viewing in the household calendar.
+export async function setCalendarViewing(propertyId, slot, agent) {
+  if (!propertyId) return;
+  const { error } = await supabaseAdmin.from("property_notes").upsert(
+    {
+      property_id: propertyId,
+      viewing_datetime: slot.starts_at,
+      estate_agent: agentLabel(agent),
+      estate_agent_email: agent.email,
+      estate_agent_phone: agent.phone,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "property_id" }
+  );
+  if (error) console.error("Could not add viewing to calendar:", error);
 }
 
 // Take a booked viewing back out of the household calendar.

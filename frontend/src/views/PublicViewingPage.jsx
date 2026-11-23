@@ -100,19 +100,37 @@ function CancelBooking({ token }) {
 }
 
 function PublicViewingPage({ listingId }) {
-  const cancelToken = new URLSearchParams(window.location.search).get("cancel");
+  const params = new URLSearchParams(window.location.search);
+  const cancelToken = params.get("cancel");
+  // From a "new match" email: identifies the buyer, so their details are
+  // already filled in (migration 025).
+  const buyerToken = params.get("b");
   const [state, setState] = useState({ loading: true });
   const [selectedDay, setSelectedDay] = useState(null);
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", website: "" });
+  // Known buyer: show "Booking as ..." instead of the form, unless they
+  // want to change something or we're missing their phone.
+  const [editingDetails, setEditingDetails] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(null);
 
   async function load() {
-    const response = await fetch(apiUrl(`/api/listing-viewings?listing=${encodeURIComponent(listingId)}`));
+    const query = `listing=${encodeURIComponent(listingId)}${
+      buyerToken ? `&b=${encodeURIComponent(buyerToken)}` : ""
+    }`;
+    const response = await fetch(apiUrl(`/api/listing-viewings?${query}`));
     const body = await response.json().catch(() => ({}));
     setState(response.ok ? body : { error: body.error || "This booking link isn't active" });
+    if (response.ok && body.buyer) {
+      setForm((current) => ({
+        ...current,
+        name: current.name || body.buyer.name || "",
+        email: body.buyer.email || "",
+        phone: current.phone || body.buyer.phone || "",
+      }));
+    }
   }
 
   useEffect(() => {
@@ -141,7 +159,13 @@ function PublicViewingPage({ listingId }) {
     const response = await fetch(apiUrl("/api/listing-viewings"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "book", listingId, slotId: selected.id, ...form }),
+      body: JSON.stringify({
+        action: "book",
+        listingId,
+        slotId: selected.id,
+        ...form,
+        b: state.buyer ? buyerToken : undefined,
+      }),
     });
     const body = await response.json().catch(() => ({}));
     setBusy(false);
@@ -194,6 +218,7 @@ function PublicViewingPage({ listingId }) {
           <p className="muted">
             {agentText} has your details. A confirmation with a calendar invite is on its way to{" "}
             {form.email}, with a link to cancel if you can't make it.
+            {state.buyer ? " It's in your PropertySearch calendar too." : ""}
           </p>
           {listing.notes && <p className="viewing-note">{listing.notes}</p>}
         </section>
@@ -206,6 +231,8 @@ function PublicViewingPage({ listingId }) {
   }
 
   const activeDay = days.find((d) => d.day === selectedDay) || days[0];
+  // We know who they are and have a phone for the agent: one tap to book.
+  const knownBuyer = Boolean(state.buyer && form.name && form.phone && !editingDetails);
 
   return (
     <div className="booking-shell">
@@ -269,13 +296,23 @@ function PublicViewingPage({ listingId }) {
 
             {selected && (
               <>
-                <h3 className="booking-step">3. Your details</h3>
+                <h3 className="booking-step">{knownBuyer ? "3. Confirm" : "3. Your details"}</h3>
                 <form className="booking-form" onSubmit={submit}>
+                  {knownBuyer ? (
+                    <p className="booking-as">
+                      Booking as <strong>{form.name}</strong> · {form.email} · {form.phone}{" "}
+                      <button type="button" className="link-button" onClick={() => setEditingDetails(true)}>
+                        Change
+                      </button>
+                    </p>
+                  ) : (
                   <div className="booking-form-grid">
                     <label>
                       Your name *
                       <input required maxLength={100} value={form.name} onChange={update("name")} />
                     </label>
+                    {/* A known buyer books under their account email. */}
+                    {!state.buyer && (
                     <label>
                       Email *
                       <input
@@ -287,6 +324,7 @@ function PublicViewingPage({ listingId }) {
                         onChange={update("email")}
                       />
                     </label>
+                    )}
                     <label>
                       Phone *
                       <input
@@ -299,6 +337,7 @@ function PublicViewingPage({ listingId }) {
                       />
                     </label>
                   </div>
+                  )}
                   <input
                     className="booking-honeypot"
                     tabIndex={-1}
