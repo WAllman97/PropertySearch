@@ -140,7 +140,7 @@ function SearchStatus({ household, onChange }) {
         </div>
       )}
 
-      <p className="muted">{statusSummary(status, pausedUntil)}</p>
+      {/* The card's heading line already says where they are. */}
       <p className="muted small">
         Agents you've booked a viewing or made an offer with see this, so they know whether to call.
       </p>
