@@ -387,8 +387,38 @@ function AgentProfileForm({ user, onCreated }) {
 // ---------------------------------------------------------------------------
 // Dashboard
 
-// Postcode with or without the space: "SW17 0AB", "sw170ab".
-const POSTCODE_RE = /^[A-Z]{1,2}[0-9][0-9A-Z]?\s*[0-9][A-Z]{2}$/i;
+// Postcode with or without the space ("SW17 0AB", "sw170ab"), or just the
+// district ("SW17"): portals' link previews often only give the district,
+// and matching works on the district (the full postcode only sharpens
+// distance and map searches).
+const POSTCODE_RE = /^[A-Z]{1,2}[0-9][0-9A-Z]?(\s*[0-9][A-Z]{2})?$/i;
+
+// The portal's wording -> the agent form's House / Flat / Bungalow.
+function agentPropertyType(details) {
+  const text = `${details.description || ""} ${details.property_type || ""}`;
+  if (/bungalow/i.test(text)) return "bungalow";
+  if (details.property_type === "flat") return "flat";
+  return details.property_type ? "house" : "";
+}
+
+// Fill in what the link preview found, without overwriting anything the
+// agent has already typed.
+function fillFromPreview(form, details) {
+  const found = {
+    address: details.address || "",
+    postcode: details.postcode || "",
+    price: details.price ?? "",
+    bedrooms: details.bedrooms ?? "",
+    property_type: agentPropertyType(details),
+    has_garden: details.has_garden == null ? "" : details.has_garden ? "yes" : "no",
+    image_url: details.image_url || "",
+  };
+  const next = { ...form };
+  for (const [key, value] of Object.entries(found)) {
+    if (next[key] === "" && value !== "") next[key] = String(value);
+  }
+  return next;
+}
 
 const EMPTY_LISTING = {
   url: "",
@@ -474,6 +504,46 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
   const update = (key) => (event) => setForm({ ...form, [key]: event.target.value });
   const row = formToRow(form);
   const matchCount = useMatchCount(row);
+  // "" | "looking" | "filled" | "partial" | "blocked" | "failed"
+  const [lookup, setLookup] = useState("");
+  const [pasteHint, setPasteHint] = useState("");
+
+  // Paste the link and the rest fills itself in from the listing's link
+  // preview, so the agent only checks it and taps Add.
+  async function lookUp(link) {
+    if (listing || !listingKey(link)) return;
+    setLookup("looking");
+    setError("");
+    try {
+      const response = await postAuthed("/api/lookup", { action: "listing", url: link, for: "agent" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body.status !== "ok") {
+        setLookup(body.status === "blocked" ? "blocked" : "failed");
+        return;
+      }
+      const details = body.details || {};
+      setForm((current) => fillFromPreview({ ...current, url: link }, details));
+      setLookup(details.address && details.postcode && details.price ? "filled" : "partial");
+    } catch {
+      setLookup("failed");
+    }
+  }
+
+  async function pasteLink() {
+    setPasteHint("");
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      const link = text.match(/https?:\/\/\S+/)?.[0];
+      if (!link) {
+        setPasteHint("No link copied. Copy the listing's address from Rightmove, Zoopla or OnTheMarket first.");
+        return;
+      }
+      setForm((current) => ({ ...current, url: link }));
+      lookUp(link);
+    } catch {
+      setPasteHint("Couldn't read the clipboard here. Click the box and paste instead.");
+    }
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -484,7 +554,7 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
       return;
     }
     if (!POSTCODE_RE.test(form.postcode.trim())) {
-      setError("Add the full postcode, e.g. SW17 0AB. It's how we find matching buyers.");
+      setError("Add the postcode, e.g. SW17 0AB (or at least SW17). It's how we find matching buyers.");
       return;
     }
     if (row.image_url && !/^https:\/\//i.test(row.image_url)) {
@@ -514,23 +584,69 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
       }
     }
 
-    if (!listing) setForm(EMPTY_LISTING);
+    if (!listing) {
+      setForm(EMPTY_LISTING);
+      setLookup("");
+    }
     onSaved();
   }
+
+  const lookupNote = {
+    looking: "Getting the details from the listing...",
+    filled: "Filled in from the listing. Check it and tap Add listing.",
+    partial: "Filled in what the listing shows. Add anything missing below.",
+    blocked: "That portal doesn't let us read the page, so add the details below.",
+    failed: "We couldn't read that listing. Add the details below.",
+  }[lookup];
 
   return (
     <form className="booking-form agent-add-listing" onSubmit={submit}>
       <div className="booking-form-grid">
         <label className="agent-wide">
           Listing link *
-          <input
-            required
-            type="url"
-            placeholder="https://www.rightmove.co.uk/properties/..."
-            value={form.url}
-            onChange={update("url")}
-          />
+          <span className="save-link-input">
+            <input
+              required
+              type="url"
+              placeholder="Paste the Rightmove, Zoopla or OnTheMarket link"
+              value={form.url}
+              onChange={(event) => {
+                setForm({ ...form, url: event.target.value });
+                // A different link: look it up again when they leave the box.
+                if (lookup !== "looking") setLookup("");
+              }}
+              // Pasting is the whole point: fill the rest in straight away.
+              onPaste={(event) => {
+                const pasted = event.clipboardData.getData("text").trim();
+                if (pasted) setTimeout(() => lookUp(pasted), 0);
+              }}
+              onBlur={(event) => {
+                if (!lookup) lookUp(event.target.value.trim());
+              }}
+            />
+            {!listing && (
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={lookup === "looking"}
+                onClick={pasteLink}
+              >
+                Paste
+              </button>
+            )}
+          </span>
         </label>
+        {(lookupNote || pasteHint) && (
+          <p
+            className={`save-link-note agent-wide${lookup === "blocked" || lookup === "failed" ? " warn" : ""}`}
+            aria-live="polite"
+          >
+            {pasteHint || lookupNote}
+          </p>
+        )}
+        {form.image_url && /^https:\/\//i.test(form.image_url) && (
+          <img className="save-link-photo agent-wide" src={form.image_url} alt="" />
+        )}
         <label>
           Address *
           <input required maxLength={200} value={form.address} onChange={update("address")} />
@@ -578,15 +694,18 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
             <option value="no">No</option>
           </select>
         </label>
-        <label className="agent-wide">
-          Main photo link
-          <input
-            type="url"
-            placeholder="https://... (right-click the main photo, Copy image address)"
-            value={form.image_url}
-            onChange={update("image_url")}
-          />
-        </label>
+        {/* Only needed when the listing didn't give us a photo. */}
+        {(listing || !form.image_url) && (
+          <label className="agent-wide">
+            Main photo link
+            <input
+              type="url"
+              placeholder="https://... (right-click the main photo, Copy image address)"
+              value={form.image_url}
+              onChange={update("image_url")}
+            />
+          </label>
+        )}
         <label className="agent-wide">
           Note for buyers
           <input

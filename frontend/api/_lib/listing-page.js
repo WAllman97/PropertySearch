@@ -93,6 +93,8 @@ export function parseLinkPreview(html) {
     // A site-wide sharing picture isn't a photo of the home.
     image_url: /^https:\/\//.test(image) && !/social|sharing|logo|default/i.test(image) ? image : "",
     agent_name: agent ? agent.trim().slice(0, 100) : null,
+    // Only a "yes" when the summary says so. Silence doesn't mean no garden.
+    has_garden: /\bno garden\b/i.test(text) ? false : /\bgardens?\b/i.test(text) ? true : null,
     description: summary.slice(0, 500),
     listing_status: /sold stc|sold subject to contract/i.test(text)
       ? "sold_stc"

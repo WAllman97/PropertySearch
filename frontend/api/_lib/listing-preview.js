@@ -10,7 +10,7 @@
 // Zoopla refuses automated reads, so those come back "blocked" and the
 // buyer types the few details in. Portal pages are never read on a
 // schedule for buyers: only when they paste a link.
-import { requireHouseholdUser, supabaseAdmin, underRateLimit } from "./household.js";
+import { requireHouseholdUser, requireUser, supabaseAdmin, underRateLimit } from "./household.js";
 import { listingKey } from "./listing.js";
 import { canonicalListingUrl, fetchListingDetails, normalisePropertyType } from "./listing-page.js";
 
@@ -60,8 +60,26 @@ async function existingProperty(key, householdId) {
   return hit ? { id: hit.id, status: hit.status } : null;
 }
 
+// An estate agent adding their own listing in the agent portal. Agents have
+// no household, so they're checked against the agents table instead.
+async function requireAgentUser(req, res) {
+  const user = await requireUser(req, res);
+  if (!user) return null;
+  const { data: agent } = await supabaseAdmin
+    .from("agents")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!agent) {
+    res.status(403).json({ error: "This account doesn't have access" });
+    return null;
+  }
+  return user;
+}
+
 export async function handleListingPreview(req, res) {
-  const user = await requireHouseholdUser(req, res);
+  const forAgent = req.body?.for === "agent";
+  const user = forAgent ? await requireAgentUser(req, res) : await requireHouseholdUser(req, res);
   if (!user) return;
 
   const url = typeof req.body?.url === "string" ? req.body.url.trim().slice(0, 500) : "";
@@ -78,10 +96,11 @@ export async function handleListingPreview(req, res) {
     portal,
     listingId,
     listingUrl: canonicalListingUrl(key),
-    existing: await existingProperty(key, user.householdId),
+    existing: forAgent ? null : await existingProperty(key, user.householdId),
   };
 
-  const agent = await fromAgentListing(key);
+  // Agents are entering this listing themselves, so skip other agents' copies.
+  const agent = forAgent ? null : await fromAgentListing(key);
   if (agent) return res.status(200).json({ ...base, status: "ok", from: "agent", details: agent });
 
   const { data: cached } = await supabaseAdmin
