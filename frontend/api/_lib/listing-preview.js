@@ -126,6 +126,11 @@ export async function handleListingPreview(req, res) {
   }
 
   const result = await fetchListingDetails(key);
+  // Portal previews switched off: the form opens empty, as when a portal
+  // refuses. Nothing to cache.
+  if (result.status === "off") {
+    return res.status(200).json({ ...base, status: "blocked", from: "off", details: {} });
+  }
   const { error } = await supabaseAdmin.from("listing_cache").upsert({
     listing_key: key,
     status: result.status,

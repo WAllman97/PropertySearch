@@ -353,16 +353,19 @@ def compute_matched_comps(property_row, postcode, origin):
     return comps
 
 
-def compute_comps(property_row):
+def compute_comps(property_row, use_portal=False):
     """Returns a comps dict, or None when the property has no usable location.
 
-    Preferred: Rightmove sold prices matched on type AND bedrooms (needs a
-    full postcode + bedroom count). Fallback: Land Registry by type only,
-    flagged in the UI as not size-matched."""
+    Land Registry by type (open data, Open Government Licence) for everyone,
+    flagged in the UI as not size-matched. Only for the original household
+    (use_portal=True), the owner's personal tool alongside the daily
+    scrape, are Rightmove's sold prices tried first, matched on type AND
+    bedrooms. Never for app users: PropertySearch doesn't crawl a portal on
+    other people's behalf (docs/DATA_SOURCES.md)."""
     latitude, longitude = property_row.get("latitude"), property_row.get("longitude")
     postcode = property_row.get("postcode") or find_postcode(property_row.get("address"))
 
-    if postcode and _bedrooms(property_row.get("bedrooms"), _row_text(property_row)) is not None:
+    if use_portal and postcode and _bedrooms(property_row.get("bedrooms"), _row_text(property_row)) is not None:
         try:
             comps = compute_matched_comps(property_row, postcode, (latitude, longitude))
             if comps and comps["count"]:
@@ -404,7 +407,7 @@ def _days_since(value):
 def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
     result = (
         supabase.table("properties")
-        .select("id,address,title,price,bedrooms,postcode,latitude,longitude,property_type,comps_updated_at,status")
+        .select("id,household_id,address,title,price,bedrooms,postcode,latitude,longitude,property_type,comps_updated_at,status")
         .or_("status.is.null,status.not.in.(" + ",".join(INACTIVE_STATUSES) + ")")
         .order("comps_updated_at", desc=False, nullsfirst=True)
         .limit(500)
@@ -412,6 +415,8 @@ def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
     )
 
     stats = {"computed": 0, "no_location": 0, "failed": 0}
+    from core.households import original_household_id
+    original = original_household_id(supabase)
 
     for row in result.data or []:
         if stats["computed"] >= limit:
@@ -426,7 +431,7 @@ def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
             continue
 
         try:
-            comps = compute_comps(row)
+            comps = compute_comps(row, use_portal=row.get("household_id") == original)
         except Exception as error:
             stats["failed"] += 1
             print(f"Sold-price comps failed for {row.get('address')}: {error}")

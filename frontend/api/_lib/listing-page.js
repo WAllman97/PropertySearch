@@ -10,8 +10,17 @@
 // We only ever fetch a URL we build ourselves from the listing id, so a
 // pasted link can't point the server at anything else.
 
+// Says who we are, like any messaging app's link preview, rather than
+// posing as a browser (docs/DATA_SOURCES.md). Vercel can override it.
 const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
+  process.env.LINK_PREVIEW_USER_AGENT ||
+  "PropertySearchLinkPreview/1.0 (+https://property-search-4jcc.vercel.app/support)";
+
+// Off switch: PORTAL_PREVIEWS=off in Vercel stops every portal fetch at once
+// (say a portal asks us to). Saving a link still works: the buyer or agent
+// types the details, and agents' own listings on PropertySearch fill in as
+// before, since they never needed the portal.
+export const portalPreviewsOn = () => String(process.env.PORTAL_PREVIEWS || "on").toLowerCase() !== "off";
 const TIMEOUT_MS = 8000;
 const MAX_BYTES = 600000;
 
@@ -108,6 +117,7 @@ export function parseLinkPreview(html) {
 export async function fetchListingDetails(key) {
   const url = canonicalListingUrl(key);
   if (!url) return { status: "failed", details: {} };
+  if (!portalPreviewsOn()) return { status: "off", details: {} };
 
   let response;
   try {
