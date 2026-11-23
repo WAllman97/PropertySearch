@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { arrivedFromPasswordReset, supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
+import SetNewPasswordForm from "../components/SetNewPasswordForm";
 import { apiUrl, siteUrl } from "../lib/platform";
 import { listingKey } from "../../api/_lib/listing.js";
 import { londonToUtc } from "../../api/_lib/time.js";
@@ -65,6 +66,8 @@ function AgentAuth() {
   });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  // Good news, e.g. "a reset link is on its way" (message is for errors).
+  const [notice, setNotice] = useState("");
   // The agency and branch a valid code belongs to (shown, and fixed on the
   // form: the code decides them, since pricing is per branch).
   const [codeAgency, setCodeAgency] = useState("");
@@ -123,13 +126,35 @@ function AgentAuth() {
     setRequested(true);
   }
 
+  function switchMode(next) {
+    setMode(next);
+    setMessage("");
+    setNotice("");
+  }
+
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
     setMessage("");
+    setNotice("");
 
     try {
-      if (mode === "signup" && full) {
+      if (mode === "forgot") {
+        // The emailed link brings them back to /agent, where AgentPortal sees
+        // the recovery session and asks for a new password. /agent must be
+        // allowed under Supabase -> Authentication -> URL Configuration ->
+        // Redirect URLs (e.g. https://<site>/**), otherwise the Site URL is used.
+        const { error } = await supabase.auth.resetPasswordForEmail(form.email.trim(), {
+          redirectTo: `${siteUrl}/agent`,
+        });
+        if (error) {
+          throw new Error(
+            error.status === 429 ? "Too many attempts. Please wait a minute and try again." : error.message
+          );
+        }
+        // Same message whether or not the account exists.
+        setNotice("If that email has an account, a reset link is on its way. Check your inbox.");
+      } else if (mode === "signup" && full) {
         await requestSeat();
       } else {
         if (mode === "signup") {
@@ -189,14 +214,14 @@ function AgentAuth() {
           <button
             type="button"
             className={mode === "signup" ? "primary" : ""}
-            onClick={() => setMode("signup")}
+            onClick={() => switchMode("signup")}
           >
             Create agent account
           </button>
           <button
             type="button"
-            className={mode === "login" ? "primary" : ""}
-            onClick={() => setMode("login")}
+            className={mode === "signup" ? "" : "primary"}
+            onClick={() => switchMode("login")}
           >
             Log in
           </button>
@@ -267,7 +292,7 @@ function AgentAuth() {
                 onChange={update("email")}
               />
             </label>
-            {!(mode === "signup" && full) && (
+            {!(mode === "signup" && full) && mode !== "forgot" && (
             <label>
               Password *
               <input
@@ -308,7 +333,15 @@ function AgentAuth() {
             onChange={update("website")}
           />
 
+          {mode === "forgot" && (
+            <p className="muted">Enter your work email and we'll send you a link to set a new password.</p>
+          )}
           {message && <p className="booking-error">{message}</p>}
+          {notice && (
+            <p className="agent-joining" role="status">
+              {notice}
+            </p>
+          )}
 
           <button type="submit" className="primary-button" disabled={busy}>
             {busy
@@ -317,8 +350,19 @@ function AgentAuth() {
                 ? full
                   ? "Request a place"
                   : "Create account"
-                : "Log in"}
+                : mode === "forgot"
+                  ? "Send reset link"
+                  : "Log in"}
           </button>
+          {mode !== "signup" && (
+            <button
+              type="button"
+              className="link-button agent-forgot"
+              onClick={() => switchMode(mode === "forgot" ? "login" : "forgot")}
+            >
+              {mode === "forgot" ? "Back to log in" : "Forgot password?"}
+            </button>
+          )}
         </form>
         )}
       </section>
@@ -563,8 +607,13 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
     }
 
     setBusy(true);
+    // A lower price typed here counts as a reduction, same as "Reduce price".
+    const cut =
+      listing && row.price && listing.price && row.price < listing.price
+        ? { previous_price: listing.price, price_reduced_at: new Date().toISOString() }
+        : {};
     const { error: saveError } = listing
-      ? await supabase.from("agent_listings").update(row).eq("id", listing.id)
+      ? await supabase.from("agent_listings").update({ ...row, ...cut }).eq("id", listing.id)
       : await supabase.from("agent_listings").insert({ ...row, agent_id: agentId });
     setBusy(false);
 
@@ -746,6 +795,7 @@ function ListingReach({ listing, reach, onSent }) {
   const [message, setMessage] = useState("");
 
   if (!listing.is_active) return null;
+  if (listing.market_status === "sold_stc" || listing.market_status === "off_market") return null;
   if (!listing.postcode) {
     return (
       <p className="agent-reach muted">
@@ -1217,18 +1267,6 @@ Thanks`
   );
 }
 
-function listingFacts(listing) {
-  return [
-    listing.postcode,
-    listing.price ? `£${listing.price.toLocaleString("en-GB")}` : "",
-    listing.bedrooms != null ? (listing.bedrooms === 0 ? "studio" : `${listing.bedrooms} bed`) : "",
-    listing.property_type || "",
-    listing.has_garden ? "garden" : listing.has_garden === false ? "no garden" : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
 // Free private times shown as small chips (there can be many with weekly
 // hours). Tap × to remove one; blocked ones are times you're at another
 // viewing (plus travel) or inside your shortest notice.
@@ -1286,6 +1324,155 @@ function FreeTimes({ slots, blocked, onChanged }) {
 
 const DAYS_SHOWN = 7;
 
+const MARKET_STATUSES = [
+  { value: "available", label: "For sale" },
+  { value: "under_offer", label: "Under offer" },
+  { value: "sold_stc", label: "Sold STC" },
+  { value: "off_market", label: "Off market" },
+];
+
+const pounds = (n) => `£${Number(n).toLocaleString("en-GB")}`;
+
+// Was the price cut in the last 30 days? Then show "Reduced" and the old price.
+function recentlyReduced(listing) {
+  return (
+    listing.previous_price > listing.price &&
+    listing.price_reduced_at &&
+    Date.now() - new Date(listing.price_reduced_at).getTime() < 30 * 24 * 3600 * 1000
+  );
+}
+
+// "Updated 2 buyers' lists" after a status or price change.
+function reachedText(result, what) {
+  if (!result?.updated) return `${what} saved.`;
+  const n = result.notified || result.updated;
+  return `${what} saved. ${n} buyer household${n === 1 ? " that saved this home has" : "s that saved this home have"} been told.`;
+}
+
+// For sale / Under offer / Sold STC / Off market, plus "Reduce price".
+// Both are passed straight on to buyers who saved the home.
+function ListingStatus({ listing, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [reducing, setReducing] = useState(false);
+  const [newPrice, setNewPrice] = useState("");
+  const status = listing.market_status || "available";
+
+  async function setStatus(value) {
+    if (value === status || busy) return;
+    setBusy(true);
+    setMessage("");
+    const { error } = await supabase.from("agent_listings").update({ market_status: value }).eq("id", listing.id);
+    if (error) {
+      setMessage(
+        /market_status/.test(error.message)
+          ? "Statuses aren't switched on yet (database migration 024 needs running)."
+          : error.message
+      );
+      setBusy(false);
+      return;
+    }
+    try {
+      const response = await postAuthed("/api/send-listing", { action: "status_update", listingId: listing.id });
+      const result = await response.json().catch(() => ({}));
+      const label = MARKET_STATUSES.find((s) => s.value === value).label;
+      setMessage(response.ok ? reachedText(result, label) : result.error || `${label} saved.`);
+    } catch {
+      setMessage("Saved, but buyers' lists couldn't be updated just now.");
+    }
+    setBusy(false);
+    onChanged();
+  }
+
+  async function reducePrice(event) {
+    event.preventDefault();
+    const price = Number(String(newPrice).replace(/[^0-9]/g, ""));
+    if (!price || !listing.price || price >= listing.price) {
+      setMessage(`Enter a price below ${listing.price ? pounds(listing.price) : "the current one"}.`);
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    const { error } = await supabase
+      .from("agent_listings")
+      .update({ price, previous_price: listing.price, price_reduced_at: new Date().toISOString() })
+      .eq("id", listing.id);
+    if (error) {
+      setMessage(error.message);
+      setBusy(false);
+      return;
+    }
+    try {
+      const response = await postAuthed("/api/send-listing", { action: "price_update", listingId: listing.id });
+      const result = await response.json().catch(() => ({}));
+      setMessage(response.ok ? reachedText(result, `New price ${pounds(price)}`) : result.error);
+    } catch {
+      setMessage("Price saved, but buyers couldn't be told just now.");
+    }
+    setReducing(false);
+    setNewPrice("");
+    setBusy(false);
+    onChanged();
+  }
+
+  return (
+    <div className="agent-status">
+      <div className="agent-status-row">
+        <div className="agent-status-switch" role="radiogroup" aria-label="Listing status">
+          {MARKET_STATUSES.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              role="radio"
+              aria-checked={status === s.value}
+              className={`status-${s.value}${status === s.value ? " selected" : ""}`}
+              disabled={busy}
+              onClick={() => setStatus(s.value)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        {listing.price > 0 && (
+          <button
+            type="button"
+            className="secondary-button agent-reduce-button"
+            disabled={busy}
+            onClick={() => {
+              setReducing(!reducing);
+              setMessage("");
+            }}
+          >
+            {reducing ? "Cancel" : "↓ Reduce price"}
+          </button>
+        )}
+      </div>
+      {reducing && (
+        <form className="agent-reduce" onSubmit={reducePrice}>
+          <label>
+            New asking price
+            <input
+              autoFocus
+              inputMode="numeric"
+              placeholder={`Now ${pounds(listing.price)}`}
+              value={newPrice}
+              onChange={(event) => setNewPrice(event.target.value)}
+            />
+          </label>
+          <button type="submit" className="primary-button" disabled={busy}>
+            {busy ? "Saving..." : "Save and tell buyers"}
+          </button>
+        </form>
+      )}
+      {message && (
+        <p className="agent-status-message" aria-live="polite">
+          {message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach, hoursOn, blocked, onChanged }) {
   const [adding, setAdding] = useState(slots.length === 0 && !hoursOn);
   const [editing, setEditing] = useState(false);
@@ -1319,16 +1506,53 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
     onChanged();
   }
 
+  const status = MARKET_STATUSES.find((s) => s.value === (listing.market_status || "available"));
+  const reduced = recentlyReduced(listing);
+  const facts = [
+    listing.bedrooms != null ? (listing.bedrooms === 0 ? "Studio" : `${listing.bedrooms} bed`) : "",
+    listing.property_type ? listing.property_type[0].toUpperCase() + listing.property_type.slice(1) : "",
+    listing.has_garden ? "Garden" : listing.has_garden === false ? "No garden" : "",
+    listing.postcode || "",
+  ].filter(Boolean);
+
   return (
-    <section className={`card agent-listing ${listing.is_active ? "" : "paused"}`}>
+    <section
+      className={`card agent-listing status-${status.value} ${listing.is_active ? "" : "paused"}`}
+    >
       <div className="agent-listing-head">
-        {listing.image_url && <img className="agent-listing-photo" src={listing.image_url} alt="" />}
-        <div>
+        <div className="agent-listing-photo-wrap">
+          {listing.image_url ? (
+            <img className="agent-listing-photo" src={listing.image_url} alt="" />
+          ) : (
+            <div className="agent-listing-photo empty" aria-hidden="true">
+              🏠
+            </div>
+          )}
+          {status.value !== "available" && (
+            <span className={`agent-listing-ribbon status-${status.value}`}>{status.label}</span>
+          )}
+        </div>
+        <div className="agent-listing-info">
+          <p className="agent-listing-price">
+            {listing.price ? pounds(listing.price) : "Price not set"}
+            {reduced && (
+              <>
+                <s className="agent-listing-was">{pounds(listing.previous_price)}</s>
+                <span className="agent-listing-badge reduced">Reduced</span>
+              </>
+            )}
+          </p>
           <h3>{listing.address}</h3>
-          <p className="muted">
-            {listingFacts(listing) ? `${listingFacts(listing)} · ` : ""}
+          {facts.length > 0 && (
+            <ul className="agent-listing-facts">
+              {facts.map((fact) => (
+                <li key={fact}>{fact}</li>
+              ))}
+            </ul>
+          )}
+          <p className="muted agent-listing-links">
             <a href={listing.listing_url} target="_blank" rel="noreferrer">
-              View listing
+              View on portal ↗
             </a>
             {listing.notes ? ` · ${listing.notes}` : ""}
           </p>
@@ -1354,6 +1578,8 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
           onCancel={() => setEditing(false)}
         />
       )}
+
+      <ListingStatus listing={listing} onChanged={onChanged} />
 
       <ListingReach listing={listing} reach={reach} onSent={onChanged} />
 
@@ -1749,12 +1975,18 @@ function DeleteAccount() {
 function AgentPortal() {
   const [user, setUser] = useState(undefined);
   const [agent, setAgent] = useState(undefined);
+  // Arrived from a password-reset email: ask for the new password first.
+  const [settingPassword, setSettingPassword] = useState(arrivedFromPasswordReset);
+  const [passwordChanged, setPasswordChanged] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setSettingPassword(true);
+      setUser(session?.user ?? null);
+    });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -1790,7 +2022,19 @@ function AgentPortal() {
       </header>
 
       <main className="app-main">
-        {user === undefined || (user && agent === undefined) ? (
+        {passwordChanged && (
+          <p className="agent-joining" role="status">
+            Your password has been changed.
+          </p>
+        )}
+        {settingPassword && user ? (
+          <SetNewPasswordForm
+            onDone={() => {
+              setSettingPassword(false);
+              setPasswordChanged(true);
+            }}
+          />
+        ) : user === undefined || (user && agent === undefined) ? (
           <p className="muted">Loading...</p>
         ) : !user ? (
           <AgentAuth />

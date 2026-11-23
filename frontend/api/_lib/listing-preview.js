@@ -12,6 +12,7 @@
 // schedule for buyers: only when they paste a link.
 import { requireHouseholdUser, requireUser, supabaseAdmin, underRateLimit } from "./household.js";
 import { listingKey } from "./listing.js";
+import { PROPERTY_STATUS } from "./agent-status.js";
 import { canonicalListingUrl, fetchListingDetails, normalisePropertyType } from "./listing-page.js";
 
 const OK_TTL_HOURS = 72;
@@ -25,7 +26,9 @@ function hoursSince(iso) {
 async function fromAgentListing(key) {
   const { data } = await supabaseAdmin
     .from("agent_listings")
-    .select("address, postcode, price, bedrooms, property_type, has_garden, image_url, notes")
+    // "*" so this keeps working whether or not migration 024 (market_status)
+    // has been run yet.
+    .select("*")
     .eq("listing_key", key)
     .eq("is_active", true)
     .not("postcode", "is", null)
@@ -43,7 +46,7 @@ async function fromAgentListing(key) {
     has_garden: data.has_garden,
     image_url: data.image_url,
     description: data.notes || "",
-    listing_status: "live",
+    listing_status: PROPERTY_STATUS[data.market_status] || "live",
   };
 }
 
