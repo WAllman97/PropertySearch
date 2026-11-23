@@ -2625,3 +2625,309 @@ button.link-button:hover {
 .watchlist-sort {
   flex: none;
 }
+
+/* ---- Calendar on a phone: agenda (CalendarView.jsx CalendarAgenda) ---- */
+.agenda {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Two-week strip: tap a day to jump to it; a dot means something's on. */
+.agenda-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  margin: 0 -4px;
+  padding: 2px 4px 6px;
+  scrollbar-width: none;
+}
+
+.agenda-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.agenda-strip-day {
+  flex: 0 0 44px;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.agenda-strip-day span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.agenda-strip-day strong {
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.agenda-strip-day i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.agenda-strip-day.busy i {
+  background: var(--accent);
+}
+
+.agenda-strip-day.today {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.agenda-strip-day.today span {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.agenda-strip-day.today.busy i {
+  background: #fff;
+}
+
+/* Next up: the one that matters most, big, with the actions you need. */
+.agenda-next {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--primary);
+  color: #fff;
+  box-shadow: var(--shadow-card);
+}
+
+.agenda-next-photo {
+  display: block;
+  width: 100%;
+  height: 170px;
+  object-fit: cover;
+}
+
+.agenda-next-body {
+  padding: 14px 16px 16px;
+}
+
+.agenda-next .eyebrow {
+  color: var(--accent-soft);
+  margin: 0 0 4px;
+}
+
+.agenda-next h3 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  color: #fff;
+}
+
+.agenda-next-when {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.agenda-next .muted {
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0;
+  font-size: 13px;
+}
+
+.agenda-next-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.agenda-next-actions a,
+.agenda-next-actions button {
+  white-space: nowrap;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 6px;
+  font-size: 14px;
+  text-decoration: none;
+  text-align: center;
+}
+
+.agenda-next-actions .primary-button {
+  background: #fff;
+  color: var(--primary);
+  border-color: #fff;
+}
+
+.agenda-next-actions .secondary-button {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Day groups */
+.agenda-day-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 6px;
+  padding: 6px 0;
+  background: var(--surface);
+  font-size: 15px;
+  color: var(--primary);
+}
+
+.agenda-day-head span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.agenda-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agenda-row-button,
+.agenda-call {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 48px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  box-shadow: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.agenda-call {
+  grid-template-columns: auto 48px 1fr;
+  cursor: default;
+}
+
+.agenda-time {
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+
+.agenda-time strong {
+  font-size: 16px;
+}
+
+.agenda-time span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.agenda-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--surface);
+}
+
+.agenda-thumb-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  border: 1px solid var(--border);
+}
+
+.agenda-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Address: up to two lines, so it isn't cut off after a few letters. */
+.agenda-main strong {
+  font-size: 14px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.agenda-main span {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agenda-chevron {
+  font-size: 22px;
+  color: var(--muted-light);
+}
+
+.agenda-empty {
+  text-align: center;
+  padding: 24px 12px;
+}
+
+.agenda-empty p {
+  margin: 0 0 6px;
+}
+
+.agenda-empty-icon {
+  font-size: 34px;
+}
+
+.agenda-past .link-button {
+  min-height: 44px;
+}
+
+.agenda-past .agenda-list {
+  opacity: 0.75;
+}
+
+/* Viewing details: bigger buttons on a phone */
+@media (max-width: 760px) {
+  .viewing-detail-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .viewing-detail-actions > * {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 14px;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+}

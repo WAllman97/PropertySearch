@@ -83,6 +83,35 @@ async function buyerFromToken(listing, token) {
   return { user, identity: await buyerIdentity(user), propertyId };
 }
 
+// No private link, but the email typed in belongs to a PropertySearch buyer
+// who has this home saved: link the booking to their account, so it goes in
+// their calendar and moves the home along, as if they'd booked in the app.
+// Only households that saved this exact home are checked, so a stranger
+// can't put a viewing into the calendar of someone who never saved it.
+async function buyerFromEmail(listing, email) {
+  const key = listingKey(listing.listing_url);
+  if (!key || !email) return null;
+  const { data: saved } = await supabaseAdmin
+    .from("properties")
+    .select("id, household_id, listing_url")
+    .ilike("listing_url", `%${key.split(":")[1]}%`);
+  const copies = (saved || []).filter((p) => listingKey(p.listing_url) === key && p.household_id);
+  if (!copies.length) return null;
+
+  const { data: members } = await supabaseAdmin
+    .from("household_members")
+    .select("user_id, household_id")
+    .in("household_id", [...new Set(copies.map((p) => p.household_id))]);
+  for (const member of (members || []).slice(0, 20)) {
+    const { data } = await supabaseAdmin.auth.admin.getUserById(member.user_id);
+    if (data?.user?.email?.toLowerCase() === email.toLowerCase()) {
+      const propertyId = copies.find((p) => p.household_id === member.household_id)?.id || null;
+      return { user: data.user, identity: await buyerIdentity(data.user), propertyId };
+    }
+  }
+  return null;
+}
+
 async function handleGetListing(req, res) {
   const listing = await loadListing(req.query.listing);
   if (!listing) return res.status(404).json({ error: "This booking link isn't active" });
@@ -189,9 +218,14 @@ async function handleBook(req, res) {
   // Honeypot: real users never see or fill this field.
   if (body.website) return res.status(200).json({ success: true });
 
-  // From their "new match" email: we know who they are.
-  const tokenListing = body.b ? await loadListing(body.listingId) : null;
-  const buyer = tokenListing ? await buyerFromToken(tokenListing, body.b) : null;
+  // From their "new match" email: we know who they are. Otherwise, if the
+  // email typed in is a buyer who saved this home, link it to them.
+  const knownListing = await loadListing(body.listingId);
+  const typedEmail = clean(body.email, 254);
+  const buyer = knownListing
+    ? (body.b ? await buyerFromToken(knownListing, body.b) : null) ||
+      (typedEmail && EMAIL_RE.test(typedEmail) ? await buyerFromEmail(knownListing, typedEmail) : null)
+    : null;
 
   const name = buyer ? clean(body.name, 100) || buyer.identity.name : clean(body.name, 100);
   // A known buyer always books under their account email.

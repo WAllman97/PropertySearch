@@ -647,14 +647,8 @@
 }
 
 .agent-header-actions a,
-.header-switch {
+.settings-switch a {
   text-decoration: none;
-}
-
-/* Buyer app header: sits left of Log Out (hidden on phones, so keep a gap). */
-.header-switch {
-  margin-left: auto;
-  margin-right: 8px;
 }
 
 .agent-forgot {

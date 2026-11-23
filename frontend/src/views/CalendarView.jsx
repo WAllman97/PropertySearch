@@ -98,6 +98,312 @@ function getGoogleCalendarLink(viewing) {
   )}/${formatForGoogle(end)}&details=${details}&location=${location}`;
 }
 
+// ---------------------------------------------------------------------------
+// Phone layout: an agenda instead of a month grid (tiny squares are no use on
+// a phone). "Next up" card with one-tap directions / call / add to calendar,
+// a two-week strip to jump to a day, then each day's viewings and calls.
+
+const DAY_MS = 864e5;
+
+function startOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function dayLabel(date) {
+  const today = startOfDay(new Date());
+  const diff = Math.round((startOfDay(date) - today) / DAY_MS);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  return date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
+}
+
+// "in 3 hours", "in 25 min", "now"
+function untilLabel(date) {
+  const mins = Math.round((date - Date.now()) / 60000);
+  if (mins <= 0) return "now";
+  if (mins < 60) return `in ${mins} min`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `in ${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.round(hours / 24);
+  return `in ${days} day${days === 1 ? "" : "s"}`;
+}
+
+function directionsUrl(address) {
+  // Apple Maps on iPhone; other devices get a web map.
+  return `https://maps.apple.com/?q=${encodeURIComponent(address || "")}`;
+}
+
+function pounds(price) {
+  return price ? `£${Number(price).toLocaleString("en-GB")}` : "";
+}
+
+// One list of everything with a time: viewings and accepted agent calls.
+function agendaItems(viewings, calls) {
+  return [
+    ...viewings.map((v) => ({ kind: "viewing", at: new Date(v.viewing_datetime), viewing: v, id: `v-${v.id}` })),
+    ...calls.map((c) => ({ kind: "call", at: new Date(c.starts_at), call: c, id: `c-${c.id}` })),
+  ].sort((a, b) => a.at - b.at);
+}
+
+// "2 viewings", "1 viewing · 1 call"
+function daySummary(items) {
+  const viewingCount = items.filter((i) => i.kind === "viewing").length;
+  const callCount = items.length - viewingCount;
+  return [
+    viewingCount ? `${viewingCount} viewing${viewingCount === 1 ? "" : "s"}` : "",
+    callCount ? `${callCount} call${callCount === 1 ? "" : "s"}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function AgendaRow({ item, onOpen, showDate = false }) {
+  // Past list: the date matters more than "Viewing".
+  const sub = (kind) => (showDate ? item.at.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : kind);
+  if (item.kind === "call") {
+    const c = item.call;
+    return (
+      <li className="agenda-row agenda-call">
+        <div className="agenda-time">
+          <strong>{formatTime(c.starts_at)}</strong>
+          <span>{sub("Call")}</span>
+        </div>
+        <div className="agenda-thumb agenda-thumb-icon" aria-hidden="true">
+          📞
+        </div>
+        <div className="agenda-main">
+          <strong>
+            {c.agent_name}
+            {c.agency ? `, ${c.agency}` : ""}
+          </strong>
+          {c.property_address && <span>About {c.property_address}</span>}
+        </div>
+      </li>
+    );
+  }
+  const v = item.viewing;
+  const p = v.properties || {};
+  return (
+    <li className="agenda-row">
+      <button type="button" className="agenda-row-button" onClick={() => onOpen(v)}>
+        <div className="agenda-time">
+          <strong>{formatTime(v.viewing_datetime)}</strong>
+          <span>{sub("Viewing")}</span>
+        </div>
+        {p.image_url ? (
+          <img className="agenda-thumb" src={p.image_url} alt="" />
+        ) : (
+          <div className="agenda-thumb agenda-thumb-icon" aria-hidden="true">
+            🏠
+          </div>
+        )}
+        <div className="agenda-main">
+          <strong>{p.address || "Viewing"}</strong>
+          <span>
+            {[pounds(p.price), p.bedrooms ? `${p.bedrooms} bed` : "", v.estate_agent].filter(Boolean).join(" · ")}
+          </span>
+        </div>
+        <span className="agenda-chevron" aria-hidden="true">
+          ›
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function CalendarAgenda({ viewings, calls, onOpen }) {
+  const [showPast, setShowPast] = useState(false);
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const items = agendaItems(viewings, calls);
+  // Still "upcoming" until it's an hour past its start.
+  const upcoming = items.filter((i) => i.at.getTime() > now.getTime() - 3600000);
+  const past = items.filter((i) => i.at.getTime() <= now.getTime() - 3600000).reverse();
+  const next = upcoming.find((i) => i.kind === "viewing");
+
+  // Group upcoming by day.
+  const days = [];
+  for (const item of upcoming) {
+    const key = startOfDay(item.at).getTime();
+    const last = days[days.length - 1];
+    if (last && last.key === key) last.items.push(item);
+    else days.push({ key, date: startOfDay(item.at), items: [item] });
+  }
+  const busyDays = new Set(days.map((d) => d.key));
+
+  // Two-week strip from today.
+  const strip = Array.from({ length: 14 }, (_, n) => new Date(todayStart.getTime() + n * DAY_MS));
+
+  function jumpTo(date) {
+    const key = startOfDay(date).getTime();
+    const target =
+      document.getElementById(`agenda-day-${key}`) ||
+      // No viewings that day: the next day that has some.
+      days.find((d) => d.key >= key) && document.getElementById(`agenda-day-${days.find((d) => d.key >= key).key}`);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  return (
+    <div className="agenda">
+      <div className="agenda-strip" role="list" aria-label="Next two weeks">
+        {strip.map((date) => {
+          const key = date.getTime();
+          return (
+            <button
+              type="button"
+              role="listitem"
+              key={key}
+              className={`agenda-strip-day${key === todayStart.getTime() ? " today" : ""}${busyDays.has(key) ? " busy" : ""}`}
+              onClick={() => jumpTo(date)}
+            >
+              <span>{date.toLocaleDateString("en-GB", { weekday: "narrow" })}</span>
+              <strong>{date.getDate()}</strong>
+              <i aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+
+      {next && (
+        <div className="agenda-next">
+          {next.viewing.properties?.image_url && (
+            <img className="agenda-next-photo" src={next.viewing.properties.image_url} alt="" />
+          )}
+          <div className="agenda-next-body">
+            <p className="eyebrow">Next up</p>
+            <h3>{next.viewing.properties?.address || "Viewing"}</h3>
+            <p className="agenda-next-when">
+              {dayLabel(next.at)}, {formatTime(next.viewing.viewing_datetime)} · {untilLabel(next.at)}
+            </p>
+            {next.viewing.estate_agent && <p className="muted">With {next.viewing.estate_agent}</p>}
+            <div className="agenda-next-actions">
+              {next.viewing.properties?.address && (
+                <a className="primary-button" href={directionsUrl(next.viewing.properties.address)} target="_blank" rel="noreferrer">
+                  Directions
+                </a>
+              )}
+              {next.viewing.estate_agent_phone && (
+                <a className="secondary-button" href={`tel:${next.viewing.estate_agent_phone.replace(/\s+/g, "")}`}>
+                  Call
+                </a>
+              )}
+              <button type="button" className="secondary-button" onClick={() => onOpen(next.viewing)}>
+                Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {days.length === 0 ? (
+        <div className="agenda-empty">
+          <p className="agenda-empty-icon" aria-hidden="true">
+            📅
+          </p>
+          <p>
+            <strong>No viewings booked</strong>
+          </p>
+          <p className="muted">
+            Book one from a home in your Watchlist, or tap "Book a viewing" in an agent's email. It
+            shows up here with directions and the agent's number.
+          </p>
+        </div>
+      ) : (
+        days.map((day) => (
+          <section className="agenda-day" key={day.key} id={`agenda-day-${day.key}`}>
+            <h4 className="agenda-day-head">
+              {dayLabel(day.date)}
+              <span>{daySummary(day.items)}</span>
+            </h4>
+            <ul className="agenda-list">
+              {day.items.map((item) => (
+                <AgendaRow key={item.id} item={item} onOpen={onOpen} />
+              ))}
+            </ul>
+          </section>
+        ))
+      )}
+
+      {past.length > 0 && (
+        <section className="agenda-past">
+          <button type="button" className="link-button" onClick={() => setShowPast(!showPast)}>
+            {showPast ? "Hide past viewings" : `Past viewings (${past.length})`}
+          </button>
+          {showPast && (
+            <ul className="agenda-list">
+              {past.map((item) => (
+                <AgendaRow key={item.id} item={item} onOpen={onOpen} showDate />
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+// Phone-sized screen? (Same breakpoint as the rest of the phone layout.)
+function useIsPhone() {
+  const query = "(max-width: 760px)";
+  const [isPhone, setIsPhone] = useState(() => window.matchMedia?.(query).matches ?? false);
+  useEffect(() => {
+    const media = window.matchMedia?.(query);
+    if (!media) return undefined;
+    const update = () => setIsPhone(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return isPhone;
+}
+
+// "Add to calendar": on an iPhone the share sheet can hand the invite to the
+// Calendar app; elsewhere it downloads the .ics file.
+async function addToCalendar(viewing) {
+  const file = buildIcsFile(viewing);
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: file.name });
+      return;
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+  }
+  downloadIcsFile(viewing);
+}
+
+function buildIcsFile(viewing) {
+  const property = viewing.properties;
+  const start = new Date(viewing.viewing_datetime);
+  const end = new Date(start.getTime() + 45 * 60 * 1000);
+  const fmt = (date) => date.toISOString().replace(/[-:]|\.\d{3}/g, "");
+  const esc = (value) =>
+    String(value || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+  const content = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//PropertySearch//Viewing Calendar//EN",
+    "BEGIN:VEVENT",
+    `UID:${viewing.id}@propertysearch`,
+    `DTSTAMP:${fmt(new Date())}`,
+    `DTSTART:${fmt(start)}`,
+    `DTEND:${fmt(end)}`,
+    `SUMMARY:${esc(`Viewing: ${property?.address || "Property"}`)}`,
+    `LOCATION:${esc(property?.address || "")}`,
+    `DESCRIPTION:${esc([viewing.estate_agent, viewing.estate_agent_phone].filter(Boolean).join("\n"))}`,
+    "BEGIN:VALARM",
+    "TRIGGER:-PT1H",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Viewing in an hour",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  return new File([content], "viewing.ics", { type: "text/calendar" });
+}
+
 function downloadIcsFile(viewing) {
   const property = viewing.properties;
   const start = new Date(viewing.viewing_datetime);
@@ -162,6 +468,7 @@ function CalendarView() {
   const [editingViewing, setEditingViewing] = useState(null);
   const [selectedViewing, setSelectedViewing] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     loadViewings();
@@ -310,14 +617,22 @@ function CalendarView() {
 
   if (loadError) return <LoadError error={loadError} onRetry={() => loadViewings()} />;
 
+  const acceptedCalls = bookingRequests.filter((r) => r.status === "accepted" && r.kind === "call");
+  const upcomingCount = viewings.filter((v) => new Date(v.viewing_datetime) > new Date()).length;
+
   return (
-    <section className="card">
+    <section className={`card${isPhone ? " calendar-phone" : ""}`}>
       <div className="section-header">
         <div>
-          <h2>Viewing Calendar</h2>
-          <p>{viewings.length} scheduled viewings</p>
+          <h2>{isPhone ? "Viewings" : "Viewing Calendar"}</h2>
+          <p>
+            {upcomingCount
+              ? `${upcomingCount} coming up`
+              : "Nothing booked yet"}
+          </p>
         </div>
 
+        {!isPhone && (
         <div className="property-actions">
           <button type="button" className="secondary-button" onClick={goToToday}>
             Today
@@ -337,10 +652,15 @@ function CalendarView() {
             →
           </button>
         </div>
+        )}
       </div>
 
       <BookingRequests requests={bookingRequests} onChanged={refreshAll} />
 
+      {isPhone ? (
+        <CalendarAgenda viewings={viewings} calls={acceptedCalls} onOpen={setSelectedViewing} />
+      ) : (
+      <>
       <div className="calendar-header">
         <h3>{formatMonthTitle(currentMonth)}</h3>
       </div>
@@ -416,6 +736,8 @@ function CalendarView() {
           );
         })}
       </div>
+      </>
+      )}
 
       {selectedViewing && (
         <div className="modal-backdrop">
@@ -461,30 +783,50 @@ function CalendarView() {
               <p className="muted">Email: {selectedViewing.estate_agent_email}</p>
             )}
 
-            <div className="property-actions">
+            <div className="property-actions viewing-detail-actions">
+              {selectedViewing.properties?.address && (
+                <a
+                  className="primary-button"
+                  href={directionsUrl(selectedViewing.properties.address)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Directions
+                </a>
+              )}
+
+              {selectedViewing.estate_agent_phone && (
+                <a
+                  className="secondary-button"
+                  href={`tel:${selectedViewing.estate_agent_phone.replace(/\s+/g, "")}`}
+                >
+                  Call agent
+                </a>
+              )}
+
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => startEditing(selectedViewing)}
+                onClick={() => addToCalendar(selectedViewing)}
               >
-                Edit Viewing
+                Add to calendar
               </button>
 
               <a
-                className="primary-button"
+                className="secondary-button"
                 href={getGoogleCalendarLink(selectedViewing)}
                 target="_blank"
                 rel="noreferrer"
               >
-                Add to Google Calendar
+                Google Calendar
               </a>
 
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => downloadIcsFile(selectedViewing)}
+                onClick={() => startEditing(selectedViewing)}
               >
-                Download .ics
+                Edit
               </button>
 
               {selectedViewing.properties?.listing_url && (
@@ -555,7 +897,8 @@ function CalendarView() {
                 Estate agent phone
                 <input
                   name="estate_agent_phone"
-                  type="text"
+                  type="tel"
+                  autoComplete="tel"
                   value={editingViewing.estate_agent_phone}
                   onChange={handleEditChange}
                 />
