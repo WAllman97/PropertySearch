@@ -34,7 +34,7 @@ function SettingsSection({ id, title, summary, open, onToggle, children }) {
   );
 }
 
-function SettingsView({ user, focusSection, onFocused, onLogOut }) {
+function SettingsView({ user, focusSection, onFocused, onLogOut, isAgent = false }) {
   const [household, setHousehold] = useState(null);
   // Which sections are open: all on a computer, none on a phone.
   const [openSections, setOpenSections] = useState(() => (isPhone() ? {} : null));
@@ -144,6 +144,22 @@ function SettingsView({ user, focusSection, onFocused, onLogOut }) {
           "Choose how often you receive property alerts and add extra recipients, such as your partner.",
           <NotificationSettings user={user} />
         )}
+
+      {/* Only for accounts that are also estate agents: most buyers never
+          need it, so it lives here rather than on every page. */}
+      {isAgent && (
+        <section className="card settings-switch">
+          <div className="section-header">
+            <div>
+              <h2>Agent area</h2>
+              <p>Your listings, viewing times and bookings as an agent.</p>
+            </div>
+            <a className="secondary-button" href="/agent">
+              Switch to agent area →
+            </a>
+          </div>
+        </section>
+      )}
 
       {household &&
         section("delete", "Delete Account", null, <DeleteBuyerAccount household={household} />)}

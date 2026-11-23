@@ -183,12 +183,6 @@ function MainApp() {
           <h1>Home-buying command centre</h1>
         </div>
 
-        {signedIn && isAgent && (
-          <a className="secondary-button header-switch" href="/agent">
-            Agent area →
-          </a>
-        )}
-
         {/* On a phone this lives at the bottom of Settings instead. */}
         {signedIn && (
           <button
@@ -291,6 +285,7 @@ function MainApp() {
                 focusSection={settingsFocus}
                 onFocused={() => setSettingsFocus(null)}
                 onLogOut={logOut}
+                isAgent={isAgent}
               />
             )}
           </>
