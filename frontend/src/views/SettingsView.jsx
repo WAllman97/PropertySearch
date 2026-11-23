@@ -9,6 +9,7 @@ import NotificationSettings from "../components/NotificationSettings";
 import PushSettings from "../components/PushSettings";
 import { isNativeApp } from "../lib/platform";
 import EmailPreferences from "../components/EmailPreferences";
+import SearchStatus, { statusSummary } from "../components/SearchStatus";
 
 const PHONE = "(max-width: 760px)";
 const isPhone = () => typeof window !== "undefined" && window.matchMedia?.(PHONE).matches;
@@ -98,6 +99,14 @@ function SettingsView({ user, focusSection, onFocused, onLogOut, isAgent = false
 
   return (
     <>
+      {household &&
+        section(
+          "status",
+          "Where you are",
+          statusSummary(household.search_status || "searching", household.paused_until),
+          <SearchStatus household={household} onChange={loadHousehold} />
+        )}
+
       {section(
         "searches",
         "What you're looking for",
