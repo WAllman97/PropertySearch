@@ -56,15 +56,17 @@ const TABS = [
   { id: "settings", label: "Settings" },
 ];
 
-function NavigationTabs({ activeView, setActiveView }) {
+// The agent area uses the same bar with its own tabs (AgentPortal.jsx); a
+// tab's `icon` picks one of the icons above when its id has none.
+function NavigationTabs({ activeView, setActiveView, tabs = TABS }) {
   function choose(id) {
     if (id !== activeView) window.scrollTo({ top: 0 });
     setActiveView(id);
   }
 
   return (
-    <nav className="nav-tabs" aria-label="Main">
-      {TABS.map((tab) => (
+    <nav className="nav-tabs" aria-label="Main" style={{ "--tab-count": tabs.length }}>
+      {tabs.map((tab) => (
         <button
           key={tab.id}
           type="button"
@@ -72,7 +74,7 @@ function NavigationTabs({ activeView, setActiveView }) {
           aria-current={activeView === tab.id ? "page" : undefined}
           onClick={() => choose(tab.id)}
         >
-          <span className="nav-icon">{ICONS[tab.id]}</span>
+          <span className="nav-icon">{ICONS[tab.icon || tab.id]}</span>
           <span className="nav-label">{tab.label}</span>
         </button>
       ))}
