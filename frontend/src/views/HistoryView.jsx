@@ -653,6 +653,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
               open={openId === property.id}
               onToggle={() => setOpenId((current) => (current === property.id ? null : property.id))}
               tag={getStatusLabel(property.status)}
+              note={<ChecklistChip items={mustHaves} checklist={checklists[property.id]} />}
             >
               <div className="property-content">
                 <MarketSignals property={property} />
@@ -671,7 +672,6 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
                   {property.offer_interest && (
                     <span>Offer: {property.offer_interest}</span>
                   )}
-                  <ChecklistChip items={mustHaves} checklist={checklists[property.id]} />
                 </div>
 
                 <CommuteSummary
