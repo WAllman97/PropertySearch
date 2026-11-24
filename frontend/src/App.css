@@ -3241,3 +3241,12 @@ button.link-button:hover {
     flex: 1;
   }
 }
+
+.tile-caption .must-have-chip {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  line-height: 1.35;
+  max-width: 100%;
+}
