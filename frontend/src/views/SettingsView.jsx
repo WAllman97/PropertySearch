@@ -10,6 +10,7 @@ import { isNativeApp } from "../lib/platform";
 import EmailPreferences from "../components/EmailPreferences";
 import SearchStatus, { statusSummary } from "../components/SearchStatus";
 import AgentControls from "../components/AgentControls";
+import { MustHaveSettings } from "../components/MustHaves";
 
 const PHONE = "(max-width: 760px)";
 const isPhone = () => typeof window !== "undefined" && window.matchMedia?.(PHONE).matches;
@@ -112,6 +113,13 @@ function SettingsView({ user, focusSection, onFocused, onLogOut, isAgent = false
         "What you're looking for",
         "Agents' new listings that fit one of these searches are sent straight to you.",
         <BuyerSearches user={user} />
+      )}
+
+      {section(
+        "musthaves",
+        "Your must-haves",
+        "Your dealbreakers. Tick them off at each viewing to see which homes fall short.",
+        <MustHaveSettings />
       )}
 
       {section(

@@ -61,7 +61,7 @@ async function loadEverything() {
     // Viewings in the last fortnight, for "How did it go?".
     supabase
       .from("property_notes")
-      .select("id, viewing_datetime, positives, negatives, general_notes, properties ( id, address, title, status )")
+      .select("*, properties ( id, address, title, status )")
       .gte("viewing_datetime", new Date(now - 14 * DAY).toISOString())
       .lt("viewing_datetime", now.toISOString())
       .order("viewing_datetime", { ascending: false }),
@@ -111,7 +111,9 @@ async function loadEverything() {
         ["viewing_booked", "viewed"].includes(v.properties.status) &&
         !v.positives &&
         !v.negatives &&
-        !v.general_notes
+        !v.general_notes &&
+        !v.viewing_notes &&
+        !Object.keys(v.checklist || {}).length
     ),
   };
 }
@@ -210,7 +212,7 @@ function DashboardView({ onNavigate }) {
         if (home.status === "viewing_booked") {
           await supabase.from("properties").update({ status: "viewed" }).eq("id", home.id);
         }
-        onNavigate?.("history");
+        onNavigate?.("history", null, home.id);
       },
     });
   }

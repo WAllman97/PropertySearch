@@ -123,6 +123,9 @@ async function must(promise, what) {
 // The homes. Streets are real south-west London streets with no house
 // numbers (as portals show them); listings, prices and photos are made up.
 
+// The household's must-haves (migration 031), ticked off at viewings below.
+const MUST_HAVES = ["Garden", "Three bedrooms or more", "Walk to a station", "Good natural light", "Off-street parking"];
+
 const HOMES = [
   {
     key: "booked", title: "Elsley Road, Battersea", postcode: "SW11", lat: 51.4655, lng: -0.1636,
@@ -142,7 +145,7 @@ const HOMES = [
     desc: "Well-kept three-bedroom house on a quiet tree-lined street off Lavender Hill, with an extended kitchen, a separate reception and a patio garden.",
     scores: [8, 8, 7, 8, 7, 8],
     notes: { positives: "- Extended kitchen\n- Quiet street\n- Ready to move in", negatives: "- Patio not lawn\n- On-street parking", viewing_notes: "Loved it. Neighbours friendly. Light in the evening." },
-    offer: 835000, agentListing: true,
+    offer: 835000, agentListing: true, checks: ["yes", "yes", "yes", "yes", "no"],
   },
   {
     key: "fav1", title: "Bolingbroke Grove, Battersea", postcode: "SW11", lat: 51.4567, lng: -0.1676,
@@ -225,6 +228,7 @@ const HOMES = [
     desc: "Three-bedroom house with a wisteria-clad front, a kitchen-diner, a cellar and a 50ft garden.",
     scores: [8, 7, 7, 7, 7, 6],
     notes: { positives: "- Lovely garden\n- Cellar storage", negatives: "- Needs a new bathroom\n- Busy road at rush hour", viewing_notes: "Good, but not as light as Gowrie Road." },
+    checks: ["yes", "yes", "yes", "no", "no"],
   },
 ];
 
@@ -270,6 +274,16 @@ async function main() {
     updated_by: buyerId,
   }), "buying position");
 
+  // Before migration 031 the table doesn't exist: carry on without them.
+  const { data: musts, error: mustError } = await admin
+    .from("must_haves")
+    .insert(MUST_HAVES.map((label, position) => ({ household_id: H, label, position })))
+    .select("id, position");
+  if (mustError) console.warn("Skipping must-haves (run migration 031):", mustError.message);
+  const mustIds = (musts || []).sort((a, b) => a.position - b.position).map((m) => m.id);
+  const checklistFor = (checks) =>
+    Object.fromEntries((checks || []).map((answer, i) => [mustIds[i], answer]).filter(([id, answer]) => id && answer));
+
   const ids = {};
   for (const h of HOMES) {
     const [loc, qual, com, val, fut, gut] = h.scores;
@@ -305,6 +319,7 @@ async function main() {
         questions: h.notes?.questions || "", viewing_notes: h.notes?.viewing_notes || null, general_notes: "",
         estate_agent: h.agentListing ? "Jordan Ellis, Larkspur Homes" : "Mia Clarke, Commonside Estates",
         viewing_datetime: h.viewedDaysAgo ? iso(londonAt(-h.viewedDaysAgo, 18, 0)) : null,
+        ...(mustIds.length && h.checks ? { checklist: checklistFor(h.checks) } : {}),
       }), "notes");
     }
   }

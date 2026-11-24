@@ -83,6 +83,8 @@ privacy answers with what the app actually does.
 > • Save a home by pasting its link from the property websites you already use
 > • Notes, ratings and a shared shortlist for your household
 > • Journey times to the places that matter to you
+> • Your must-haves list: tick each one off at a viewing, and see at a
+>   glance which homes fall short
 >
 > FIND THE RIGHT HOMES
 > • Search by postcode, by distance from a place ("within ½ mile of

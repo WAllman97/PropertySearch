@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { ConfirmEmailPage } from "./components/ConfirmEmail";
 import { onSharedLink } from "./lib/sharedLinks";
 import ViewingRequestPage from "./views/ViewingRequestPage";
@@ -146,6 +146,17 @@ function MainApp() {
   const [showJoin, setShowJoin] = useState(() => Boolean(getInviteCode()));
   // Settings card to scroll to when another view links there.
   const [settingsFocus, setSettingsFocus] = useState(null);
+  // A home to open on the Watchlist (from a calendar viewing or the Dashboard).
+  const [focusProperty, setFocusProperty] = useState(null);
+  const clearFocusProperty = useCallback(() => setFocusProperty(null), []);
+  const openNotes = useCallback((propertyId) => {
+    setFocusProperty(propertyId);
+    setActiveView("history");
+  }, []);
+  const openSettings = useCallback((section) => {
+    setSettingsFocus(section);
+    setActiveView("settings");
+  }, []);
 
   // A property link shared to the app opens Add Property on the Properties tab.
   useEffect(() => onSharedLink(() => setActiveView("properties")), []);
@@ -305,14 +316,23 @@ function MainApp() {
             )}
             {activeView === "dashboard" && (
               <DashboardView
-                onNavigate={(view, section) => {
+                onNavigate={(view, section, propertyId) => {
                   if (section) setSettingsFocus(section);
+                  if (propertyId) setFocusProperty(propertyId);
                   setActiveView(view);
                 }}
               />
             )}
-            {activeView === "calendar" && <CalendarView />}
-            {activeView === "history" && <HistoryView />}
+            {activeView === "calendar" && (
+              <CalendarView onOpenNotes={openNotes} onOpenSettings={() => openSettings("musthaves")} />
+            )}
+            {activeView === "history" && (
+              <HistoryView
+                focusPropertyId={focusProperty}
+                onFocused={clearFocusProperty}
+                onOpenSettings={() => openSettings("musthaves")}
+              />
+            )}
             {activeView === "settings" && (
               <SettingsView
                 user={user}

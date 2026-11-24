@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
 import BookingRequests from "../components/BookingRequests";
 import LoadError from "../components/LoadError";
+import { ViewingChecklist } from "../components/MustHaves";
 import { friendlyError } from "../lib/errors";
 
 function getMonthStart(date) {
@@ -460,7 +461,7 @@ function downloadIcsFile(viewing) {
   URL.revokeObjectURL(url);
 }
 
-function CalendarView() {
+function CalendarView({ onOpenNotes, onOpenSettings }) {
   const [viewings, setViewings] = useState([]);
   const [bookingRequests, setBookingRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -840,6 +841,24 @@ function CalendarView() {
                 </a>
               )}
             </div>
+
+            {selectedViewing.property_id && (
+              <div className="viewing-modal-checklist">
+                <ViewingChecklist
+                  propertyId={selectedViewing.property_id}
+                  onOpenSettings={onOpenSettings}
+                />
+                {onOpenNotes && (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => onOpenNotes(selectedViewing.property_id)}
+                  >
+                    Notes &amp; scoring →
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
