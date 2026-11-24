@@ -8,6 +8,7 @@ import { listingKey } from "../../api/_lib/listing.js";
 import { londonToUtc } from "../../api/_lib/time.js";
 import { openProof, proofLabel } from "../components/PositionProof";
 import AgentHours from "./AgentHours";
+import NavigationTabs from "../components/NavigationTabs";
 import { CheckYourEmail } from "../components/ConfirmEmail";
 import "./AgentPortal.css";
 
@@ -1860,7 +1861,7 @@ function listingSummary(listing, slots, bookingsBySlot, reach) {
 // First-run checklist for a new agent: list a home, publish times, send it
 // to matching buyers. Ticks itself off from what's saved; hidden once done
 // or when the agent hides it (remembered on this device).
-function AgentGettingStarted({ agentId, listings, slots, reach, hoursSet }) {
+function AgentGettingStarted({ agentId, listings, slots, reach, hoursSet, onGo }) {
   const key = `agentStartHidden:${agentId}`;
   const [hidden, setHidden] = useState(() => {
     try {
@@ -1908,9 +1909,9 @@ function AgentGettingStarted({ agentId, listings, slots, reach, hoursSet }) {
     setHidden(true);
   }
 
-  function go(target) {
-    document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  // The steps live on other tabs (Listings, Settings): the dashboard
+  // switches tab, then scrolls.
+  const go = onGo;
 
   return (
     <section className="card getting-started" aria-labelledby="agent-start-title">
@@ -2043,6 +2044,232 @@ function AgentAgenda({ listings, slots, bookingsBySlot, positions }) {
   );
 }
 
+// Calendar tab: the agent's diary across every listing, laid out like the
+// buyer's phone calendar (App.css .agenda-*): a two-week strip, "Next up",
+// then each day. Booked viewings by default; free times on request, since
+// weekly hours can add a lot of them.
+const stripWeekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "narrow" });
+const stripDate = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric" });
+
+function mapsUrl(listing) {
+  const where = [listing?.address, listing?.postcode].filter(Boolean).join(", ");
+  return where ? `https://maps.apple.com/?q=${encodeURIComponent(where)}` : "";
+}
+
+function AgentCalendar({ listings, slots, bookingsBySlot, positions, timeOff }) {
+  const [showFree, setShowFree] = useState(false);
+  const now = Date.now();
+  const listingById = Object.fromEntries(listings.map((l) => [l.id, l]));
+  const upcoming = slots.filter((s) => new Date(s.ends_at).getTime() > now);
+  const booked = (slot) => bookingsBySlot[slot.id] || [];
+  const shown = showFree ? upcoming : upcoming.filter((s) => booked(s).length);
+  const freeCount = upcoming.filter((s) => !booked(s).length).length;
+
+  const days = [];
+  for (const slot of shown) {
+    const key = londonDayKey(new Date(slot.starts_at));
+    const last = days[days.length - 1];
+    if (last?.key === key) last.slots.push(slot);
+    else days.push({ key, slots: [slot] });
+  }
+  const bookedDays = new Set(upcoming.filter((s) => booked(s).length).map((s) => londonDayKey(new Date(s.starts_at))));
+  const todayKey = londonDayKey(new Date(now));
+  const tomorrowKey = londonDayKey(new Date(now + 864e5));
+  const dayLabel = (key, at) => (key === todayKey ? "Today" : key === tomorrowKey ? "Tomorrow" : agendaDay.format(at));
+  const offOn = (key) => timeOff.some((t) => key >= t.starts_on && key <= t.ends_on);
+  const strip = Array.from({ length: 14 }, (_, n) => new Date(now + n * 864e5));
+
+  const next = upcoming.find((s) => booked(s).length);
+  const nextListing = next && listingById[next.listing_id];
+  const nextBuyer = next && booked(next)[0];
+
+  function jumpTo(key) {
+    const day = days.find((d) => d.key >= key);
+    if (day) document.getElementById(`agent-day-${day.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  return (
+    <div className="agenda agent-calendar">
+      <div className="agenda-strip" role="list" aria-label="Next two weeks">
+        {strip.map((date) => {
+          const key = londonDayKey(date);
+          return (
+            <button
+              type="button"
+              role="listitem"
+              key={key}
+              className={`agenda-strip-day${key === todayKey ? " today" : ""}${bookedDays.has(key) ? " busy" : ""}${offOn(key) ? " off" : ""}`}
+              onClick={() => jumpTo(key)}
+              title={offOn(key) ? "Time off" : undefined}
+            >
+              <span>{stripWeekday.format(date)}</span>
+              <strong>{stripDate.format(date)}</strong>
+              <i aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+
+      {next && (
+        <div className="agenda-next">
+          {nextListing?.image_url && <img className="agenda-next-photo" src={nextListing.image_url} alt="" />}
+          <div className="agenda-next-body">
+            <p className="eyebrow">Next up</p>
+            <h3>{nextListing?.address || "Viewing"}</h3>
+            <p className="agenda-next-when">
+              {dayLabel(londonDayKey(new Date(next.starts_at)), new Date(next.starts_at))}, {timeRange(next)}
+            </p>
+            <p className="muted">
+              With {booked(next).map((b) => b.buyer_name).join(", ")}
+            </p>
+            <div className="agenda-next-actions">
+              {mapsUrl(nextListing) && (
+                <a className="primary-button" href={mapsUrl(nextListing)} target="_blank" rel="noreferrer">
+                  Directions
+                </a>
+              )}
+              {nextBuyer?.buyer_phone && (
+                <a className="secondary-button" href={`tel:${nextBuyer.buyer_phone.replace(/\s+/g, "")}`}>
+                  Call {nextBuyer.buyer_name?.split(" ")[0] || "buyer"}
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {freeCount > 0 && (
+        <button type="button" className="link-button agent-calendar-toggle" onClick={() => setShowFree(!showFree)}>
+          {showFree ? "Booked viewings only" : `Show free times too (${freeCount})`}
+        </button>
+      )}
+
+      {days.length === 0 ? (
+        <div className="agenda-empty">
+          <p className="agenda-empty-icon" aria-hidden="true">
+            📅
+          </p>
+          <p>
+            <strong>No viewings booked</strong>
+          </p>
+          <p className="muted">
+            {freeCount
+              ? "Buyers book your free times from the listing or a match email. Bookings show up here."
+              : "Set your viewing hours in Settings, or add times to a listing, and buyers can book straight in."}
+          </p>
+        </div>
+      ) : (
+        days.map((day) => {
+          const first = new Date(day.slots[0].starts_at);
+          const count = day.slots.reduce((n, s) => n + booked(s).length, 0);
+          return (
+            <section className="agenda-day" key={day.key} id={`agent-day-${day.key}`}>
+              <h4 className="agenda-day-head">
+                {dayLabel(day.key, first)}
+                <span>{count ? `${count} viewing${count === 1 ? "" : "s"}` : "Free times only"}</span>
+              </h4>
+              <ul className="agenda-list">
+                {day.slots.map((slot) => {
+                  const listing = listingById[slot.listing_id];
+                  const buyers = booked(slot);
+                  const phone = buyers.find((b) => b.buyer_phone)?.buyer_phone;
+                  return (
+                    <li key={slot.id} className="agenda-row">
+                      <div className={`agenda-row-button agent-calendar-row${buyers.length ? "" : " free"}`}>
+                        <div className="agenda-time">
+                          <strong>{agendaTime.format(new Date(slot.starts_at))}</strong>
+                          <span>{buyers.length ? "Viewing" : "Free"}</span>
+                        </div>
+                        {listing?.image_url ? (
+                          <img className="agenda-thumb" src={listing.image_url} alt="" />
+                        ) : (
+                          <div className="agenda-thumb agenda-thumb-icon" aria-hidden="true">
+                            🏠
+                          </div>
+                        )}
+                        <div className="agenda-main">
+                          <strong>{buyers.length ? buyers.map((b) => b.buyer_name).join(", ") : listing?.address || "Viewing time"}</strong>
+                          {buyers.length > 0 && <span>{listing?.address || "Viewing"}</span>}
+                          {buyers.map((b) =>
+                            b.buyer_id ? (
+                              <span key={b.id} className="agent-calendar-position">
+                                <BuyerPosition position={positions[b.buyer_id]} />
+                              </span>
+                            ) : null
+                          )}
+                        </div>
+                        {phone ? (
+                          <a className="secondary-button agent-agenda-call" href={`tel:${phone.replace(/\s+/g, "")}`}>
+                            Call
+                          </a>
+                        ) : (
+                          <span />
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+// Settings tab: who you are, your viewing hours, and the account things
+// that used to sit in the header on every page.
+function AgentSettings({ agent, email, hoursCard, isBuyer, onLogOut }) {
+  return (
+    <div className="agent-settings">
+      <section className="card agent-profile-card">
+        <h3>Your profile</h3>
+        <dl className="agent-profile-facts">
+          <dt>Name</dt>
+          <dd>{agent.name}</dd>
+          {(agent.agency || agent.branch) && (
+            <>
+              <dt>Agency</dt>
+              <dd>{[agent.agency, agent.branch].filter(Boolean).join(" · ")}</dd>
+            </>
+          )}
+          {agent.phone && (
+            <>
+              <dt>Phone</dt>
+              <dd>{agent.phone}</dd>
+            </>
+          )}
+          {email && (
+            <>
+              <dt>Email</dt>
+              <dd>{email}</dd>
+            </>
+          )}
+        </dl>
+      </section>
+
+      {hoursCard}
+
+      <section className="card agent-account-card">
+        <h3>Account</h3>
+        <div className="agent-account-actions">
+          {isBuyer && (
+            <a className="secondary-button" href="/">
+              Switch to the buyer app
+            </a>
+          )}
+          <button type="button" className="secondary-button" onClick={onLogOut}>
+            Log out
+          </button>
+        </div>
+      </section>
+
+      <DeleteAccount />
+    </div>
+  );
+}
+
 // Roughly how much time PropertySearch saved this agent (migration 030):
 // the evidence for "is it worth it". Hidden until there's something to show.
 const SAVED_ROWS = [
@@ -2117,7 +2344,10 @@ function TimeSaved({ refreshKey }) {
   );
 }
 
-function AgentDashboard({ agent }) {
+// Which tab each getting-started step's target lives on.
+const TARGET_VIEW = { "agent-add-listing": "listings", "agent-listings": "listings", "agent-hours": "settings" };
+
+function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
   const [listings, setListings] = useState([]);
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -2221,43 +2451,102 @@ function AgentDashboard({ agent }) {
     />
   );
 
-  return (
-    <div className="agent-dashboard">
-      <header className="agent-dashboard-head">
-        <div>
-          <p className="eyebrow">{[agent.agency, agent.branch].filter(Boolean).join(" · ")}</p>
-          <h2>Viewings</h2>
-          <p className="muted">
-            {bookedCount
-              ? `${bookedCount} buyer${bookedCount === 1 ? "" : "s"} booked across ${upcomingBooked} upcoming time${upcomingBooked === 1 ? "" : "s"}.`
-              : "No bookings yet. Buyers who've saved one of your listings will see the times you add."}
-          </p>
-        </div>
-      </header>
+  // Getting started: open the tab the step lives on, then scroll to it.
+  function goTo(target) {
+    if (target === "agent-add-listing") setAddingListing(true);
+    const tab = TARGET_VIEW[target];
+    if (tab && tab !== view) setView(tab);
+    setTimeout(() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
 
-      {!loading && <TimeSaved refreshKey={listings.length + bookedCount + offers.length} />}
+  const heading = (title, text) => (
+    <header className="agent-dashboard-head">
+      <div>
+        <p className="eyebrow">{[agent.agency, agent.branch].filter(Boolean).join(" · ")}</p>
+        <h2>{title}</h2>
+        {text && <p className="muted">{text}</p>}
+      </div>
+    </header>
+  );
 
-      {!loading && (
+  if (loading) {
+    return (
+      <div className="agent-dashboard">
+        <p className="muted">Loading...</p>
+      </div>
+    );
+  }
+
+  if (view === "calendar") {
+    return (
+      <div className="agent-dashboard">
+        {heading("Calendar", "Every viewing across your listings.")}
+        <AgentCalendar
+          listings={listings}
+          slots={slots}
+          bookingsBySlot={bookingsBySlot}
+          positions={positions}
+          timeOff={timeOff}
+        />
+      </div>
+    );
+  }
+
+  if (view === "settings") {
+    return (
+      <div className="agent-dashboard">
+        {heading("Settings")}
+        <AgentSettings agent={agent} email={email} hoursCard={hoursCard} isBuyer={isBuyer} onLogOut={onLogOut} />
+      </div>
+    );
+  }
+
+  if (view === "today") {
+    return (
+      <div className="agent-dashboard">
+        {heading(
+          "Today",
+          bookedCount
+            ? `${bookedCount} buyer${bookedCount === 1 ? "" : "s"} booked across ${upcomingBooked} upcoming time${upcomingBooked === 1 ? "" : "s"}.`
+            : "No bookings yet. Buyers who've saved one of your listings will see the times you add."
+        )}
+
+        <TimeSaved refreshKey={listings.length + bookedCount + offers.length} />
+
         <AgentGettingStarted
           agentId={agent.user_id}
           listings={listings}
           slots={slots}
           reach={reach}
           hoursSet={!!availability}
+          onGo={goTo}
         />
+
+        {/* What needs doing: offers to answer, then who you're seeing. */}
+        <OfferRequests offers={offers} positions={positions} onChanged={load} />
+
+        {listings.length > 0 && (
+          <AgentAgenda listings={listings} slots={slots} bookingsBySlot={bookingsBySlot} positions={positions} />
+        )}
+
+        {listings.length > 0 && (
+          <button type="button" className="secondary-button agent-today-more" onClick={() => setView("calendar")}>
+            See the full calendar
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Listings tab.
+  return (
+    <div className="agent-dashboard">
+      {heading(
+        "Listings",
+        listings.length
+          ? `${listings.length} listing${listings.length === 1 ? "" : "s"}. Tap one to change its status, times or price.`
+          : "Paste a Rightmove, Zoopla or OnTheMarket link and we fill in the rest."
       )}
-
-      {/* Order: what's happening (viewings, offers to answer), then
-          listings, then the set-once things (weekly hours). New agents
-          with no hours yet see the hours first, since nothing works
-          without them. */}
-      {!loading && listings.length > 0 && (
-        <AgentAgenda listings={listings} slots={slots} bookingsBySlot={bookingsBySlot} positions={positions} />
-      )}
-
-      <OfferRequests offers={offers} positions={positions} onChanged={load} />
-
-      {!loading && !availability && hoursCard}
 
       <section className="card agent-add-section" id="agent-add-listing">
         {addingListing || listings.length === 0 ? (
@@ -2280,35 +2569,27 @@ function AgentDashboard({ agent }) {
       </section>
 
       <div id="agent-listings" />
-      {loading ? (
-        <p className="muted">Loading...</p>
-      ) : (
-        <>
-          {listings.length > 0 && (
-            <h3 className="agent-listings-head">
-              Your listings <span className="muted">({listings.length})</span>
-            </h3>
-          )}
-          {listings.map((listing) => (
-            <ListingCard
-              key={listing.id}
-              listing={listing}
-              slots={slotsByListing[listing.id] || []}
-              bookingsBySlot={bookingsBySlot}
-              positions={positions}
-              agentId={agent.user_id}
-              reach={reach[listing.id]}
-              hoursOn={!!availability?.enabled}
-              blocked={blocked}
-              // A few listings: show them in full. Lots: compact, tap to open.
-              startOpen={listings.length <= 2}
-              onChanged={load}
-            />
-          ))}
-        </>
+      {listings.length > 0 && (
+        <h3 className="agent-listings-head">
+          Your listings <span className="muted">({listings.length})</span>
+        </h3>
       )}
-
-      {!loading && availability && hoursCard}
+      {listings.map((listing) => (
+        <ListingCard
+          key={listing.id}
+          listing={listing}
+          slots={slotsByListing[listing.id] || []}
+          bookingsBySlot={bookingsBySlot}
+          positions={positions}
+          agentId={agent.user_id}
+          reach={reach[listing.id]}
+          hoursOn={!!availability?.enabled}
+          blocked={blocked}
+          // A few listings: show them in full. Lots: compact, tap to open.
+          startOpen={listings.length <= 2}
+          onChanged={load}
+        />
+      ))}
     </div>
   );
 }
@@ -2383,7 +2664,27 @@ function DeleteAccount() {
 
 // ---------------------------------------------------------------------------
 
+// The agent's tabs, in the same bottom bar as the buyer app.
+const AGENT_TABS = [
+  { id: "today", label: "Today", icon: "dashboard" },
+  { id: "listings", label: "Listings", icon: "properties" },
+  { id: "calendar", label: "Calendar" },
+  { id: "settings", label: "Settings" },
+];
+
+// Links can open a tab directly, e.g. /agent?view=calendar
+function initialAgentView() {
+  const view = new URLSearchParams(window.location.search).get("view");
+  return AGENT_TABS.some((tab) => tab.id === view) ? view : "today";
+}
+
+async function logOut() {
+  await forgetThisPhone();
+  supabase.auth.signOut({ scope: "local" });
+}
+
 function AgentPortal() {
+  const [view, setView] = useState(initialAgentView);
   const [user, setUser] = useState(undefined);
   const [agent, setAgent] = useState(undefined);
   const [isBuyer, setIsBuyer] = useState(false);
@@ -2430,32 +2731,31 @@ function AgentPortal() {
   }, [agent]);
 
   return (
-    <div className="app-shell">
+    // signed-in: on a phone, room for the bottom tab bar and a compact header.
+    <div className={`app-shell${user && agent ? " signed-in" : ""}`}>
       <header className="app-header">
         <div>
           <p className="eyebrow">PropertySearch for agents</p>
           <h1>{agent ? agent.name : "Viewing bookings"}</h1>
         </div>
-        <div className="agent-header-actions">
-          {user && isBuyer && (
-            <a className="secondary-button" href="/">
-              ← Buyer app
-            </a>
-          )}
-          {user && (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={async () => {
-                await forgetThisPhone();
-                supabase.auth.signOut({ scope: "local" });
-              }}
-            >
+        {/* With a profile, these live in the Settings tab instead. */}
+        {user && !agent && (
+          <div className="agent-header-actions">
+            {isBuyer && (
+              <a className="secondary-button" href="/">
+                ← Buyer app
+              </a>
+            )}
+            <button type="button" className="secondary-button" onClick={logOut}>
               Log Out
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </header>
+
+      {user && agent && !settingPassword && (
+        <NavigationTabs activeView={view} setActiveView={setView} tabs={AGENT_TABS} />
+      )}
 
       <main className="app-main">
         {agent && offerPush && (
@@ -2511,10 +2811,14 @@ function AgentPortal() {
             <DeleteAccount />
           </>
         ) : (
-          <>
-            <AgentDashboard agent={agent} />
-            <DeleteAccount />
-          </>
+          <AgentDashboard
+            agent={agent}
+            email={user.email}
+            view={view}
+            setView={setView}
+            isBuyer={isBuyer}
+            onLogOut={logOut}
+          />
         )}
       </main>
       <footer className="app-footer muted">

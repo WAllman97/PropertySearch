@@ -1375,3 +1375,66 @@
   font-size: 12px;
   margin: 0;
 }
+
+/* ---- Agent tabs: Calendar and Settings ---- */
+.agent-calendar-row {
+  cursor: default;
+}
+
+.agent-calendar-row.free {
+  opacity: 0.65;
+}
+
+.agent-calendar-position {
+  white-space: normal !important;
+}
+
+.agent-calendar-toggle {
+  align-self: flex-start;
+}
+
+.agenda-strip-day.off strong {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.agent-today-more {
+  align-self: center;
+}
+
+.agent-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.agent-profile-card h3,
+.agent-account-card h3 {
+  margin: 0 0 10px;
+}
+
+.agent-profile-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.agent-profile-facts dt {
+  color: var(--muted);
+}
+
+.agent-profile-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-account-actions a {
+  text-decoration: none;
+}

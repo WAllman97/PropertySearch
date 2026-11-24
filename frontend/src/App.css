@@ -2287,7 +2287,7 @@ button.link-button:hover {
     z-index: 40;
     margin: 0;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(var(--tab-count, 5), 1fr);
     gap: 0;
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     background: rgba(255, 255, 255, 0.96);
