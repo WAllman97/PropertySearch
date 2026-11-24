@@ -58,6 +58,11 @@ AI triage scoring; the agent call/viewing booking page (`/book/<slug>`); the sec
 - **Watchlist sorting:** date, price, score, progress, price cut, time on market.
 - **Portal policy:** portals are read only as link previews of a page the buyer pastes. Price cuts for app users come from agents updating prices in the agent portal.
 
+### 24 Nov: must-haves and viewing notes
+- **Must-haves (migration 031):** Settings → "Your must-haves" is the household's dealbreaker list. At each viewing the buyer ticks every one ✓ / ✗ (stored in `property_notes.checklist`), with free-text viewing notes. Watchlist tiles show "✗ 1 must-have missing" or "✓ 4 of 5".
+- **Viewing notes tidied:** a home's notes page shows the booked viewing (date, agent, phone, email, filled in by the booking) as a summary with "Change", instead of empty boxes; then must-haves and notes, the score, and pros/cons. Saving notes no longer writes over the viewing details unless they were changed by hand.
+- **Calendar → notes:** tapping a viewing shows the must-have ticks and notes inline (to fill in during the viewing) and a "Notes & scoring" button that opens that home. The Dashboard's "How did it go?" opens the home too.
+
 ## Architecture
 
 | Part | Where | Notes |
@@ -65,7 +70,7 @@ AI triage scoring; the agent call/viewing booking page (`/book/<slug>`); the sec
 | Web app | `frontend/` (React + Vite), Vercel | Also wrapped as the iOS app via Capacitor |
 | API | `frontend/api/*.js` (12 Vercel functions max), shared code in `frontend/api/_lib/` | Service-role Supabase client, so every route checks the household itself |
 | Jobs | `backend/` (Python), GitHub Actions | Viewing reminders and agent run sheets, Land Registry sold-price comparisons, nightly backup |
-| Database | Supabase (Postgres, row-level security, storage) | Migrations in `backend/migrations/` 001–030 |
+| Database | Supabase (Postgres, row-level security, storage) | Migrations in `backend/migrations/` 001–031 |
 | Email / push | Resend / APNs | |
 
 **Workflows:** `viewing-reminders.yml` (hourly), `sold-price-comps.yml` (daily 06:00 UTC), `ios-testflight.yml` (manual), `nightly-backup.yml`.

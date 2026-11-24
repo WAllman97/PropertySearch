@@ -10,6 +10,7 @@ import PropertyTile from "../components/PropertyTile";
 import { daysOnMarket, priceDrop } from "../utils/market";
 import LoadError from "../components/LoadError";
 import { friendlyError } from "../lib/errors";
+import { ChecklistChip, ViewingChecklist, useMustHaves } from "../components/MustHaves";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -50,6 +51,62 @@ const WATCHLIST_SORTS = [
 ];
 const SORT_KEY = "watchlistSort";
 
+const viewingWhen = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+// The viewing as booked (through an agent, or typed in by the buyer), shown
+// as a summary. Bookings fill this in themselves; editing is the exception.
+function ViewingSummary({ notes, request, onEdit }) {
+  const when = notes.viewing_datetime ? new Date(notes.viewing_datetime) : null;
+  const past = when && when < new Date();
+  const agent = notes.estate_agent;
+  const phone = notes.estate_agent_phone;
+  const email = notes.estate_agent_email;
+  const waiting = !when && request && ["pending", "proposed"].includes(request.status);
+
+  if (!when && !agent && !waiting) {
+    return (
+      <div className="viewing-summary none">
+        <p>No viewing booked yet. Book one from the agent's times above, or add one you arranged yourself.</p>
+        <div className="viewing-summary-links">
+          <button type="button" className="link-button" onClick={onEdit}>
+            + Add a viewing
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="viewing-summary">
+      {when ? (
+        <p className="viewing-summary-when">
+          {past ? "Viewed" : "Viewing"} {viewingWhen.format(when)}
+        </p>
+      ) : waiting ? (
+        <p className="viewing-summary-when">Viewing asked for, waiting to hear back</p>
+      ) : (
+        <p className="viewing-summary-when">No viewing date yet</p>
+      )}
+      {agent && <p>With {agent}</p>}
+      <div className="viewing-summary-links">
+        {phone && <a href={`tel:${phone.replace(/\s+/g, "")}`}>{phone}</a>}
+        {email && <a href={`mailto:${email}`}>{email}</a>}
+        <button type="button" className="link-button" onClick={onEdit}>
+          Change
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function getPropertyAgeDays(property) {
   const dateValue =
     property.date_found ||
@@ -79,7 +136,7 @@ function getAgeLabel(days) {
   return days === 0 ? "Added today" : `Added ${days} days ago`;
 }
 
-function HistoryView() {
+function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
   const [sortKey, setSortKey] = useState(() => {
     try {
       const saved = localStorage.getItem(SORT_KEY);
@@ -104,6 +161,10 @@ function HistoryView() {
   const [notes, setNotes] = useState(emptyNotes);
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesMessage, setNotesMessage] = useState("");
+  const [editingViewing, setEditingViewing] = useState(false);
+  const { items: mustHaves } = useMustHaves();
+  // Each home's must-have ticks, for the tiles.
+  const [checklists, setChecklists] = useState({});
   // Live accepted offers by property id (withdrawn ones are hidden).
   const [offers, setOffers] = useState({});
   // The one tile flipped open to show its details.
@@ -117,7 +178,26 @@ function HistoryView() {
     if (selectedProperty) {
       loadNotes(selectedProperty.id);
     }
-  }, [selectedProperty]);
+    // Only when a different home is opened, not on every refresh of it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProperty?.id]);
+
+  // Arrived from a calendar viewing or the Dashboard: open that home.
+  useEffect(() => {
+    if (!focusPropertyId) return;
+    supabase
+      .from("properties")
+      .select("*")
+      .eq("id", focusPropertyId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setSelectedProperty(data);
+          window.scrollTo(0, 0);
+        }
+        onFocused?.();
+      });
+  }, [focusPropertyId, onFocused]);
 
   async function loadWatchlist() {
     setLoading(true);
@@ -140,6 +220,10 @@ function HistoryView() {
       .select("id, property_id, amount, status")
       .neq("status", "withdrawn");
     setOffers(Object.fromEntries((offerRows || []).map((o) => [o.property_id, o])));
+
+    // checklist arrives with migration 031; before that, no ticks to show.
+    const { data: noteRows } = await supabase.from("property_notes").select("property_id, checklist");
+    setChecklists(Object.fromEntries((noteRows || []).map((n) => [n.property_id, n.checklist])));
 
     if (error) {
       console.error("Error loading watchlist:", error);
@@ -191,6 +275,7 @@ function HistoryView() {
 
   async function loadNotes(propertyId) {
     setNotesMessage("");
+    setEditingViewing(false);
 
     const { data, error } = await supabase
       .from("property_notes")
@@ -222,11 +307,24 @@ function HistoryView() {
     setSavingNotes(true);
     setNotesMessage("");
 
+    // The viewing details only when changed by hand here, so a booking
+    // made since this page opened isn't written over.
+    const viewingFields = editingViewing
+      ? {
+          viewing_datetime: fromLocalInputValue(notes.viewing_datetime),
+          estate_agent: notes.estate_agent,
+          estate_agent_email: notes.estate_agent_email,
+          estate_agent_phone: notes.estate_agent_phone,
+        }
+      : {};
     const { error } = await supabase.from("property_notes").upsert(
       {
         property_id: selectedProperty.id,
-        ...notes,
-        viewing_datetime: fromLocalInputValue(notes.viewing_datetime),
+        positives: notes.positives,
+        negatives: notes.negatives,
+        questions: notes.questions,
+        general_notes: notes.general_notes,
+        ...viewingFields,
         updated_at: new Date().toISOString(),
       },
       {
@@ -242,6 +340,11 @@ function HistoryView() {
       return;
     }
 
+    // A date added by hand moves an early-stage home on to "Viewing booked".
+    if (viewingFields.viewing_datetime && ["new", "favourite"].includes(selectedProperty.status)) {
+      await updateStatus(selectedProperty.id, "viewing_booked");
+    }
+    setEditingViewing(false);
     setNotesMessage("Notes saved.");
   }
 
@@ -370,6 +473,82 @@ function HistoryView() {
         </div>
 
         <div className="details-section">
+          <h3>Viewing</h3>
+          <ViewingSummary
+            notes={notes}
+            request={requestsByProperty[selectedProperty.id]}
+            onEdit={() => setEditingViewing(true)}
+          />
+
+          {editingViewing && (
+            <div className="viewing-edit">
+              <label>
+                Viewing date and time
+                <input
+                  name="viewing_datetime"
+                  type="datetime-local"
+                  value={notes.viewing_datetime}
+                  onChange={handleNotesChange}
+                />
+              </label>
+
+              <label>
+                Estate agent
+                <input
+                  name="estate_agent"
+                  type="text"
+                  value={notes.estate_agent}
+                  onChange={handleNotesChange}
+                  placeholder="Agent name / branch"
+                />
+              </label>
+
+              <label>
+                Estate agent email
+                <input
+                  name="estate_agent_email"
+                  type="email"
+                  value={notes.estate_agent_email}
+                  onChange={handleNotesChange}
+                  placeholder="agent@example.com"
+                />
+              </label>
+
+              <label>
+                Estate agent phone
+                <input
+                  name="estate_agent_phone"
+                  type="tel"
+                  autoComplete="tel"
+                  value={notes.estate_agent_phone}
+                  onChange={handleNotesChange}
+                  placeholder="Phone number"
+                />
+              </label>
+
+              <div className="property-actions">
+                <button type="button" className="primary-button" onClick={saveNotes} disabled={savingNotes}>
+                  {savingNotes ? "Saving..." : "Save viewing"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingViewing(false);
+                    loadNotes(selectedProperty.id);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="details-section">
+          <ViewingChecklist propertyId={selectedProperty.id} onOpenSettings={onOpenSettings} />
+        </div>
+
+        <div className="details-section">
           <PropertyScoreEditor
             property={selectedProperty}
             onUpdate={async () => {
@@ -379,50 +558,7 @@ function HistoryView() {
         </div>
 
         <div className="details-section">
-          <h3>Viewing Notes</h3>
-
-          <label>
-            Viewing date
-            <input
-              name="viewing_datetime"
-              type="datetime-local"
-              value={notes.viewing_datetime}
-              onChange={handleNotesChange}
-            />
-          </label>
-
-          <label>
-            Estate agent
-            <input
-              name="estate_agent"
-              type="text"
-              value={notes.estate_agent}
-              onChange={handleNotesChange}
-              placeholder="Agent name / branch"
-            />
-          </label>
-
-          <label>
-            Estate agent email
-            <input
-              name="estate_agent_email"
-              type="email"
-              value={notes.estate_agent_email}
-              onChange={handleNotesChange}
-              placeholder="agent@example.com"
-            />
-          </label>
-
-          <label>
-            Estate agent phone
-            <input
-              name="estate_agent_phone"
-              type="text"
-              value={notes.estate_agent_phone}
-              onChange={handleNotesChange}
-              placeholder="Phone number"
-            />
-          </label>
+          <h3>Pros, cons and questions</h3>
 
           <label>
             Positives
@@ -466,7 +602,7 @@ function HistoryView() {
             onClick={saveNotes}
             disabled={savingNotes}
           >
-            {savingNotes ? "Saving..." : "Save Notes"}
+            {savingNotes ? "Saving..." : "Save notes"}
           </button>
 
           {notesMessage && <p className="form-message">{notesMessage}</p>}
@@ -535,6 +671,7 @@ function HistoryView() {
                   {property.offer_interest && (
                     <span>Offer: {property.offer_interest}</span>
                   )}
+                  <ChecklistChip items={mustHaves} checklist={checklists[property.id]} />
                 </div>
 
                 <CommuteSummary
