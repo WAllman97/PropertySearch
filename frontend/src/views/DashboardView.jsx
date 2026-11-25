@@ -23,6 +23,7 @@ const STAGES = [
 // information only, since those sales often fall through.
 const GONE = { sold_stc: "sold STC", removed: "taken off the market" };
 const DAY = 864e5;
+const HOUR = 36e5;
 
 const pounds = (n) => `£${Number(n).toLocaleString("en-GB")}`;
 const when = (iso) =>
@@ -63,7 +64,8 @@ async function loadEverything() {
       .from("property_notes")
       .select("*, properties ( id, address, title, status )")
       .gte("viewing_datetime", new Date(now - 14 * DAY).toISOString())
-      .lt("viewing_datetime", now.toISOString())
+      // Ask how it went only once the viewing is over (about an hour in).
+      .lt("viewing_datetime", new Date(now - HOUR).toISOString())
       .order("viewing_datetime", { ascending: false }),
     // Paused or found somewhere (migration 029).
     supabase.rpc("my_household"),

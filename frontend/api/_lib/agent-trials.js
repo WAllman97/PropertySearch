@@ -130,6 +130,18 @@ async function loadInvite(token) {
   return data;
 }
 
+// The login an invite was used for, when it was made from this invite and its
+// email was never confirmed: the agent can start again with new details.
+// A confirmed account is never returned (and so never replaced).
+async function unconfirmedClaim(invite) {
+  if (!invite?.used_at || !invite.used_by) return null;
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(invite.used_by);
+  const user = data?.user;
+  if (error || !user || user.email_confirmed_at || user.confirmed_at) return null;
+  if (user.user_metadata?.role !== "agent") return null;
+  return user;
+}
+
 async function buyerFirstName(invite) {
   if (invite.viewing_request_id) {
     const { data } = await supabaseAdmin
@@ -259,7 +271,9 @@ export async function handleSendInvite(req, res, body) {
       .eq("email", email)
       .is("used_at", null)
       .maybeSingle();
-    if (isLive(existing)) {
+    // A live invite whose email never went out (Resend down, say) is sent
+    // again, rather than answering "already invited" for 30 days.
+    if (isLive(existing) && existing.emailed_at) {
       return res.status(200).json({ success: true, already: true });
     }
 
@@ -272,7 +286,9 @@ export async function handleSendInvite(req, res, body) {
       return res.status(429).json({ error: "This agent has had a few invites this week already. Please try again next week." });
     }
 
-    if (existing) {
+    if (isLive(existing)) {
+      invite = existing;
+    } else if (existing) {
       try {
         invite = await renew(existing, { agent_name: agentName || existing.agent_name, property_id: property.id, invited_by_user: user.id });
       } catch (error) {
@@ -307,28 +323,37 @@ export async function handleSendInvite(req, res, body) {
   const meta = user.user_metadata || {};
   const buyer = firstWord(meta.name || meta.full_name);
 
-  // No email for the agent: the buyer sends the link themselves (WhatsApp,
-  // text, the portal's contact form), like a viewing request.
+  // The link for the buyer to send themselves (WhatsApp, text, the portal's
+  // contact form), like a viewing request: when there's no email for the
+  // agent, or ours didn't go.
+  const url = inviteUrl(req, invite.token);
+  const shareText = [
+    `Hi${agentName ? ` ${firstWord(agentName)}` : ""}, I use PropertySearch to book viewings${property.address ? ` and I've saved ${property.address}` : ""}.`,
+    "If you join, I can book your viewing times straight into your diary. It's free for 14 days, no code needed:",
+    url,
+    buyer ? `Thanks, ${buyer}` : "Thanks",
+  ].join("\n\n");
   if (!email) {
-    const url = inviteUrl(req, invite.token);
-    const shareText = [
-      `Hi${agentName ? ` ${firstWord(agentName)}` : ""}, I use PropertySearch to book viewings${property.address ? ` and I've saved ${property.address}` : ""}.`,
-      "If you join, I can book your viewing times straight into your diary. It's free for 14 days, no code needed:",
-      url,
-      buyer ? `Thanks, ${buyer}` : "Thanks",
-    ].join("\n\n");
     return res.status(200).json({ success: true, emailed: false, shareUrl: url, shareText });
   }
 
-  const sent = await sendEmail({
-    to: email,
-    subject: `${plainText(buyer, 30) || "A buyer"} invited you to PropertySearch`,
-    html: inviteEmailHtml(req, invite, { buyer, address: property.address }),
-  });
+  let sent = null;
+  try {
+    sent = await sendEmail({
+      to: email,
+      subject: `${plainText(buyer, 30) || "A buyer"} invited you to PropertySearch`,
+      html: inviteEmailHtml(req, invite, { buyer, address: property.address }),
+    });
+  } catch (sendError) {
+    console.error("agent invite email failed:", sendError);
+  }
   if (sent?.sent) {
     await supabaseAdmin.from("agent_invites").update({ emailed_at: new Date().toISOString() }).eq("id", invite.id);
+    return res.status(200).json({ success: true, emailed: true });
   }
-  return res.status(200).json({ success: true, emailed: Boolean(sent?.sent) });
+  // Not sent: emailed_at stays empty so a retry sends it again, and the
+  // buyer can share the link themselves meanwhile.
+  return res.status(200).json({ success: true, emailed: false, shareUrl: url, shareText });
 }
 
 // The agent answered a buyer's request on /request/<token> without an
@@ -405,10 +430,13 @@ export async function handleInviteLookup(req, res, token) {
   const { data: optOut } = invite.email
     ? await supabaseAdmin.from("agent_invite_optouts").select("email").eq("email", invite.email).maybeSingle()
     : { data: null };
-  if (invite.used_at) {
+  // Used by a login that was never confirmed: still show the form, so
+  // "Start again" (or reopening the link) can replace it.
+  const reusable = invite.used_at && (await unconfirmedClaim(invite));
+  if (invite.used_at && !reusable) {
     return res.status(410).json({ error: "This invite has been used. Log in instead.", used: true, optedOut: Boolean(optOut) });
   }
-  if (!isLive(invite)) {
+  if (new Date(invite.expires_at).getTime() <= Date.now()) {
     return res.status(410).json({
       error: `This invite has expired. Ask the buyer for a new one, or email ${CONTACT_EMAIL}.`,
       optedOut: Boolean(optOut),
@@ -464,12 +492,18 @@ export async function handleInviteOptOut(req, res, body) {
 export async function handleInviteSignup(req, res, body) {
   const invite = await loadInvite(body.token);
   if (!invite) return res.status(404).json({ error: "This invite link isn't valid." });
-  if (!isLive(invite)) {
+  // Signed up from this invite but never confirmed (a typo in the email, say,
+  // then "Start again"): that login is replaced below, not a dead end.
+  const stale = await unconfirmedClaim(invite);
+  if (!stale && !isLive(invite)) {
     return res.status(410).json({
       error: invite.used_at
         ? "This invite has been used. Log in instead."
         : `This invite has expired. Ask the buyer for a new one, or email ${CONTACT_EMAIL}.`,
     });
+  }
+  if (stale && new Date(invite.expires_at).getTime() <= Date.now()) {
+    return res.status(410).json({ error: `This invite has expired. Ask the buyer for a new one, or email ${CONTACT_EMAIL}.` });
   }
 
   const profile = {
@@ -488,6 +522,18 @@ export async function handleInviteSignup(req, res, body) {
   }
   if (password.length < 8 || password.length > 72) {
     return res.status(400).json({ error: "Password must be 8 to 72 characters" });
+  }
+
+  if (stale) {
+    // Deleting the login removes its agents row too (on delete cascade).
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(stale.id);
+    if (deleteError) {
+      console.error("Unconfirmed invite login delete failed:", deleteError);
+      return res.status(500).json({ error: "Could not create your account. Please try again." });
+    }
+    await supabaseAdmin.from("branch_billing").delete().eq("branch_key", `agent:${stale.id}`);
+    // used_by is already null (on delete set null): free the invite again.
+    await supabaseAdmin.from("agent_invites").update({ used_at: null, used_by: null }).eq("id", invite.id).is("used_by", null);
   }
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({

@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 // stored as <household id>/<property id>/<random id>.jpg.
 
 const PHOTO_BUCKET = "viewing-photos";
+const PHOTO_EXT = { "image/jpeg": "jpg", "image/png": "png", "image/heic": "heic", "image/webp": "webp" };
 // Phone photos are 3-5 MB; this is plenty to remember a room by.
 const MAX_SIDE = 1600;
 const HOUR_MS = 3600000;
@@ -109,7 +110,12 @@ export function ViewingPhotos({ householdId, propertyId }) {
       const { body, type } = await toJpeg(file);
       const { error: uploadError } = await supabase.storage
         .from(PHOTO_BUCKET)
-        .upload(`${folder}/${crypto.randomUUID()}.jpg`, body, { contentType: type, upsert: false });
+        // The real type's extension: a photo that couldn't be converted is
+        // stored as what it is (e.g. HEIC), not mislabelled as .jpg.
+        .upload(`${folder}/${crypto.randomUUID()}.${PHOTO_EXT[type] || "jpg"}`, body, {
+          contentType: type,
+          upsert: false,
+        });
       if (uploadError) throw uploadError;
       await load();
     } catch (err) {
@@ -140,8 +146,9 @@ export function ViewingPhotos({ householdId, propertyId }) {
         <input
           ref={inputRef}
           type="file"
+          // No "capture": iPhone then offers Take Photo or the photo library,
+          // so pictures taken earlier can be added too.
           accept="image/*"
-          capture="environment"
           onChange={add}
           hidden
         />

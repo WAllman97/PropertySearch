@@ -174,7 +174,7 @@ def _booked_by_agent(day):
         supabase.table("viewing_slots")
         .select(
             "id, agent_id, starts_at, ends_at, agent_listings(address), "
-            "viewing_bookings(id, buyer_name, buyer_phone, buyer_email, status, created_at, agent_notified_late_at)"
+            "viewing_bookings(id, buyer_name, buyer_phone, buyer_email, status, created_at)"
         )
         .is_("cancelled_at", "null")
         .gte("starts_at", day_start.isoformat())
@@ -222,8 +222,10 @@ def send_agent_runsheets():
 
     Runs hourly with the reminders; sends once per agent per day (agents.
     runsheet_sent_on, migration 027) on the first run after 7am London.
-    runsheet_sent_at (035) records when the bookings were read, so anything
-    booked after that gets a "New today" push instead (send_late_booking_pushes).
+    runsheet_sent_at (035) records when the bookings were read. Bookings made
+    after that aren't pushed again here: the booking itself already sends the
+    agent a "New viewing booked" push. viewing_bookings.agent_notified_late_at
+    (035) is unused, kept reserved in case a late summary comes back.
     """
     london_now = datetime.now(LONDON)
     if not (RUNSHEET_FROM_HOUR <= london_now.hour < RUNSHEET_UNTIL_HOUR):
@@ -365,65 +367,6 @@ def send_agent_evening_sheets():
                 ).execute()
             except Exception as release_error:
                 print(f"Could not release evening sheet claim for agent {agent['user_id'][:8]}: {release_error}")
-    return failed
-
-
-def send_late_booking_pushes():
-    """After the morning run-sheet, push agents what's been booked for today since.
-
-    "New today: 14:00 Jane Smith, 12 Oak Road". Each booking is claimed
-    (viewing_bookings.agent_notified_late_at, migration 035) before the push,
-    so it's mentioned once at most; only viewings still to come are included.
-    """
-    now = datetime.now(timezone.utc)
-    today = datetime.now(LONDON).date()
-    by_agent = _booked_by_agent(today)
-    if not by_agent:
-        return 0
-    agents = (
-        supabase.table("agents")
-        .select("user_id, runsheet_sent_on, runsheet_sent_at")
-        .in_("user_id", list(by_agent))
-        .eq("runsheet_sent_on", today.isoformat())
-        .execute()
-    ).data or []
-
-    failed = 0
-    for agent in agents:
-        if not agent.get("runsheet_sent_at"):
-            continue
-        sheet_at = _parse(agent["runsheet_sent_at"])
-        late = []
-        for slot, booked in by_agent[agent["user_id"]]:
-            if _parse(slot["starts_at"]) <= now:
-                continue
-            for b in booked:
-                if b.get("agent_notified_late_at") or _parse(b["created_at"]) <= sheet_at:
-                    continue
-                try:
-                    claimed = (
-                        supabase.table("viewing_bookings")
-                        .update({"agent_notified_late_at": now.isoformat()})
-                        .eq("id", b["id"])
-                        .is_("agent_notified_late_at", "null")
-                        .execute()
-                    ).data
-                except Exception as error:
-                    print(f"Could not claim late booking {b['id'][:8]}: {error}")
-                    failed += 1
-                    continue
-                if claimed:
-                    start = _parse(slot["starts_at"]).astimezone(LONDON)
-                    address = (slot.get("agent_listings") or {}).get("address", "")
-                    late.append(f"{start:%H:%M} {b.get('buyer_name') or 'A buyer'}, {address}")
-        if not late:
-            continue
-        # Best effort, never retried: each booking already had its own email.
-        try:
-            _agent_push(agent["user_id"], "New today", "; ".join(late), "/agent?view=calendar")
-            print(f"Late-booking push to agent {agent['user_id'][:8]} ({len(late)} booking(s)).")
-        except Exception as error:
-            print(f"Late-booking push failed for agent {agent['user_id'][:8]}: {error}")
     return failed
 
 
@@ -589,7 +532,6 @@ if __name__ == "__main__":
         roll_weekly_hours_forward,
         mark_past_viewings_viewed,
         send_agent_runsheets,
-        send_late_booking_pushes,
         send_agent_evening_sheets,
         run_viewing_reminders,
         ask_for_viewing_feedback,

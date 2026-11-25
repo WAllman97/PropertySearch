@@ -258,6 +258,7 @@ function InviteAgent({ property, request }) {
   const [error, setError] = useState("");
   const [done, setDone] = useState(""); // what to say once it's sent
   const [share, setShare] = useState(null); // { text, copied? }
+  const [fallback, setFallback] = useState(null); // the link to share when our email failed
 
   // Fill in the agent from the home's notes, like the request form.
   useEffect(() => {
@@ -284,6 +285,7 @@ function InviteAgent({ property, request }) {
     event.preventDefault();
     setBusy(true);
     setError("");
+    setFallback(null);
     try {
       const response = await postAuthed("/api/agent-signup", {
         action: "send_invite",
@@ -295,6 +297,10 @@ function InviteAgent({ property, request }) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(result.error || "Could not send the invite");
+      } else if (form.email.trim() && result.emailed === false) {
+        // Our email didn't go: say so, rather than "Invite sent".
+        setError("Couldn't send the invite. Try again, or share the link yourself.");
+        setFallback(result.shareText ? { text: result.shareText } : null);
       } else if (result.shareText) {
         setShare({ text: result.shareText });
       } else if (result.already) {
@@ -387,6 +393,18 @@ function InviteAgent({ property, request }) {
         <button type="button" className="link-button" onClick={() => setOpen(false)}>
           Cancel
         </button>
+        {fallback && (
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setError("");
+              setShare(fallback);
+            }}
+          >
+            Share the link instead
+          </button>
+        )}
       </div>
       {error && <p className="booking-error">{error}</p>}
     </form>

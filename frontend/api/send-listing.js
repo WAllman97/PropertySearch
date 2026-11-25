@@ -151,10 +151,22 @@ async function handler(req, res) {
   if (!listing || listing.agent_id !== user.id) {
     return res.status(404).json({ error: "Listing not found" });
   }
-  // The agent changed the price: pass it on to buyers who saved the home.
-  if (req.body?.action === "price_update") return handlePriceUpdate(req, res, listing, user.id);
   // The agent changed the status: pass it on to buyers who saved the home.
+  // Not behind the trial check below: Sold STC / Off market must still reach
+  // buyers after a trial ends, so they don't chase a home that's gone.
   if (req.body?.action === "status_update") return handleStatusUpdate(req, res, listing, user.id);
+  // A free trial that has ended (migration 034): no new buyer contact until
+  // the agent adds a branch code (price cuts included). Their existing
+  // viewings still go ahead.
+  const agentRow = listing.agents || {};
+  const trialOver = agentRow.trial_ends_at && !agentRow.signup_code && new Date(agentRow.trial_ends_at) < new Date();
+  // The agent changed the price: pass it on to buyers who saved the home.
+  if (req.body?.action === "price_update") {
+    if (trialOver) {
+      return res.status(403).json({ error: "Your free trial has ended. Add your branch code in Settings to tell buyers about price changes." });
+    }
+    return handlePriceUpdate(req, res, listing, user.id);
+  }
   // A new seller report link: the old one (forwarded, or after the sale)
   // stops working straight away.
   if (req.body?.action === "new_report_link") {
@@ -173,10 +185,7 @@ async function handler(req, res) {
   if (!listing.is_active) {
     return res.status(409).json({ error: "Show this listing to buyers before sending it." });
   }
-  // A free trial that has ended (migration 034): no new buyer contact until
-  // the agent adds a branch code. Their existing viewings still go ahead.
-  const agentRow = listing.agents || {};
-  if (agentRow.trial_ends_at && !agentRow.signup_code && new Date(agentRow.trial_ends_at) < new Date()) {
+  if (trialOver) {
     return res.status(403).json({ error: "Your free trial has ended. Add your branch code in Settings to send homes to buyers." });
   }
   if (listing.market_status === "sold_stc" || listing.market_status === "off_market") {
@@ -419,7 +428,7 @@ async function handleSellerReport(req, res) {
       .from("viewing_slots")
       .select("id, starts_at, ends_at, capacity, cancelled_at, viewing_bookings(id, buyer_email, status, created_at)")
       .eq("listing_id", listing.id)
-      .is("cancelled_at", null)
+      // Cancelled times too: their bookings still count for numbering buyers.
       .order("starts_at"),
     supabaseAdmin
       .from("offers")
@@ -446,15 +455,19 @@ async function handleSellerReport(req, res) {
       : Promise.resolve({ data: [] }),
   ]);
 
-  // Confirmed bookings, oldest booking first, so "Buyer 1" is the first to book.
+  // Buyers are numbered from every booking ever made, cancelled ones too,
+  // oldest first: "Buyer 1" is the first to book, and nobody's number shifts
+  // when someone cancels. Only confirmed bookings on live times are shown.
+  const allBookings = [];
   const bookings = [];
   for (const slot of slotsResult.data || []) {
     for (const b of slot.viewing_bookings || []) {
-      if (b.status === "confirmed") bookings.push({ ...b, slot });
+      allBookings.push(b);
+      if (b.status === "confirmed" && !slot.cancelled_at) bookings.push({ ...b, slot });
     }
   }
   const labelOf = new Map();
-  for (const b of [...bookings].sort((x, y) => x.created_at.localeCompare(y.created_at))) {
+  for (const b of [...allBookings].sort((x, y) => x.created_at.localeCompare(y.created_at))) {
     const key = (b.buyer_email || b.id).toLowerCase();
     if (!labelOf.has(key)) labelOf.set(key, `Buyer ${labelOf.size + 1}`);
   }

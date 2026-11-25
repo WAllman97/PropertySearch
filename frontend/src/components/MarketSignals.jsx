@@ -96,6 +96,9 @@ function PriceBadges({ property }) {
 
 function CompsDetail({ property, history }) {
   const comps = property.comps;
+  // Nothing to list yet (no sales nearby, one asking price): draw nothing,
+  // not an empty box.
+  if (!(history && history.length > 1) && !(comps?.sales?.length > 0)) return null;
 
   return (
     <div className="market-detail">
@@ -182,6 +185,10 @@ function MarketSignals({ property, defaultOpen = false }) {
     setOpen(next);
     if (next && history === null) loadHistory();
   }
+
+  const detailEmpty = !(history && history.length > 1) && !(comps?.sales?.length > 0);
+  // A home with no price signals at all: no panel.
+  if (!comps && !hasDetail && detailEmpty && !PriceBadges({ property })) return null;
 
   return (
     <div className="market-signals">

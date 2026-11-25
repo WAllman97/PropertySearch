@@ -33,8 +33,23 @@ export function AgentTrialBanner({ agent, onChanged }) {
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [requested, setRequested] = useState(false);
+  // The agency a code just moved them onto. Kept here because reloading the
+  // agent (now with a code) would otherwise hide the banner, success and all.
+  const [converted, setConverted] = useState("");
+
+  if (converted) {
+    return (
+      <section className="agent-trial agent-trial-ok" role="status">
+        <p className="agent-trial-notice">You're on {converted} now. Everything you've set up stays.</p>
+        <div className="agent-trial-actions">
+          <button type="button" className="link-button" onClick={() => setConverted("")}>
+            Dismiss
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   if (!agent?.trial_ends_at || agent.signup_code) return null;
 
@@ -50,7 +65,7 @@ export function AgentTrialBanner({ agent, onChanged }) {
     setError("");
     try {
       const result = await post({ action: "add_code", code: code.trim() });
-      setNotice(`You're on ${[result.agency, result.branch].filter(Boolean).join(" · ") || "your branch"}. Buyers can keep booking.`);
+      setConverted(result.agency || agent.agency || "your branch");
       setEntering(false);
       onChanged?.();
     } catch (err) {
@@ -93,8 +108,6 @@ export function AgentTrialBanner({ agent, onChanged }) {
             : `Buyers can book your times until ${shortDate(agent.trial_ends_at)}. Add your branch code to keep it going.`}
         </span>
       </div>
-
-      {notice && <p className="agent-trial-notice">{notice}</p>}
 
       {entering ? (
         <form className="agent-trial-code" onSubmit={addCode}>
