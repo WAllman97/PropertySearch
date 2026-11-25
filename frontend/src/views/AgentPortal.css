@@ -1438,3 +1438,287 @@
 .agent-account-actions a {
   text-decoration: none;
 }
+
+/* "Are you sure? [Confirm] [Keep]" in place of a browser pop-up. */
+.inline-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 6px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.inline-confirm-text {
+  flex: 1 1 220px;
+  font-weight: 600;
+}
+
+.inline-confirm-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-confirm-buttons button {
+  padding: 6px 14px;
+}
+
+/* Closing a listing: pick which booked viewings to cancel. */
+.agent-closing-bookings {
+  flex: 1 1 100%;
+}
+
+.agent-closing-bookings p {
+  margin: 0 0 4px;
+}
+
+.agent-closing-bookings ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agent-closing-all {
+  display: flex;
+  gap: 16px;
+}
+
+/* Viewing feedback (migration 035): "Maybe · 'small garden'". */
+.feedback-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  white-space: normal;
+}
+
+.feedback-tag.feedback-second_look {
+  background: var(--primary-soft);
+  border-color: transparent;
+  color: var(--primary);
+}
+
+.feedback-tag.feedback-maybe {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.feedback-tag.feedback-not_for_us {
+  color: var(--muted);
+}
+
+.agent-feedback {
+  margin: 4px 0 10px;
+}
+
+.agent-feedback p {
+  margin: 0 0 4px;
+}
+
+.agent-feedback ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-recent-feedback h3 {
+  margin: 0 0 8px;
+}
+
+/* A booking you can tap: opens the booking sheet. */
+button.agent-open-booking {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-weight: normal;
+  text-align: left;
+  align-items: stretch;
+  cursor: pointer;
+}
+
+button.agent-open-booking:hover {
+  transform: none;
+}
+
+button.agent-open-booking:hover > strong {
+  text-decoration: underline;
+}
+
+button.link-button.agent-booking-name {
+  padding: 0;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+/* The calendar row's buyer names are buttons inside the clamped title. */
+.agenda-main .agent-calendar-buyers span {
+  color: inherit;
+  font-size: inherit;
+  white-space: normal;
+  overflow: visible;
+}
+
+.agent-sheet h3 {
+  margin: 4px 0 2px;
+}
+
+.agent-sheet .muted {
+  margin: 0;
+}
+
+.agent-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 6px;
+}
+
+.agent-sheet-actions a {
+  text-decoration: none;
+}
+
+.agent-sheet-row {
+  margin: 8px 0;
+}
+
+button.link-button.agent-sheet-cancel {
+  color: var(--danger);
+}
+
+/* "Your branch" this month. */
+.agent-branch h3 {
+  margin: 0 0 10px;
+}
+
+.agent-branch-stats,
+.seller-report-stats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.agent-branch-stats li,
+.seller-report-stats li {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.agent-branch-stats strong,
+.seller-report-stats strong {
+  font-size: 20px;
+  color: var(--primary);
+}
+
+.agent-branch-stats span,
+.seller-report-stats span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Clipboard blocked: the link, selected, to copy by hand. */
+.agent-copy-box {
+  flex: 1 1 100%;
+  font-size: 13px;
+}
+
+/* /report/<token>: the vendor's view. */
+.seller-report h3 {
+  margin: 20px 0 8px;
+}
+
+.seller-report-sub {
+  margin: 4px 0;
+  font-weight: 600;
+}
+
+.seller-report-stats {
+  margin: 14px 0 6px;
+}
+
+.seller-report-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.seller-report-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.seller-report-list li:last-child {
+  border-bottom: 0;
+}
+
+.seller-report-list li > span:first-child {
+  min-width: 150px;
+  font-variant-numeric: tabular-nums;
+}
+
+.seller-report-foot {
+  margin-top: 20px;
+}
+
+/* Buyer Dashboard "How was it?" (DashboardView.jsx). Kept next to the
+   agent's feedback styles; this stylesheet is always loaded (App.jsx
+   imports AgentPortal). */
+.dash-list li.dash-feedback {
+  align-items: flex-start;
+}
+
+.dash-feedback .dash-dot {
+  margin-top: 6px;
+}
+
+.feedback-answers,
+.feedback-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-weight: normal;
+}
+
+.feedback-answers button,
+.feedback-note button {
+  padding: 6px 14px;
+}
+
+.feedback-note span {
+  flex: 1 1 100%;
+}
+
+.feedback-note input {
+  flex: 1 1 180px;
+  min-width: 0;
+}

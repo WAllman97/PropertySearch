@@ -4,6 +4,7 @@ import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
 import BookingRequests from "../components/BookingRequests";
 import LoadError from "../components/LoadError";
 import { ViewingChecklist } from "../components/MustHaves";
+import ViewingDayCard, { directionsUrl, isViewingDay, useMinuteClock } from "../components/ViewingDayCard";
 import { friendlyError } from "../lib/errors";
 
 function getMonthStart(date) {
@@ -132,11 +133,6 @@ function untilLabel(date) {
   return `in ${days} day${days === 1 ? "" : "s"}`;
 }
 
-function directionsUrl(address) {
-  // Apple Maps on iPhone; other devices get a web map.
-  return `https://maps.apple.com/?q=${encodeURIComponent(address || "")}`;
-}
-
 function pounds(price) {
   return price ? `£${Number(price).toLocaleString("en-GB")}` : "";
 }
@@ -215,9 +211,8 @@ function AgendaRow({ item, onOpen, showDate = false }) {
   );
 }
 
-function CalendarAgenda({ viewings, calls, onOpen }) {
+function CalendarAgenda({ viewings, calls, onOpen, onOpenSettings, now }) {
   const [showPast, setShowPast] = useState(false);
-  const now = new Date();
   const todayStart = startOfDay(now);
   const items = agendaItems(viewings, calls);
   // Still "upcoming" until it's an hour past its start.
@@ -268,7 +263,20 @@ function CalendarAgenda({ viewings, calls, onOpen }) {
         })}
       </div>
 
-      {next && (
+      {next && isViewingDay(next.at, now) ? (
+        // The day itself: everything for standing outside the door.
+        <ViewingDayCard
+          address={next.viewing.properties?.address}
+          when={next.viewing.viewing_datetime}
+          agent={next.viewing.estate_agent}
+          phone={next.viewing.estate_agent_phone}
+          householdId={next.viewing.properties?.household_id}
+          propertyId={next.viewing.property_id}
+          onDetails={() => onOpen(next.viewing)}
+        >
+          <ViewingChecklist propertyId={next.viewing.property_id} onOpenSettings={onOpenSettings} />
+        </ViewingDayCard>
+      ) : next && (
         <div className="agenda-next">
           {next.viewing.properties?.image_url && (
             <img className="agenda-next-photo" src={next.viewing.properties.image_url} alt="" />
@@ -469,7 +477,9 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
   const [editingViewing, setEditingViewing] = useState(null);
   const [selectedViewing, setSelectedViewing] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [editError, setEditError] = useState("");
   const isPhone = useIsPhone();
+  const now = useMinuteClock();
 
   useEffect(() => {
     loadViewings();
@@ -510,7 +520,8 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
           bedrooms,
           listing_url,
           image_url,
-          status
+          status,
+          household_id
         )
       `)
       .not("viewing_datetime", "is", null)
@@ -566,6 +577,7 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
   }
 
   function startEditing(viewing) {
+    setEditError("");
     setEditingViewing({
       id: viewing.id,
       viewing_datetime: toLocalInputValue(viewing.viewing_datetime),
@@ -599,7 +611,7 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
       .eq("id", editingViewing.id);
 
     if (error) {
-      alert(friendlyError(error));
+      setEditError(friendlyError(error));
       return;
     }
 
@@ -620,6 +632,8 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
 
   const acceptedCalls = bookingRequests.filter((r) => r.status === "accepted" && r.kind === "call");
   const upcomingCount = viewings.filter((v) => new Date(v.viewing_datetime) > new Date()).length;
+  // A computer has no "Next up" card: today's viewing goes above the month.
+  const todayViewing = viewings.find((v) => isViewingDay(v.viewing_datetime, now));
 
   return (
     <section className={`card${isPhone ? " calendar-phone" : ""}`}>
@@ -661,9 +675,29 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
       <BookingRequests requests={bookingRequests} onChanged={refreshAll} />
 
       {isPhone ? (
-        <CalendarAgenda viewings={viewings} calls={acceptedCalls} onOpen={setSelectedViewing} />
+        <CalendarAgenda
+          viewings={viewings}
+          calls={acceptedCalls}
+          onOpen={setSelectedViewing}
+          onOpenSettings={onOpenSettings}
+          now={now}
+        />
       ) : (
       <>
+      {todayViewing && (
+        <ViewingDayCard
+          address={todayViewing.properties?.address}
+          when={todayViewing.viewing_datetime}
+          agent={todayViewing.estate_agent}
+          phone={todayViewing.estate_agent_phone}
+          householdId={todayViewing.properties?.household_id}
+          propertyId={todayViewing.property_id}
+          onDetails={() => setSelectedViewing(todayViewing)}
+        >
+          <ViewingChecklist propertyId={todayViewing.property_id} onOpenSettings={onOpenSettings} />
+        </ViewingDayCard>
+      )}
+
       <div className="calendar-header">
         <h3>{formatMonthTitle(currentMonth)}</h3>
       </div>
@@ -928,6 +962,11 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
               <button type="submit" className="primary-button">
                 Save Changes
               </button>
+              {editError && (
+                <p className="form-error" role="alert">
+                  {editError}
+                </p>
+              )}
             </form>
           </div>
         </div>

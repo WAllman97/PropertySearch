@@ -1,0 +1,116 @@
+/* Free-trial banner for invited agents (AgentTrial.jsx). Green while there's
+   time, amber in the last 4 days, red once it has ended. */
+
+.agent-trial {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.agent-trial-warn {
+  border-left-color: var(--accent);
+  background: #fdf3e1;
+}
+
+.agent-trial-ended {
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.agent-trial-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-trial-head strong {
+  color: var(--primary);
+}
+
+.agent-trial-warn .agent-trial-head strong {
+  color: #6b4e16;
+}
+
+.agent-trial-ended .agent-trial-head strong {
+  color: var(--danger);
+}
+
+.agent-trial-head span,
+.agent-trial-contact p {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.agent-trial-notice {
+  margin: 8px 0 0;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.agent-trial-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+}
+
+.agent-trial-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.agent-trial-code label {
+  flex: 1 1 220px;
+}
+
+.agent-trial-code input,
+.agent-trial-fields input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font: inherit;
+}
+
+.agent-trial-code input {
+  text-transform: uppercase;
+}
+
+.agent-trial-contact {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.agent-trial-contact p {
+  margin: 0 0 8px;
+}
+
+.agent-trial-contact a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.agent-trial-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.agent-trial-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}

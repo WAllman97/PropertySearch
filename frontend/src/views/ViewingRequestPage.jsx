@@ -29,6 +29,22 @@ async function call(body) {
   return result;
 }
 
+// A single-use free-trial link made from this request (migration 034), or
+// null if the agent is already on PropertySearch or opted out.
+async function trialInvite(token) {
+  try {
+    const response = await fetch(apiUrl("/api/agent-signup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "request_invite", requestToken: token }),
+    });
+    const result = await response.json().catch(() => ({}));
+    return response.ok && result.available && result.invite ? result.invite : null;
+  } catch {
+    return null;
+  }
+}
+
 function ViewingRequestPage({ token }) {
   const params = new URLSearchParams(window.location.search);
   const [request, setRequest] = useState(null);
@@ -44,6 +60,8 @@ function ViewingRequestPage({ token }) {
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
   const [stopping] = useState(() => params.get("stop") === "1");
+  // After they confirm or suggest a time: the free-trial invite token.
+  const [invite, setInvite] = useState(null);
 
   async function load() {
     try {
@@ -59,6 +77,20 @@ function ViewingRequestPage({ token }) {
     // Runs once for this link.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // They've just done the job by hand: the best moment to show how
+  // PropertySearch would save them the trouble. Made only now, so an invite
+  // isn't created for every page view.
+  useEffect(() => {
+    if (done !== "confirmed" && done !== "proposed") return undefined;
+    let live = true;
+    trialInvite(token).then((value) => {
+      if (live) setInvite(value);
+    });
+    return () => {
+      live = false;
+    };
+  }, [done, token]);
 
   async function submit(event) {
     event.preventDefault();
@@ -285,16 +317,29 @@ function ViewingRequestPage({ token }) {
         </form>
       )}
 
-      <section className="card request-pitch">
-        <h3>Book viewings without the back-and-forth</h3>
-        <p className="muted">
-          On PropertySearch you set your viewing hours once, buyers who've saved your listings book themselves in,
-          and you see their buying position before they arrive.
-        </p>
-        <a className="secondary-button" href="/agents">
-          See how it works for agents
-        </a>
-      </section>
+      {invite ? (
+        <section className="card request-pitch">
+          <h3>Let {request.buyerName} book you directly next time</h3>
+          <p className="muted">
+            This buyer uses PropertySearch to book viewings. Join free for 14 days and their next booking lands in
+            your diary. No code needed.
+          </p>
+          <a className="primary-button" href={`/agent?invite=${invite}`}>
+            Start free trial
+          </a>
+        </section>
+      ) : (
+        <section className="card request-pitch">
+          <h3>Book viewings without the back-and-forth</h3>
+          <p className="muted">
+            On PropertySearch you set your viewing hours once, buyers who've saved your listings book themselves in,
+            and you see their buying position before they arrive.
+          </p>
+          <a className="secondary-button" href="/agents">
+            See how it works for agents
+          </a>
+        </section>
+      )}
 
       {!request.optedOut && !stopping && (
         <p className="muted agent-auth-foot">

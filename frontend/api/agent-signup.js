@@ -16,44 +16,32 @@
 // Agents need a sign-up code so strangers can't fill buyers' cards with fake
 // viewing times: one of the per-agency codes made on /admin (migration 019),
 // or the older single AGENT_SIGNUP_CODE if that's set in Vercel.
+//
+// Free trials from a buyer's invite (migration 034) are actions on this
+// route too, handled in _lib/agent-trials.js (see the list there):
+// send_invite, request_invite, invite_lookup (or GET ?invite=),
+// invite_signup, invite_opt_out, add_code, request_code, admin_code_email.
 import { requireUser, supabaseAdmin } from "./_lib/household.js";
 import { withCors } from "./_lib/cors.js";
 import { sendConfirmEmail } from "./_lib/confirm-email.js";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CODE_RE = /^[A-Z0-9-]{4,40}$/;
-
-const normaliseCode = (value) => (typeof value === "string" ? value.trim().toUpperCase() : "");
-
-function clean(value, max) {
-  if (typeof value !== "string") return "";
-  return value.trim().slice(0, max);
-}
+import {
+  CODE_ERROR,
+  EMAIL_RE,
+  clean,
+  fullError,
+  handleAddCode,
+  handleAdminCodeEmail,
+  handleInviteLookup,
+  handleInviteOptOut,
+  handleInviteSignup,
+  handleRequestCode,
+  handleRequestInvite,
+  handleSendInvite,
+  lookUpCode,
+  normaliseCode,
+} from "./_lib/agent-trials.js";
 
 export default withCors(handler);
-
-// A live branch code: { agency, branch, full }, or null if it's wrong or
-// off. full: every seat the branch asked for is taken.
-async function lookUpCode(code) {
-  if (!CODE_RE.test(code)) return null;
-  const { data } = await supabaseAdmin
-    .from("agent_invite_codes")
-    .select("agency, branch, is_active, max_uses, uses")
-    .eq("code", code)
-    .maybeSingle();
-  if (!data || !data.is_active) return null;
-  return {
-    agency: data.agency,
-    branch: data.branch,
-    full: data.max_uses !== null && data.uses >= data.max_uses,
-  };
-}
-
-const CODE_ERROR =
-  "That sign-up code isn't right. Ask PropertySearch for your agency's code.";
-const branchName = (found) => [found.agency, found.branch].filter(Boolean).join(" · ");
-const fullError = (found) =>
-  `${branchName(found)} has used all its places on PropertySearch. Request a place and we'll add one.`;
 
 async function handleSeatRequest(req, res, body) {
   const code = normaliseCode(body.code);
@@ -142,6 +130,7 @@ async function handleAddProfile(req, res, body) {
 
 async function handler(req, res) {
   if (req.method === "GET") {
+    if (req.query?.invite) return handleInviteLookup(req, res, req.query.invite);
     const found = await lookUpCode(normaliseCode(req.query?.code));
     return found
       ? res.status(200).json(found)
@@ -161,6 +150,14 @@ async function handler(req, res) {
 
   if (body.action === "request_seat") return handleSeatRequest(req, res, body);
   if (body.action === "add_profile") return handleAddProfile(req, res, body);
+  if (body.action === "send_invite") return handleSendInvite(req, res, body);
+  if (body.action === "request_invite") return handleRequestInvite(req, res, body);
+  if (body.action === "invite_lookup") return handleInviteLookup(req, res, body.token);
+  if (body.action === "invite_signup") return handleInviteSignup(req, res, body);
+  if (body.action === "invite_opt_out") return handleInviteOptOut(req, res, body);
+  if (body.action === "add_code") return handleAddCode(req, res, body);
+  if (body.action === "request_code") return handleRequestCode(req, res, body);
+  if (body.action === "admin_code_email") return handleAdminCodeEmail(req, res, body);
 
   const code = normaliseCode(body.code);
   const legacyCode = process.env.AGENT_SIGNUP_CODE;

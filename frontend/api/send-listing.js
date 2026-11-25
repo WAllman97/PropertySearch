@@ -6,6 +6,10 @@
 //        a buyer saved a search: send them live auto-send listings it fits
 //   POST /api/send-listing { action: "status_update", listingId }
 //        under offer / sold STC / off market: update buyers' copies (_lib/agent-status.js)
+//   GET  /api/send-listing?report=<report_token>
+//        the seller report the agent shares with the vendor (no login; the
+//        private link is the key, migration 035). Counts, dates, anonymised
+//        feedback, offers and prices only: never buyers' names or contacts.
 //
 // Replaces scraping: instead of us crawling portals, agents push listings
 // to buyers who want them (migrations 009 + 010). Each buyer gets a listing
@@ -123,6 +127,7 @@ function listingEmail(listing, agent, base, inList, token, unsubscribe) {
 }
 
 async function handler(req, res) {
+  if (req.method === "GET" && req.query?.report) return handleSellerReport(req, res);
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -150,8 +155,29 @@ async function handler(req, res) {
   if (req.body?.action === "price_update") return handlePriceUpdate(req, res, listing, user.id);
   // The agent changed the status: pass it on to buyers who saved the home.
   if (req.body?.action === "status_update") return handleStatusUpdate(req, res, listing, user.id);
+  // A new seller report link: the old one (forwarded, or after the sale)
+  // stops working straight away.
+  if (req.body?.action === "new_report_link") {
+    const { data: renewed, error: renewError } = await supabaseAdmin
+      .from("agent_listings")
+      .update({ report_token: crypto.randomUUID() })
+      .eq("id", listing.id)
+      .select("report_token")
+      .single();
+    if (renewError) {
+      console.error("new report link failed:", renewError);
+      return res.status(500).json({ error: "Could not make a new link. Please try again." });
+    }
+    return res.status(200).json({ success: true, reportToken: renewed.report_token });
+  }
   if (!listing.is_active) {
     return res.status(409).json({ error: "Show this listing to buyers before sending it." });
+  }
+  // A free trial that has ended (migration 034): no new buyer contact until
+  // the agent adds a branch code. Their existing viewings still go ahead.
+  const agentRow = listing.agents || {};
+  if (agentRow.trial_ends_at && !agentRow.signup_code && new Date(agentRow.trial_ends_at) < new Date()) {
+    return res.status(403).json({ error: "Your free trial has ended. Add your branch code in Settings to send homes to buyers." });
   }
   if (listing.market_status === "sold_stc" || listing.market_status === "off_market") {
     return res.status(409).json({ error: "This home is sold or off the market, so it isn't sent to buyers." });
@@ -348,6 +374,9 @@ async function handleForSearch(req, res) {
 
   let sent = 0;
   for (const listing of listings || []) {
+    // An agent whose free trial ended without a code doesn't auto-send.
+    const a = listing.agents || {};
+    if (a.trial_ends_at && !a.signup_code && new Date(a.trial_ends_at) < new Date()) continue;
     const result = await deliverListing(listing, [user.id], appBaseUrl(req)).catch((err) => {
       console.error("for_search delivery failed:", err);
       return { sent: 0 };
@@ -355,4 +384,143 @@ async function handleForSearch(req, res) {
     sent += result.sent;
   }
   return res.status(200).json({ success: true, sent });
+}
+
+// The vendor's view of how their home is doing: /report/<token>.
+//   GET /api/send-listing?report=<report_token>
+// Buyers are numbered ("Buyer 1") by the order they first booked, so the
+// vendor can follow one buyer's second viewing without learning who it is.
+const OFFER_TEXT = {
+  awaiting_agent: "Waiting for the agent to confirm",
+  confirmed: "Accepted",
+  disputed: "Not confirmed by the agent",
+  unverified: "Reported by the buyer",
+};
+
+async function handleSellerReport(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  const token = String(req.query.report || "");
+  if (!UUID_RE.test(token)) return res.status(404).json({ error: "This report link isn't valid." });
+
+  const { data: listing, error } = await supabaseAdmin
+    .from("agent_listings")
+    .select(
+      "id, agent_id, address, postcode, image_url, price, previous_price, price_reduced_at, bedrooms, " +
+        "property_type, has_garden, market_status, created_at, agents(name, agency, branch)"
+    )
+    .eq("report_token", token)
+    .maybeSingle();
+  if (error || !listing) {
+    return res.status(404).json({ error: "This report link isn't valid any more. Ask your agent for a new one." });
+  }
+
+  const [slotsResult, offersResult, pricesResult, sentResult, matchResult] = await Promise.all([
+    supabaseAdmin
+      .from("viewing_slots")
+      .select("id, starts_at, ends_at, capacity, cancelled_at, viewing_bookings(id, buyer_email, status, created_at)")
+      .eq("listing_id", listing.id)
+      .is("cancelled_at", null)
+      .order("starts_at"),
+    supabaseAdmin
+      .from("offers")
+      .select("amount, status, reported_at")
+      .eq("agent_listing_id", listing.id)
+      // Only offers the agent confirmed or is still to answer: never one
+      // they disputed, or a buyer's claim they haven't seen.
+      .in("status", ["confirmed", "awaiting_agent"])
+      .order("reported_at"),
+    supabaseAdmin
+      .from("listing_price_history")
+      .select("price, changed_at")
+      .eq("listing_id", listing.id)
+      .order("changed_at"),
+    supabaseAdmin.from("listing_sends").select("user_id", { count: "exact", head: true }).eq("listing_id", listing.id),
+    listing.postcode
+      ? supabaseAdmin.rpc("match_buyer_searches", {
+          p_postcode: listing.postcode,
+          p_price: listing.price,
+          p_bedrooms: listing.bedrooms,
+          p_property_type: listing.property_type,
+          p_has_garden: listing.has_garden,
+        })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  // Confirmed bookings, oldest booking first, so "Buyer 1" is the first to book.
+  const bookings = [];
+  for (const slot of slotsResult.data || []) {
+    for (const b of slot.viewing_bookings || []) {
+      if (b.status === "confirmed") bookings.push({ ...b, slot });
+    }
+  }
+  const labelOf = new Map();
+  for (const b of [...bookings].sort((x, y) => x.created_at.localeCompare(y.created_at))) {
+    const key = (b.buyer_email || b.id).toLowerCase();
+    if (!labelOf.has(key)) labelOf.set(key, `Buyer ${labelOf.size + 1}`);
+  }
+  const buyerLabel = (b) => labelOf.get((b.buyer_email || b.id).toLowerCase());
+  const now = Date.now();
+  const viewings = bookings
+    .map((b) => ({
+      at: b.slot.starts_at,
+      done: new Date(b.slot.ends_at).getTime() < now,
+      buyer: buyerLabel(b),
+      openHouse: b.slot.capacity > 1,
+    }))
+    .sort((x, y) => x.at.localeCompare(y.at));
+
+  const bookingById = new Map(bookings.map((b) => [b.id, b]));
+  let feedback = [];
+  if (bookingById.size) {
+    const { data } = await supabaseAdmin
+      .from("viewing_feedback")
+      .select("booking_id, viewing_at, answer, note")
+      .in("booking_id", [...bookingById.keys()])
+      .order("viewing_at");
+    feedback = (data || []).map((f) => ({
+      at: f.viewing_at,
+      buyer: buyerLabel(bookingById.get(f.booking_id)),
+      answer: f.answer,
+      note: f.note || "",
+    }));
+  }
+
+  // Before migration 035's history: what the listing itself remembers.
+  let prices = (pricesResult.data || []).map((p) => ({ price: p.price, at: p.changed_at }));
+  if (!prices.length && listing.price) {
+    prices = listing.previous_price
+      ? [
+          { price: listing.previous_price, at: listing.created_at },
+          { price: listing.price, at: listing.price_reduced_at || listing.created_at },
+        ]
+      : [{ price: listing.price, at: listing.created_at }];
+  }
+
+  const matching = new Set(
+    (matchResult.data || []).map((m) => m.user_id).filter((id) => id && id !== listing.agent_id)
+  ).size;
+
+  return res.status(200).json({
+    report: {
+      address: listing.address,
+      imageUrl: listing.image_url || "",
+      price: listing.price,
+      status: listing.market_status || "available",
+      listedAt: listing.created_at,
+      agent: {
+        name: listing.agents?.name || "",
+        agency: [listing.agents?.agency, listing.agents?.branch].filter(Boolean).join(" · "),
+      },
+      viewings,
+      feedback,
+      offers: (offersResult.data || []).map((o) => ({
+        amount: o.amount,
+        status: OFFER_TEXT[o.status] || o.status,
+        at: o.reported_at,
+      })),
+      prices,
+      matchingBuyers: matching,
+      sentTo: sentResult.count || 0,
+    },
+  });
 }

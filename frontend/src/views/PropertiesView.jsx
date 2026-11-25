@@ -65,6 +65,8 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
   const [openId, setOpenId] = useState(null);
   // "Added to Watchlist" note with Undo after a one-tap favourite.
   const [favNote, setFavNote] = useState(null);
+  // A save or undo that failed, shown above the homes (not a pop-up).
+  const [actionError, setActionError] = useState("");
   // "Saved to your Watchlist" after adding a home by its link, and a count
   // of saves so the getting-started checklist re-checks itself.
   const [savedNote, setSavedNote] = useState(null);
@@ -114,6 +116,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
   }
 
   async function updateStatus(listingId, status) {
+    setActionError("");
     const { data, error } = await supabase
       .from("properties")
       .update({ status })
@@ -122,12 +125,12 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
 
     if (error) {
       console.error("Error updating property:", error);
-      alert(friendlyError(error));
+      setActionError(friendlyError(error));
       return;
     }
 
     if (!data || data.length === 0) {
-      alert("That home couldn't be updated. Please refresh and try again.");
+      setActionError("That home couldn't be updated. Please refresh and try again.");
       return;
     }
 
@@ -146,12 +149,13 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
   // One tap on a tile's star: straight to the Watchlist, no scoring pop-up
   // (score it later from the Watchlist). Undo puts it back.
   async function quickFavourite(property) {
+    setActionError("");
     const { error } = await supabase
       .from("properties")
       .update({ status: "favourite" })
       .eq("id", property.id);
     if (error) {
-      alert(friendlyError(error));
+      setActionError(friendlyError(error));
       return;
     }
     setProperties((current) => current.filter((p) => p.id !== property.id));
@@ -167,7 +171,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
       .update({ status: property.status || "new" })
       .eq("id", property.id);
     if (error) {
-      alert(friendlyError(error));
+      setActionError(friendlyError(error));
       return;
     }
     await loadProperties({ quiet: true });
@@ -416,6 +420,12 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
             + Add your first home
           </button>
         </div>
+      )}
+
+      {actionError && (
+        <p className="form-error" role="alert">
+          {actionError}
+        </p>
       )}
 
       <div className="tile-grid">

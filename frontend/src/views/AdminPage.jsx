@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { postAuthed } from "../lib/api";
 import AuthForm from "../components/AuthForm";
 import "./AdminPage.css";
 
@@ -11,7 +12,8 @@ import "./AdminPage.css";
 // Targets are deliberately not in this file: the repository and the site's
 // code are public. They live in the admin_targets table.
 
-const PLANS = ["pilot", "paying", "cancelled"];
+// 'trial': an agent a buyer invited, on a 14-day free trial (migration 034).
+const PLANS = ["pilot", "paying", "cancelled", "trial"];
 
 // The period we're in (or the last one, once they've all passed).
 function currentTarget(targets, now = new Date()) {
@@ -311,6 +313,8 @@ function Dashboard({ data, onReload }) {
         <BarChart title="Offers reported per month" points={offers.by_month} labelFor={monthLabel} unit="offers" />
       </section>
 
+      <AgentTrials onChanged={load} />
+
       <AgentCodes />
 
       <section className="card">
@@ -355,6 +359,181 @@ function Dashboard({ data, onReload }) {
         )}
       </section>
     </>
+  );
+}
+
+// Agents on a free trial from a buyer's invite (migration 034). Extend a
+// trial, or make their branch a code: that puts them on it (the same as
+// them typing it in) and emails them the code.
+function trialLeft(iso) {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return { text: `ended ${shortDate(iso)}`, ended: true };
+  const days = Math.ceil(ms / 864e5);
+  return { text: `${days} day${days === 1 ? "" : "s"} left`, soon: days <= 4 };
+}
+
+function TrialRow({ agent, onChanged, onMessage }) {
+  const [making, setMaking] = useState(false);
+  const [form, setForm] = useState({ agency: agent.agency || "", branch: agent.branch || "", seats: "1" });
+  const [busy, setBusy] = useState(false);
+  const left = trialLeft(agent.trial_ends_at);
+
+  async function extend() {
+    setBusy(true);
+    const { error } = await supabase.rpc("admin_extend_trial", { p_agent: agent.user_id });
+    setBusy(false);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onMessage(`Extended ${agent.name}'s trial by 14 days.`);
+    onChanged();
+  }
+
+  async function makeCode(event) {
+    event.preventDefault();
+    setBusy(true);
+    const { data: code, error } = await supabase.rpc("admin_make_trial_code", {
+      p_agent: agent.user_id,
+      p_agency: form.agency.trim(),
+      p_branch: form.branch.trim(),
+      p_seats: Number(form.seats),
+    });
+    if (error) {
+      setBusy(false);
+      onMessage(error.message);
+      return;
+    }
+    let emailed = false;
+    try {
+      const response = await postAuthed("/api/agent-signup", { action: "admin_code_email", agentId: agent.user_id });
+      const result = await response.json().catch(() => ({}));
+      emailed = response.ok && result.emailed;
+    } catch {
+      emailed = false;
+    }
+    setBusy(false);
+    setMaking(false);
+    onMessage(
+      emailed
+        ? `Made ${code} and put ${agent.name} on it. We've emailed them the code.`
+        : `Made ${code} and put ${agent.name} on it, but the email didn't go. Send it to ${agent.email} yourself.`
+    );
+    onChanged();
+  }
+
+  return (
+    <li>
+      <div>
+        <strong>{agent.name}</strong> · {agent.agency}
+        {agent.branch ? `, ${agent.branch}` : ""}
+        <div className="muted">
+          <a href={`mailto:${agent.email}`}>{agent.email}</a>
+          {agent.phone ? ` · ${agent.phone}` : ""} · joined {shortDate(agent.created_at)} ·{" "}
+          <span className={left.ended || left.soon ? "admin-flag" : ""}>{left.text}</span>
+        </div>
+        <div className="muted">
+          {agent.bookings} booking{agent.bookings === 1 ? "" : "s"} · {agent.listings} listing
+          {agent.listings === 1 ? "" : "s"}
+          {agent.referred_by_household && (
+            <>
+              {" "}
+              · invited by household <code>{agent.referred_by_household.slice(0, 8)}</code>
+            </>
+          )}
+          {agent.code_requested_at && <> · asked for a code {shortDate(agent.code_requested_at)}</>}
+        </div>
+        {making && (
+          <form className="admin-code-form" onSubmit={makeCode}>
+            <label>
+              Agency
+              <input required maxLength={100} value={form.agency} onChange={(e) => setForm({ ...form, agency: e.target.value })} />
+            </label>
+            <label>
+              Branch
+              <input required maxLength={100} value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })} />
+            </label>
+            <label>
+              Seats (people)
+              <input
+                required
+                type="number"
+                min={1}
+                max={500}
+                value={form.seats}
+                onChange={(e) => setForm({ ...form, seats: e.target.value })}
+              />
+            </label>
+            <button type="submit" className="primary-button" disabled={busy}>
+              {busy ? "Making..." : "Make code and email it"}
+            </button>
+          </form>
+        )}
+      </div>
+      <div className="admin-code-actions">
+        <button type="button" className="secondary-button" disabled={busy} onClick={extend}>
+          Extend 14 days
+        </button>
+        <button type="button" className="link-button" onClick={() => setMaking(!making)}>
+          {making ? "Cancel" : "Make a branch code"}
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function AgentTrials({ onChanged }) {
+  const [trials, setTrials] = useState(null);
+  const [message, setMessage] = useState("");
+
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.rpc("admin_trial_agents");
+    if (error) {
+      setMessage(/admin_trial_agents/.test(error.message) ? "Free trials need database migration 034." : error.message);
+      setTrials([]);
+      return;
+    }
+    setTrials(data || []);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <section className="card">
+      <div className="section-header">
+        <div>
+          <h2>Trials</h2>
+          <p>
+            Agents who joined from a buyer's invite, without a code. After 14 days buyers can't book them until they
+            have a branch code.
+          </p>
+        </div>
+      </div>
+      {message && <p className="muted">{message}</p>}
+      {trials === null ? (
+        <p className="muted">Loading...</p>
+      ) : trials.length === 0 ? (
+        <p className="muted">No agents on a trial.</p>
+      ) : (
+        <div className="admin-requests">
+          <ul>
+            {trials.map((agent) => (
+              <TrialRow
+                key={agent.user_id}
+                agent={agent}
+                onMessage={setMessage}
+                onChanged={() => {
+                  load();
+                  onChanged();
+                }}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

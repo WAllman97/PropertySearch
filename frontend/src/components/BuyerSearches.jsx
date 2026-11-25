@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 import { formatShortGBP } from "../utils/market";
+import { dismissPushOffer, enablePush, shouldOfferPush } from "../lib/push";
 
 const SearchAreaMap = lazy(() => import("./SearchAreaMap"));
 
@@ -502,6 +503,12 @@ function BuyerSearches({ user }) {
   const [searches, setSearches] = useState(null);
   const [editing, setEditing] = useState(null); // search id, "new", or null
   const [message, setMessage] = useState("");
+  // The search waiting for "Delete" to be confirmed.
+  const [deleting, setDeleting] = useState(null);
+  // iPhone app: offer notifications right after a search is saved, when the
+  // reason for them is obvious, rather than the moment the app opens.
+  const [offerPush, setOfferPush] = useState(false);
+  const [pushError, setPushError] = useState("");
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -540,6 +547,9 @@ function BuyerSearches({ user }) {
     setEditing(null);
     setMessage("Search saved.");
     await load();
+    shouldOfferPush()
+      .then((offer) => offer && setOfferPush(true))
+      .catch(() => {});
 
     // Homes agents have already listed that fit: send them now, rather than
     // waiting for the next new listing.
@@ -570,10 +580,25 @@ function BuyerSearches({ user }) {
   }
 
   async function remove(search) {
-    if (!window.confirm(`Delete "${search.name}"?`)) return;
-    await supabase.from("buyer_searches").delete().eq("id", search.id);
-    setMessage("");
+    setDeleting(null);
+    const { error } = await supabase.from("buyer_searches").delete().eq("id", search.id);
+    setMessage(error ? "Couldn't delete that search. Please try again." : "");
     load();
+  }
+
+  async function turnOnPush() {
+    setPushError("");
+    try {
+      const result = await enablePush();
+      if (result === "denied") {
+        setPushError("Notifications are off for PropertySearch. Turn them on in the iPhone's Settings app.");
+        return;
+      }
+      setOfferPush(false);
+    } catch (error) {
+      console.error("Could not turn on notifications:", error);
+      setPushError("Couldn't turn on notifications. Try again from Settings → Phone Notifications.");
+    }
   }
 
   if (searches === null || (searches.length === 0 && !starter && !message.includes("migration"))) {
@@ -608,17 +633,29 @@ function BuyerSearches({ user }) {
               {!search.is_active && <span className="muted"> · paused</span>}
               <p className="muted">{describeSearch(search)}</p>
             </div>
-            <div className="buyer-search-row-actions">
-              <button type="button" onClick={() => setEditing(search.id)}>
-                Edit
-              </button>
-              <button type="button" onClick={() => toggleActive(search)}>
-                {search.is_active ? "Pause" : "Resume"}
-              </button>
-              <button type="button" className="danger-button" onClick={() => remove(search)}>
-                Delete
-              </button>
-            </div>
+            {deleting === search.id ? (
+              <div className="buyer-search-row-actions inline-confirm" role="group" aria-label={`Delete ${search.name}?`}>
+                <span>Delete this search?</span>
+                <button type="button" className="danger-button" onClick={() => remove(search)}>
+                  Delete
+                </button>
+                <button type="button" onClick={() => setDeleting(null)}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="buyer-search-row-actions">
+                <button type="button" onClick={() => setEditing(search.id)}>
+                  Edit
+                </button>
+                <button type="button" onClick={() => toggleActive(search)}>
+                  {search.is_active ? "Pause" : "Resume"}
+                </button>
+                <button type="button" className="danger-button" onClick={() => setDeleting(search.id)}>
+                  Delete
+                </button>
+              </div>
+            )}
           </div>
         )
       )}
@@ -635,6 +672,28 @@ function BuyerSearches({ user }) {
       )}
 
       {message && <p className="form-message">{message}</p>}
+
+      {offerPush && (
+        <div className="push-offer search-push-offer" role="status">
+          <p>Want a tap on the shoulder when a home matches this search?</p>
+          <div className="push-offer-actions">
+            <button type="button" className="primary-button" onClick={turnOnPush}>
+              Turn on
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                dismissPushOffer();
+                setOfferPush(false);
+              }}
+            >
+              Not now
+            </button>
+          </div>
+          {pushError && <p className="form-error">{pushError}</p>}
+        </div>
+      )}
     </div>
   );
 }
