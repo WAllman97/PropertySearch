@@ -179,6 +179,11 @@ export function ViewingChecklist({ propertyId, onOpenSettings }) {
   const [checklist, setChecklist] = useState({});
   const [notes, setNotes] = useState("");
   const savedNotes = useRef("");
+  // The latest typed text, and the text currently on its way to the server.
+  // Refs, so the unmount / tab-hidden saves see the newest words.
+  const notesRef = useRef("");
+  const savingNotes = useRef(null);
+  const currentId = useRef(propertyId);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -193,6 +198,7 @@ export function ViewingChecklist({ propertyId, onOpenSettings }) {
         if (!live) return;
         setChecklist(data?.checklist || {});
         setNotes(data?.viewing_notes || "");
+        notesRef.current = data?.viewing_notes || "";
         savedNotes.current = data?.viewing_notes || "";
       });
     return () => {
@@ -200,11 +206,16 @@ export function ViewingChecklist({ propertyId, onOpenSettings }) {
     };
   }, [propertyId]);
 
-  async function save(values) {
-    setStatus("Saving...");
-    const { error: saveError } = await supabase
-      .from("property_notes")
-      .upsert({ property_id: propertyId, ...values, updated_at: new Date().toISOString() }, { onConflict: "property_id" });
+  async function save(values, id = propertyId, { quiet = false } = {}) {
+    if (!quiet) setStatus("Saving...");
+    let saveError;
+    try {
+      ({ error: saveError } = await supabase
+        .from("property_notes")
+        .upsert({ property_id: id, ...values, updated_at: new Date().toISOString() }, { onConflict: "property_id" }));
+    } catch (err) {
+      saveError = err;
+    }
     setStatus(saveError ? "Couldn't save. Check your connection and try again." : "Saved");
     return !saveError;
   }
@@ -219,10 +230,54 @@ export function ViewingChecklist({ propertyId, onOpenSettings }) {
     if (!(await save({ checklist: next }))) setChecklist(before);
   }
 
-  async function saveNotes() {
-    if (notes === savedNotes.current) return;
-    if (await save({ viewing_notes: notes || null })) savedNotes.current = notes;
+  // Saves the notes for `id` if they've changed. Skips unchanged text and
+  // text that's already being saved, so the timer, blur and unmount saves
+  // can't double up.
+  async function saveNotes(id = propertyId) {
+    const text = notesRef.current;
+    if (text === savedNotes.current || text === savingNotes.current) return;
+    savingNotes.current = text;
+    const ok = await save({ viewing_notes: text || null }, id, { quiet: true });
+    if (savingNotes.current === text) savingNotes.current = null;
+    // Ignore a late reply for a home we've since moved away from.
+    if (ok && currentId.current === id) savedNotes.current = text;
   }
+  const saveNotesRef = useRef(saveNotes);
+  saveNotesRef.current = saveNotes;
+
+  function changeNotes(value) {
+    notesRef.current = value;
+    setNotes(value);
+  }
+
+  // Autosave shortly after typing stops, so closing the sheet or locking the
+  // phone mid-sentence doesn't lose anything.
+  useEffect(() => {
+    const timer = setTimeout(() => saveNotesRef.current(propertyId), 800);
+    return () => clearTimeout(timer);
+  }, [notes, propertyId]);
+
+  // Also save straight away when the app goes to the background, and when
+  // the sheet closes or switches to another home (cleanup runs with the old id).
+  useEffect(() => {
+    // A new home starts blank until its notes load, so the old home's text
+    // can't be autosaved onto it.
+    if (currentId.current !== propertyId) {
+      notesRef.current = "";
+      savedNotes.current = "";
+      savingNotes.current = null;
+      setNotes("");
+    }
+    currentId.current = propertyId;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") saveNotesRef.current(propertyId);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      saveNotesRef.current(propertyId);
+    };
+  }, [propertyId]);
 
   const { yes, no, total } = checklistSummary(items, checklist);
 
@@ -285,15 +340,15 @@ export function ViewingChecklist({ propertyId, onOpenSettings }) {
         Viewing notes
         <textarea
           value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          onBlur={saveNotes}
+          onChange={(event) => changeNotes(event.target.value)}
+          onBlur={() => saveNotes()}
           placeholder="How did it feel? Light, noise, the neighbours, what the agent said..."
           rows={4}
         />
       </label>
       <div className="viewing-checklist-foot">
         {notes !== savedNotes.current && (
-          <button type="button" className="secondary-button" onClick={saveNotes}>
+          <button type="button" className="secondary-button" onClick={() => saveNotes()}>
             Save notes
           </button>
         )}

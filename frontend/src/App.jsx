@@ -48,10 +48,27 @@ function getInviteCode() {
   return match ? match[1].toLowerCase() : null;
 }
 
-// Email links can open a tab directly, e.g. /?view=calendar
+// Email links can open a tab directly, e.g. /?view=calendar. The param is
+// then removed from the address, otherwise opening the same link again later
+// looks like "already here" and does nothing. Read once and remembered, so a
+// second call (React may run this twice) still gets the right tab.
+let launchView;
 function getInitialView() {
-  const view = new URLSearchParams(window.location.search).get("view");
-  return VIEWS.includes(view) ? view : "properties";
+  if (launchView === undefined) {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    launchView = VIEWS.includes(view) ? view : "properties";
+    if (params.has("view")) {
+      params.delete("view");
+      const rest = params.toString();
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`
+      );
+    }
+  }
+  return launchView;
 }
 
 function App() {

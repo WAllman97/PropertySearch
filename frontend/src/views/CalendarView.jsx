@@ -642,6 +642,7 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
             type="button"
             className="secondary-button"
             onClick={goToPreviousMonth}
+            aria-label="Previous month"
           >
             ←
           </button>
@@ -649,6 +650,7 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
             type="button"
             className="secondary-button"
             onClick={goToNextMonth}
+            aria-label="Next month"
           >
             →
           </button>

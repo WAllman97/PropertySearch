@@ -67,6 +67,7 @@ function PropertyScoreEditor({ property, onUpdate }) {
 
         <input
           type="range"
+          aria-label={label}
           min="1"
           max="10"
           value={scores[field]}

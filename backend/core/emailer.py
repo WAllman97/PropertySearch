@@ -4,6 +4,7 @@ The daily new-listing email that used to live here went with the personal
 scraper (removed 23 Nov 2026, docs/DATA_SOURCES.md).
 """
 
+import html
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -31,6 +32,18 @@ def safe(value, fallback="Unknown"):
 
     value = str(value).strip()
     return value if value else fallback
+
+
+def esc(value):
+    """Escape text or a URL for HTML (quotes too, for attributes). Addresses,
+    agent names and links come from listings and users, not from us."""
+    return html.escape(str(value or ""), quote=True)
+
+
+def web_url(value):
+    """Only http(s) links go in href/src, so a stored "javascript:" can't."""
+    value = str(value or "").strip()
+    return value if value.lower().startswith(("http://", "https://")) else ""
 
 
 def send_resend_email(subject, html_body, recipients):
@@ -84,8 +97,8 @@ def build_viewing_reminder_html(viewing):
 
     address = safe(property_data.get("address"), "your saved property")
     price = format_price(property_data.get("price"))
-    listing_url = safe(property_data.get("listing_url"), "")
-    image_url = property_data.get("image_url") or ""
+    listing_url = web_url(property_data.get("listing_url"))
+    image_url = web_url(property_data.get("image_url"))
 
     when = format_viewing_datetime(viewing.get("viewing_datetime"))
     agent = safe(viewing.get("estate_agent"), "Not provided")
@@ -109,9 +122,9 @@ def build_viewing_reminder_html(viewing):
         f"""
         <tr>
             <td style="padding:4px 16px 4px 0;font-family:Arial,sans-serif;
-                       font-size:13px;color:#6b7280;white-space:nowrap;">{label}</td>
+                       font-size:13px;color:#6b7280;white-space:nowrap;">{esc(label)}</td>
             <td style="padding:4px 0;font-family:Arial,sans-serif;
-                       font-size:14px;color:#111827;">{safe(value)}</td>
+                       font-size:14px;color:#111827;">{esc(safe(value))}</td>
         </tr>
         """
         for label, value in detail_rows
@@ -121,7 +134,7 @@ def build_viewing_reminder_html(viewing):
     if image_url:
         image_html = f"""
         <tr><td style="padding:0 0 16px;">
-            <img src="{image_url}" width="100%"
+            <img src="{esc(image_url)}" width="100%"
                  style="max-width:600px;border-radius:10px;display:block;" />
         </td></tr>
         """
@@ -129,7 +142,7 @@ def build_viewing_reminder_html(viewing):
     listing_button = ""
     if listing_url:
         listing_button = f"""
-        <a href="{listing_url}"
+        <a href="{esc(listing_url)}"
            style="display:inline-block;background:#111827;color:#ffffff;
                   padding:10px 18px;border-radius:7px;text-decoration:none;
                   font-family:Arial,sans-serif;font-size:13px;font-weight:bold;
@@ -154,7 +167,7 @@ def build_viewing_reminder_html(viewing):
                                 margin-bottom:8px;">Viewing reminder</div>
                     <div style="font-family:Georgia,serif;font-size:24px;
                                 font-weight:bold;color:#ffffff;line-height:1.25;">
-                        {address}</div>
+                        {esc(address)}</div>
                 </td></tr>
                 <tr><td style="background:#ffffff;border-radius:0 0 14px 14px;
                                padding:24px 28px;">
@@ -168,7 +181,7 @@ def build_viewing_reminder_html(viewing):
                     <table cellpadding="0" cellspacing="0"
                            style="margin-bottom:20px;">{details_html}</table>
                     {listing_button}
-                    <a href="{maps_url}"
+                    <a href="{esc(maps_url)}"
                        style="display:inline-block;background:#f3f4f6;color:#111827;
                               padding:10px 18px;border-radius:7px;text-decoration:none;
                               font-family:Arial,sans-serif;font-size:13px;

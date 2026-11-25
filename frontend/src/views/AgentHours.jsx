@@ -106,6 +106,23 @@ function prettyDate(day) {
   });
 }
 
+// The form's starting values, from what's saved (or defaults for a new agent).
+function settingsFrom(availability) {
+  return availability
+    ? {
+        enabled: availability.enabled,
+        slot_minutes: availability.slot_minutes,
+        travel_minutes: availability.travel_minutes,
+        days_ahead: availability.days_ahead,
+        notice_hours: availability.notice_hours,
+      }
+    : DEFAULT_SETTINGS;
+}
+
+function daysFrom(availability, hours) {
+  return availability ? daysFromRows(hours) : DEFAULT_DAYS;
+}
+
 function todayLondon() {
   return londonDay(new Date().toISOString());
 }
@@ -231,18 +248,8 @@ function TimeOff({ agentId, timeOff, bookedSlots, onChanged }) {
 export default function AgentHours({ agentId, availability, hours, timeOff, bookedSlots, onChanged }) {
   const isNew = !availability;
   const [editing, setEditing] = useState(isNew);
-  const [settings, setSettings] = useState(() =>
-    availability
-      ? {
-          enabled: availability.enabled,
-          slot_minutes: availability.slot_minutes,
-          travel_minutes: availability.travel_minutes,
-          days_ahead: availability.days_ahead,
-          notice_hours: availability.notice_hours,
-        }
-      : DEFAULT_SETTINGS
-  );
-  const [days, setDays] = useState(() => (availability ? daysFromRows(hours) : DEFAULT_DAYS));
+  const [settings, setSettings] = useState(() => settingsFrom(availability));
+  const [days, setDays] = useState(() => daysFrom(availability, hours));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -272,6 +279,15 @@ export default function AgentHours({ agentId, availability, hours, timeOff, book
 
   function removePeriod(day, index) {
     setDays({ ...days, [day]: days[day].filter((_, i) => i !== index) });
+  }
+
+  // Cancel / Close throws away unsaved edits; otherwise the next Change then
+  // Save would quietly save them.
+  function discardEdits() {
+    setSettings(settingsFrom(availability));
+    setDays(daysFrom(availability, hours));
+    setError("");
+    setEditing(false);
   }
 
   async function save(event) {
@@ -345,7 +361,7 @@ export default function AgentHours({ agentId, availability, hours, timeOff, book
           )}
         </div>
         {!isNew && (
-          <button type="button" className="secondary-button" onClick={() => setEditing(!editing)}>
+          <button type="button" className="secondary-button" onClick={() => (editing ? discardEdits() : setEditing(true))}>
             {editing ? "Close" : "Change"}
           </button>
         )}
@@ -460,7 +476,7 @@ export default function AgentHours({ agentId, availability, hours, timeOff, book
               {busy ? "Saving..." : isNew ? "Use these hours" : "Save hours"}
             </button>
             {!isNew && (
-              <button type="button" className="link-button" onClick={() => setEditing(false)}>
+              <button type="button" className="link-button" onClick={discardEdits}>
                 Cancel
               </button>
             )}

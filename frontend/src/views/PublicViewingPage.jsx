@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "./AgentPortal.css";
 import { apiUrl } from "../lib/platform";
+import { friendlyError } from "../lib/errors";
 
 // Public page an agent shares with buyers: /viewings/<listing id>. Anyone can
 // book one of the agent's times without an account. ?cancel=<token> shows
@@ -30,28 +31,40 @@ const longFormatter = new Intl.DateTimeFormat("en-GB", {
 
 function CancelBooking({ token }) {
   const [state, setState] = useState({ loading: true });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     fetch(apiUrl(`/api/listing-viewings?cancel=${encodeURIComponent(token)}`))
       .then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => ({})) }))
       .then(({ ok, body }) =>
         setState(ok ? { booking: body.booking } : { error: body.error || "Booking not found" })
-      );
-  }, [token]);
+      )
+      // No signal: offer a retry rather than "Loading..." forever.
+      .catch((err) => setState({ error: friendlyError(err), retry: true }));
+  }, [token, attempt]);
+
+  function retry() {
+    setState({ loading: true });
+    setAttempt((n) => n + 1);
+  }
 
   async function cancel() {
-    setState({ ...state, busy: true });
-    const response = await fetch(apiUrl("/api/listing-viewings"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "cancel", token }),
-    });
-    const body = await response.json().catch(() => ({}));
-    setState(
-      response.ok
-        ? { booking: { ...state.booking, status: "cancelled" }, justCancelled: true }
-        : { ...state, busy: false, error: body.error || "Could not cancel" }
-    );
+    setState({ ...state, busy: true, error: "" });
+    try {
+      const response = await fetch(apiUrl("/api/listing-viewings"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel", token }),
+      });
+      const body = await response.json().catch(() => ({}));
+      setState(
+        response.ok
+          ? { booking: { ...state.booking, status: "cancelled" }, justCancelled: true }
+          : { ...state, busy: false, error: body.error || "Could not cancel" }
+      );
+    } catch (err) {
+      setState({ ...state, busy: false, error: friendlyError(err) });
+    }
   }
 
   const { booking } = state;
@@ -62,7 +75,14 @@ function CancelBooking({ token }) {
         {state.loading ? (
           <p className="muted">Loading...</p>
         ) : !booking ? (
-          <p className="booking-error">{state.error}</p>
+          <>
+            <p className="booking-error">{state.error}</p>
+            {state.retry && (
+              <button type="button" className="secondary-button" onClick={retry}>
+                Try again
+              </button>
+            )}
+          </>
         ) : booking.status === "cancelled" ? (
           <>
             <p className="eyebrow">Cancelled</p>
@@ -120,8 +140,17 @@ function PublicViewingPage({ listingId }) {
     const query = `listing=${encodeURIComponent(listingId)}${
       buyerToken ? `&b=${encodeURIComponent(buyerToken)}` : ""
     }`;
-    const response = await fetch(apiUrl(`/api/listing-viewings?${query}`));
-    const body = await response.json().catch(() => ({}));
+    let response;
+    let body;
+    try {
+      response = await fetch(apiUrl(`/api/listing-viewings?${query}`));
+      body = await response.json().catch(() => ({}));
+    } catch (err) {
+      // No signal. On first load show a retry instead of "Loading..." forever;
+      // if the page is already showing times, keep them on screen.
+      setState((current) => (current.listing ? current : { loadFailed: friendlyError(err) }));
+      return;
+    }
     setState(response.ok ? body : { error: body.error || "This booking link isn't active" });
     if (response.ok && body.buyer) {
       setForm((current) => ({
@@ -156,19 +185,28 @@ function PublicViewingPage({ listingId }) {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const response = await fetch(apiUrl("/api/listing-viewings"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "book",
-        listingId,
-        slotId: selected.id,
-        ...form,
-        b: state.buyer ? buyerToken : undefined,
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy(false);
+    let response;
+    let body;
+    try {
+      response = await fetch(apiUrl("/api/listing-viewings"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "book",
+          listingId,
+          slotId: selected.id,
+          ...form,
+          b: state.buyer ? buyerToken : undefined,
+        }),
+      });
+      body = await response.json().catch(() => ({}));
+    } catch (err) {
+      // Network dropped: keep their choice so they can just tap Book again.
+      setError(friendlyError(err));
+      return;
+    } finally {
+      setBusy(false);
+    }
     if (!response.ok) {
       setError(body.error || "Could not book that viewing");
       setSelected(null);
@@ -182,6 +220,26 @@ function PublicViewingPage({ listingId }) {
     return (
       <div className="booking-shell">
         <p className="muted">Loading...</p>
+      </div>
+    );
+  }
+
+  if (state.loadFailed) {
+    return (
+      <div className="booking-shell">
+        <section className="card">
+          <p className="booking-error">{state.loadFailed}</p>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setState({ loading: true });
+              load();
+            }}
+          >
+            Try again
+          </button>
+        </section>
       </div>
     );
   }

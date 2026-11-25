@@ -5,9 +5,16 @@ import PositionProof from "./PositionProof";
 // The household's "ready to proceed" position (migration 015). Agents you
 // book viewings with see it, marked as your own declaration, so they know
 // you can move quickly. Same rule as position_is_proceedable() in SQL.
+// Local calendar date as YYYY-MM-DD. toISOString() is UTC, which is still
+// yesterday between midnight and 1am in British Summer Time.
+function localDateString(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function isProceedable(p) {
   if (!p) return false;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
   const funded =
     p.buying_with === "cash" ||
     (p.buying_with === "mortgage" &&
