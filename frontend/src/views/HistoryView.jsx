@@ -14,7 +14,7 @@ import StagePicker from "../components/StagePicker";
 import UndoBar from "../components/UndoBar";
 import TotalCost, { useBuyerPosition } from "../components/TotalCost";
 import CompareHomes from "../components/CompareHomes";
-import ViewingDayCard, { isViewingDay, useMinuteClock } from "../components/ViewingDayCard";
+import ViewingDayCard, { ViewingPhotos, isViewingDay, useMinuteClock } from "../components/ViewingDayCard";
 
 const emptyNotes = {
   viewing_datetime: "",
@@ -641,7 +641,8 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
     return [...properties].sort(sort.compare);
   }, [properties, sortKey]);
 
-  const undoBar = undo && (
+  // Hidden while picking homes to compare: both bars sit at the bottom.
+  const undoBar = undo && !picking && (
     <UndoBar key={undo.key} message="Archived" onUndo={undoArchive} onDone={() => setUndo(null)} />
   );
 
@@ -759,7 +760,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
               <p>{selectedProperty.address}</p>
 
               {position && (
-                <TotalCost price={selectedProperty.price} position={position} onOpenSettings={onOpenSettings} />
+                <TotalCost price={selectedProperty.price} position={position} onOpenSettings={() => onOpenSettings?.("position")} />
               )}
 
               <div className="detail-stage-row">
@@ -913,9 +914,11 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
             {viewingMessage && <p className="form-message">{viewingMessage}</p>}
           </div>
 
-          {viewingToday ? (
-            // On the day: directions, the agent, must-haves, notes and photos
-            // in one place.
+          {/* On the day: directions, the agent and photos at the top. The
+              must-haves and notes stay where they always are, so the card
+              appearing or going (on the minute) never rebuilds them and
+              closes the keyboard mid-sentence. */}
+          {viewingToday && (
             <div className="details-section">
               <ViewingDayCard
                 address={selectedProperty.address}
@@ -924,16 +927,16 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
                 phone={notes.estate_agent_phone}
                 householdId={selectedProperty.household_id}
                 propertyId={selectedProperty.id}
-              >
-                {mustHaveTicks}
-                {notesBox}
-              </ViewingDayCard>
+              />
             </div>
-          ) : (
-            <>
-              <div className="details-section">{mustHaveTicks}</div>
-              <div className="details-section">{notesBox}</div>
-            </>
+          )}
+          <div className="details-section">{mustHaveTicks}</div>
+          <div className="details-section">{notesBox}</div>
+          {/* After the day the photos stay here with the home. */}
+          {!viewingToday && notes.viewing_datetime && selectedProperty.household_id && (
+            <div className="details-section">
+              <ViewingPhotos householdId={selectedProperty.household_id} propertyId={selectedProperty.id} />
+            </div>
           )}
 
           <div className="details-section">

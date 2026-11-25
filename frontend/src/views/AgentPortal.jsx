@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { arrivedFromPasswordReset, supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
+import { friendlyError } from "../lib/errors";
 import SetNewPasswordForm from "../components/SetNewPasswordForm";
 import { dismissPushOffer, enablePush, forgetThisPhone, refreshPushRegistration, shouldOfferPush } from "../lib/push";
 import { apiUrl, siteUrl } from "../lib/platform";
@@ -1306,12 +1307,18 @@ function SlotRow({ slot, bookings, positions, feedbackFor, onOpenBooking, onChan
   async function call(body) {
     setBusy(true);
     setError("");
-    const response = await postAuthed("/api/viewings", body);
-    const result = await response.json().catch(() => ({}));
-    setBusy(false);
-    setConfirming(null);
-    if (!response.ok) setError(result.error || "Something went wrong. Please try again.");
-    onChanged();
+    // A network error mustn't leave the buttons stuck on busy.
+    try {
+      const response = await postAuthed("/api/viewings", body);
+      const result = await response.json().catch(() => ({}));
+      setConfirming(null);
+      if (!response.ok) setError(result.error || "Something went wrong. Please try again.");
+      onChanged();
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function removeSlot() {
@@ -1680,10 +1687,14 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
   const status = listing.market_status || "available";
 
   function pick(value) {
-    if (value === status || busy) return;
+    if (busy) return;
+    const closes = value === "sold_stc" || value === "off_market";
+    // Picking another status shuts a Sold STC / Off market "Are you sure?".
+    if (!closes) setClosing(null);
+    if (value === status) return;
     setMessage("");
     // Closing takes the home's times away and tells buyers: ask first.
-    if (value === "sold_stc" || value === "off_market") {
+    if (closes) {
       setClosing(value);
       setCancelIds(new Set(upcomingBookings.map((b) => b.id)));
       return;
@@ -1741,7 +1752,9 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
       if (done < toCancel.length) note += ` ${toCancel.length - done} couldn't be cancelled: try again from the times below.`;
     }
     const kept = upcomingBookings.length - toCancel.length;
-    if (closing && kept > 0) note += ` ${kept} viewing${kept === 1 ? " is" : "s are"} still booked.`;
+    // Only closing leaves "still booked" viewings worth a mention (and this
+    // run's closing may be stale, so go by the status picked).
+    if ((value === "sold_stc" || value === "off_market") && kept > 0) note += ` ${kept} viewing${kept === 1 ? " is" : "s are"} still booked.`;
     setClosing(null);
     setMessage(note);
     setBusy(false);
@@ -3472,6 +3485,15 @@ function AgentPortal() {
           <p className="muted">Loading...</p>
         ) : !user ? (
           <AgentAuth />
+        ) : !agent && inviteFromLink() ? (
+          // An invite makes a new login, so it can't be used from this one
+          // (the profile form below would ask for a branch code).
+          <section className="card agent-auth">
+            <p>This invite is for a new agent account. Log out, then open the link again.</p>
+            <button type="button" className="primary-button" onClick={logOut}>
+              Log out
+            </button>
+          </section>
         ) : !agent ? (
           <>
             <AgentProfileForm user={user} onCreated={loadAgent} />

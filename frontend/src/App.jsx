@@ -362,7 +362,7 @@ function MainApp() {
               <HistoryView
                 focusPropertyId={focusProperty}
                 onFocused={clearFocusProperty}
-                onOpenSettings={() => openSettings("musthaves")}
+                onOpenSettings={(section) => openSettings(typeof section === "string" ? section : "musthaves")}
               />
             )}
             {activeView === "settings" && (

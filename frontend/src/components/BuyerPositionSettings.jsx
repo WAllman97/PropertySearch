@@ -242,8 +242,13 @@ function BuyerPositionSettings() {
             onChange={(event) => {
               set("selling_status")(event);
               // Saying "first-time buyer" here is the same answer below.
-              if (event.target.value === "first_time") {
+              // Both ways: someone with a home to sell (or who's sold one)
+              // isn't a first-time buyer, so the stamp duty relief goes.
+              const value = event.target.value;
+              if (value === "first_time") {
                 setForm((current) => ({ ...current, first_time_buyer: true }));
+              } else if (["sold_stc", "on_market", "not_listed"].includes(value)) {
+                setForm((current) => ({ ...current, first_time_buyer: false }));
               }
             }}
           >

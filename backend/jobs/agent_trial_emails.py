@@ -14,6 +14,7 @@ GitHub emails about it.
 import os
 import sys
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from supabase import create_client
@@ -36,7 +37,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 SITE = (os.getenv("APP_URL") or APP_URL).rstrip("/")
 CONTACT_EMAIL = "hello@viewpal.co.uk"
-DAY_SECONDS = 24 * 3600
+LONDON = ZoneInfo("Europe/London")
 
 
 def parse_time(value):
@@ -44,13 +45,15 @@ def parse_time(value):
 
 
 def which_email(ends_at, now):
-    """The email due now, or None. 'day13' wins if a run was missed."""
-    left = (ends_at - now).total_seconds()
-    if left <= 0:
-        return None
-    if left <= DAY_SECONDS * 1.5:
+    """The email due today, or None.
+
+    By London calendar date, so "4 days left" and "ends tomorrow" are true
+    whatever time of day the trial started or the job runs.
+    """
+    days_left = (ends_at.astimezone(LONDON).date() - now.astimezone(LONDON).date()).days
+    if days_left == 1:
         return "day13"
-    if left <= DAY_SECONDS * 4:
+    if days_left == 4:
         return "day10"
     return None
 
@@ -146,7 +149,7 @@ def send_trial_emails():
         except Exception as error:
             print(f"Failed {key} for agent {agent_id[:8]}: {error}")
             failed += 1
-            # Give the claim back so tomorrow's run retries.
+            # Give the claim back so a rerun today can retry.
             try:
                 supabase.rpc("release_trial_email", {"p_agent": agent_id, "p_key": key}).execute()
             except Exception as release_error:
