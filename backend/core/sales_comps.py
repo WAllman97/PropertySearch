@@ -75,7 +75,7 @@ SELECT ?paon ?saon ?street ?postcode ?amount ?date ?ptype ?estate ?newbuild WHER
 """
 
 _session = requests.Session()
-_session.headers["User-Agent"] = "property-search/1.0 (sold-price comparisons)"
+_session.headers["User-Agent"] = "viewpal/1.0 (sold-price comparisons)"
 # The office network intercepts TLS, so a run there needs
 # INSECURE_OFFICE_TLS=1. Everywhere else (GitHub Actions, Vercel) verifies.
 if os.getenv("INSECURE_OFFICE_TLS") == "1":

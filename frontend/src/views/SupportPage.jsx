@@ -7,7 +7,7 @@ function SupportPage() {
   return (
     <div className="booking-shell privacy-page">
       <header className="booking-header">
-        <p className="eyebrow">PropertySearch</p>
+        <p className="eyebrow">ViewPal</p>
         <h1>Help and support</h1>
       </header>
 
@@ -32,7 +32,7 @@ function SupportPage() {
         <h4>Why aren't I getting phone notifications?</h4>
         <p>
           Settings, then Phone Notifications: make sure they're on, and that notifications for
-          PropertySearch are allowed in your iPhone's Settings.
+          ViewPal are allowed in your iPhone's Settings.
         </p>
         <h4>I'm an estate agent. How do I list a property?</h4>
         <p>

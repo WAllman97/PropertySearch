@@ -15,10 +15,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-APP_URL = "https://property-search-4jcc.vercel.app/"
+APP_URL = "https://viewpal.app/"
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "PropertySearch <onboarding@resend.dev>")
+FROM_EMAIL = os.getenv("FROM_EMAIL", "ViewPal <onboarding@resend.dev>")
 
 if not RESEND_API_KEY:
     raise ValueError("RESEND_API_KEY is missing from your .env file")
@@ -189,7 +189,7 @@ def build_viewing_reminder_html(viewing):
                 </td></tr>
                 <tr><td style="font-family:Arial,sans-serif;font-size:11px;
                                color:#9ca3af;text-align:center;padding:16px 0;">
-                    Automated reminder from PropertySearch.
+                    Automated reminder from ViewPal.
                 </td></tr>
             </table>
         </td></tr>

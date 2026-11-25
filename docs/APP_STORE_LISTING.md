@@ -9,22 +9,22 @@ privacy answers with what the app actually does.
 
 | Field | Value |
 |---|---|
-| Name (30 chars max) | PropertySearch. Names are unique across the App Store, so if it's taken try "PropertySearch: Home Buying" or "PropertySearch UK" |
+| Name (30 chars max) | ViewPal. Names are unique across the App Store, so if it's taken try "ViewPal: Home Buying" or "ViewPal UK" |
 | Subtitle (30) | Home buying, organised |
 | Bundle ID | com.wallman97.propertysearch |
-| SKU | propertysearch-ios |
+| SKU | viewpal-ios |
 | Primary category | Lifestyle |
 | Secondary category | Productivity |
 | Content rights | Answer **Yes**, it shows third-party content: when a user saves a link, the app shows that page's link preview (title, short summary, main photo), as messaging apps do, and listings agents add themselves. Portal pages are only read when a user pastes a link, never on a schedule. Check this answer with a solicitor before submitting. |
 | Age rating | Answer "None" / "No" to every question (gives 4+). "Unrestricted web access": No |
-| Privacy policy URL | https://property-search-4jcc.vercel.app/privacy |
-| Support URL | https://property-search-4jcc.vercel.app/support |
+| Privacy policy URL | https://viewpal.app/privacy |
+| Support URL | https://viewpal.app/support |
 | Devices | iPhone only (the project is set to iPhone, so no iPad screenshots needed) |
 
 ## Test Information (TestFlight)
 
 - **Beta app description:**
-  > PropertySearch keeps a home search in one place: save listings from any
+  > ViewPal keeps a home search in one place: save listings from any
   > portal, compare them, keep track of viewings, and book viewings
   > straight from local agents. Partners share one list. Estate agents can
   > publish viewing times and send new listings to matching buyers.
@@ -77,7 +77,7 @@ privacy answers with what the app actually does.
 > a tap and new listings sent straight from local agents.
 
 **Description:**
-> PropertySearch is a home-buying organiser for you and your partner.
+> ViewPal is a home-buying organiser for you and your partner.
 >
 > KEEP EVERYTHING TOGETHER
 > • Save a home by pasting its link from the property websites you already use
@@ -130,7 +130,7 @@ helps people use it, is fine.
   prices come from HM Land Registry open data.
 - Save-a-link reads only the link-preview tags of the one page a buyer
   pastes (`frontend/api/_lib/listing-page.js`).
-- Agents on PropertySearch are the licensed source: their details and
+- Agents on ViewPal are the licensed source: their details and
   photos are used first.
 - Apple guideline 5.2.2 asks that apps showing another service's content
   are allowed to under its terms. Get a short legal view on the link

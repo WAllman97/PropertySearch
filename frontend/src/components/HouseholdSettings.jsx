@@ -27,7 +27,7 @@ export function HouseholdMembers({ household, onChange }) {
   async function share() {
     try {
       await navigator.share({
-        title: "Join our PropertySearch household",
+        title: "Join our ViewPal household",
         text: "Sign up with this link to share our property list and viewings.",
         url: link,
       });

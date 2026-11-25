@@ -4,7 +4,7 @@ import { postAuthed } from "../lib/api";
 import { friendlyError } from "../lib/errors";
 import { liveSiteUrl } from "../lib/platform";
 
-// Ask the agent for a viewing when they aren't on PropertySearch (migration
+// Ask the agent for a viewing when they aren't on ViewPal (migration
 // 023): pick up to three times, we email the agent a link to confirm one,
 // suggest another or decline. Shown by ViewingSlots when a home has no
 // bookable times.
@@ -247,7 +247,7 @@ function RequestForm({ property, onSent, onCancel }) {
   );
 }
 
-// Invite the home's agent to PropertySearch (migration 034): they get a
+// Invite the home's agent to ViewPal (migration 034): they get a
 // single-use link for a 14-day free trial, and once they join the buyer can
 // book their times straight in. With no email for the agent, the buyer gets
 // the link to send themselves.
@@ -359,7 +359,7 @@ function InviteAgent({ property, request }) {
       <div className="viewing-slots-head">
         <span className="viewing-note">Want to book this agent in one tap next time?</span>
         <button type="button" className="link-button" onClick={() => setOpen(true)}>
-          Invite this agent to PropertySearch
+          Invite this agent to ViewPal
         </button>
       </div>
     );
@@ -368,7 +368,7 @@ function InviteAgent({ property, request }) {
   return (
     <form className="viewing-request-form" onSubmit={send}>
       <p className="viewing-note">
-        We'll email the agent a free 14-day trial, from PropertySearch, mentioning your first name and this home.
+        We'll email the agent a free 14-day trial, from ViewPal, mentioning your first name and this home.
       </p>
       <div className="viewing-request-grid">
         <label>

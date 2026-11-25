@@ -42,12 +42,12 @@ repository secret**:
 
 Repo → **Actions** → **Nightly Backup** → a run → **Artifacts** →
 `backup-YYYY-MM-DD`. It downloads as a zip containing
-`propertysearch-backup-YYYY-MM-DD.tar.gz.gpg`.
+`viewpal-backup-YYYY-MM-DD.tar.gz.gpg`.
 
 Decrypt and unpack (Git Bash on Windows, or a Mac terminal):
 
 ```
-gpg --decrypt propertysearch-backup-YYYY-MM-DD.tar.gz.gpg > backup.tar.gz
+gpg --decrypt viewpal-backup-YYYY-MM-DD.tar.gz.gpg > backup.tar.gz
 mkdir backup && tar -xzf backup.tar.gz -C backup
 ```
 

@@ -7,7 +7,7 @@ export function friendlyError(error, fallback = "Something went wrong. Please tr
     return "You're offline. Check your connection and try again.";
   }
   if (/load failed|failed to fetch|network|timed? ?out|fetch/i.test(message)) {
-    return "Couldn't reach PropertySearch. Check your connection and try again.";
+    return "Couldn't reach ViewPal. Check your connection and try again.";
   }
   if (/jwt|session|auth|token|401/i.test(message)) {
     return "You've been signed out. Please log in again.";

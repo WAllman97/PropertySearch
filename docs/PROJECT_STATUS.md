@@ -1,4 +1,4 @@
-# PropertySearch: project status
+# ViewPal: project status
 
 _Reconstructed on 22 Nov 2026 from the git history. The Claude chats for 12–20 Nov were lost when the work PC was restored to an 11 Nov image; the code and commits were not affected. Last commit: 20 Nov, `03dab2a` (main = `fix/review-findings`, identical trees)._
 
@@ -62,6 +62,18 @@ AI triage scoring; the agent call/viewing booking page (`/book/<slug>`); the sec
 - **Must-haves (migration 031):** Settings → "Your must-haves" is the household's dealbreaker list. At each viewing the buyer ticks every one ✓ / ✗ (stored in `property_notes.checklist`), with free-text viewing notes. Watchlist tiles show "✗ 1 must-have missing" or "✓ 4 of 5".
 - **Viewing notes tidied:** a home's notes page shows the booked viewing (date, agent, phone, email, filled in by the booking) as a summary with "Change", instead of empty boxes; then must-haves and notes, the score, and pros/cons. Saving notes no longer writes over the viewing details unless they were changed by hand.
 - **Calendar → notes:** tapping a viewing shows the must-have ticks and notes inline (to fill in during the viewing) and a "Notes & scoring" button that opens that home. The Dashboard's "How did it go?" opens the home too.
+
+### 25 Nov: renamed to ViewPal
+- The product is now **ViewPal** (was PropertySearch). Name checks on 25 Nov: no "ViewPal" company at Companies House (only VIEWPALM LIMITED); the only trade mark worldwide in WIPO's database is GE Healthcare's in Japan (class 9, medical imaging); no ViewPal app on the UK or US App Store. viewpal.com belongs to someone else (a holding page). Will owns **viewpal.app** (main address) and **viewpal.co.uk** (redirects to it and also receives email).
+- **iPhone:** the bundle ID stays `com.wallman97.propertysearch` (decided 25 Nov: users never see it, and keeping it avoids a new App Store Connect record and TestFlight reinstalls). Only the names changed: the identifier's name in the developer portal, and the app's name in App Store Connect. URL scheme `viewpal://` (the app still accepts `propertysearch://`).
+- **Web address:** code defaults now point at `https://viewpal.app`. The iPhone app calls the API there, so `viewpal.app` must be live on Vercel before the next iPhone build. Universal links and the app keep accepting the old `property-search-4jcc.vercel.app` links already in people's inboxes.
+- **Email:** the contact address is `hello@viewpal.app`; addresses at either domain are treated as ours. The demo App Review accounts stay on `@viewpal.co.uk`.
+- **To do for the rename:**
+  - Vercel: add `viewpal.app` and `www.viewpal.app`, plus `viewpal.co.uk` as a redirect.
+  - Supabase Auth: set the Site URL and redirect URLs to `viewpal.app`.
+  - Resend: verify `viewpal.app`, then set `FROM_EMAIL` (e.g. `ViewPal <bookings@viewpal.app>`) in both Vercel and GitHub.
+  - Google Workspace for the inboxes.
+  - Rename the GitHub repo and the Vercel project if you want.
 
 ## Architecture
 

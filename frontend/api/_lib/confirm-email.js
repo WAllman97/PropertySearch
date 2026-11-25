@@ -50,7 +50,7 @@ export async function sendConfirmEmail(req, { email, password, name, next = "/" 
       Button not working? Copy this into your browser:<br>${url}
     </p>`
   );
-  return sendEmail({ to: email, subject: "Confirm your email for PropertySearch", html });
+  return sendEmail({ to: email, subject: "Confirm your email for ViewPal", html });
 }
 
 // POST { action: "resend_confirmation", email, password }. The password must

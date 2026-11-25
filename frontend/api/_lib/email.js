@@ -1,6 +1,6 @@
 // Resend email + .ics calendar invites for the API routes.
 
-const fromEmail = process.env.FROM_EMAIL || "PropertySearch <onboarding@resend.dev>";
+const fromEmail = process.env.FROM_EMAIL || "ViewPal <onboarding@resend.dev>";
 
 export function escapeHtml(value) {
   return String(value ?? "")
@@ -22,7 +22,7 @@ function icsText(value) {
     .replace(/\r?\n/g, "\\n");
 }
 
-// The bare address out of "PropertySearch <bookings@example.com>", for the
+// The bare address out of "ViewPal <bookings@example.com>", for the
 // invite's ORGANIZER line.
 function addressOf(value) {
   const match = String(value || "").match(/<([^>]+)>/);
@@ -77,10 +77,10 @@ export function buildIcs({ uid, start, end, summary, description, location, canc
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//PropertySearch//Bookings//EN",
+    "PRODID:-//ViewPal//Bookings//EN",
     cancelled ? "METHOD:CANCEL" : "METHOD:PUBLISH",
     "BEGIN:VEVENT",
-    `UID:${uid}@propertysearch`,
+    `UID:${uid}@viewpal.app`,
     `SEQUENCE:${cancelled ? 1 : 0}`,
     cancelled ? "STATUS:CANCELLED" : "STATUS:CONFIRMED",
     `DTSTAMP:${icsDate(new Date())}`,
@@ -111,7 +111,7 @@ export function emailLayout(title, bodyHtml) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"></head>
   <body style="margin:0;padding:24px;background:#f8f6f2;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e4ddd2;border-radius:14px;padding:24px;">
-      <div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">PropertySearch</div>
+      <div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">ViewPal</div>
       <h1 style="font-family:Georgia,serif;font-size:21px;color:#223a33;margin:0 0 16px;">${escapeHtml(title)}</h1>
       ${bodyHtml}
     </div>

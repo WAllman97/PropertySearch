@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- PropertySearch app icon. Square, no transparency: iOS rounds the corners itself.
+  <!-- ViewPal app icon. Square, no transparency: iOS rounds the corners itself.
        Regenerate the PNGs with: npm run app:icons -->
   <rect width="1024" height="1024" fill="#223a33"/>
   <!-- Scaled and centred so nothing sits in the corners iOS rounds off. -->

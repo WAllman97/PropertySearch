@@ -393,9 +393,9 @@ function buildIcsFile(viewing) {
   const content = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//PropertySearch//Viewing Calendar//EN",
+    "PRODID:-//ViewPal//Viewing Calendar//EN",
     "BEGIN:VEVENT",
-    `UID:${viewing.id}@propertysearch`,
+    `UID:${viewing.id}@viewpal.app`,
     `DTSTAMP:${fmt(new Date())}`,
     `DTSTART:${fmt(start)}`,
     `DTEND:${fmt(end)}`,
@@ -440,9 +440,9 @@ function downloadIcsFile(viewing) {
   const icsContent = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//PropertySearch//Viewing Calendar//EN",
+    "PRODID:-//ViewPal//Viewing Calendar//EN",
     "BEGIN:VEVENT",
-    `UID:${viewing.id}@propertysearch`,
+    `UID:${viewing.id}@viewpal.app`,
     `DTSTAMP:${formatIcsDate(new Date())}`,
     `DTSTART:${formatIcsDate(start)}`,
     `DTEND:${formatIcsDate(end)}`,

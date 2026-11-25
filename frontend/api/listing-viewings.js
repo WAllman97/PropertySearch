@@ -69,7 +69,7 @@ async function buyerFromToken(listing, token) {
   if (!user?.email) return null;
 
   // Their household's saved copy of this home (added when the listing was
-  // sent), so the viewing lands in their PropertySearch calendar.
+  // sent), so the viewing lands in their ViewPal calendar.
   let propertyId = null;
   const key = listingKey(listing.listing_url);
   if (member && key) {
@@ -84,7 +84,7 @@ async function buyerFromToken(listing, token) {
   return { user, identity: await buyerIdentity(user), propertyId };
 }
 
-// No private link, but the email typed in belongs to a PropertySearch buyer
+// No private link, but the email typed in belongs to a ViewPal buyer
 // who has this home saved: link the booking to their account, so it goes in
 // their calendar and moves the home along, as if they'd booked in the app.
 // Only households that saved this exact home are checked, so a stranger
@@ -327,7 +327,7 @@ async function handleCancel(req, res) {
 
   const address = slot.agent_listings.address;
   const when = slotLabel(slot);
-  // Booked from a match email: it was in their PropertySearch calendar too.
+  // Booked from a match email: it was in their ViewPal calendar too.
   await clearCalendarViewing(booking.property_id, slot);
   // Both sides get the calendar update that removes it.
   const removal = cancelledIcs(slot, booking.id);

@@ -7,7 +7,7 @@ import { Capacitor } from "@capacitor/core";
 export const isNativeApp = Capacitor.isNativePlatform();
 
 const LIVE_SITE_URL = (
-  import.meta.env.VITE_PUBLIC_SITE_URL || "https://property-search-4jcc.vercel.app"
+  import.meta.env.VITE_PUBLIC_SITE_URL || "https://viewpal.app"
 ).replace(/\/$/, "");
 
 // The live website, also when running in the app.

@@ -42,7 +42,7 @@ export async function loadSlot(slotId) {
 
 // Booking emails to the agent and the buyer, each with a calendar invite.
 //   buyer: { name, email, phone }
-//   inCalendar: signed-in buyers get it in their PropertySearch calendar
+//   inCalendar: signed-in buyers get it in their ViewPal calendar
 //   cancelUrl: guests cancel with this private link
 export async function sendBookingEmails({ slot, bookingId, buyer, base, inCalendar, cancelUrl }) {
   const listing = slot.agent_listings;
@@ -67,7 +67,7 @@ export async function sendBookingEmails({ slot, bookingId, buyer, base, inCalend
     .eq("slot_id", slot.id)
     .eq("status", "confirmed");
 
-  const source = inCalendar ? "through PropertySearch" : "through your PropertySearch booking link";
+  const source = inCalendar ? "through ViewPal" : "through your ViewPal booking link";
 
   await Promise.all([
     // The agent's phone too (when they use the iPhone app).
@@ -115,7 +115,7 @@ export async function sendBookingEmails({ slot, bookingId, buyer, base, inCalend
         </table>
         <p style="margin:0;">${
           inCalendar
-            ? `It's in your PropertySearch calendar, and you'll get a reminder the day before.${
+            ? `It's in your ViewPal calendar, and you'll get a reminder the day before.${
                 cancelUrl
                   ? ` Can't make it? <a href="${escapeHtml(cancelUrl)}" style="color:#223a33;font-weight:bold;">Cancel this viewing</a>.`
                   : ""
@@ -229,7 +229,7 @@ export async function sendCancelledToBuyer({ slot, booking, base, agentLeft = fa
   const stillOn = !status || status === "available" || status === "under_offer";
   const url = stillOn && base && !agentLeft ? await rebookUrl(slot, booking, base) : null;
   const why = agentLeft
-    ? " The agent has left PropertySearch, so please contact them directly to arrange another viewing."
+    ? " The agent has left ViewPal, so please contact them directly to arrange another viewing."
     : stillOn
       ? ""
       : " The home is no longer on the market.";

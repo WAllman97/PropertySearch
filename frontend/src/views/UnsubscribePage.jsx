@@ -34,7 +34,7 @@ function UnsubscribePage() {
       <div className="booking-shell">
         <section className="card check-email">
           <h3>That link isn't complete</h3>
-          <p>You can turn emails on and off in PropertySearch → Settings.</p>
+          <p>You can turn emails on and off in ViewPal → Settings.</p>
         </section>
       </div>
     );

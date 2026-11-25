@@ -23,7 +23,7 @@ const timeFormatter = new Intl.DateTimeFormat("en-GB", {
 
 // Loads every open slot for the household's saved homes, grouped by
 // property, and each home's latest viewing request to an agent who isn't on
-// PropertySearch (migration 023).
+// ViewPal (migration 023).
 export function useAvailableViewings() {
   const [byProperty, setByProperty] = useState({});
   const [requestsByProperty, setRequestsByProperty] = useState({});
@@ -87,7 +87,7 @@ function ViewingSlots({ property, slots, request, onChanged }) {
     return [...groups.entries()];
   }, [bookable]);
 
-  // No agent on PropertySearch for this home (or no times left): ask the
+  // No agent on ViewPal for this home (or no times left): ask the
   // agent by email instead.
   if (!slots?.length || (!mine && !bookable.length)) {
     return <ViewingRequest property={property} request={request} onChanged={onChanged} />;

@@ -37,7 +37,7 @@ const STEPS = [
 const FAQS = [
   [
     "Is this another property portal?",
-    "No. Keep listing where you do now. PropertySearch is where buyers organise their search, so your viewing times and listings reach buyers who are already looking.",
+    "No. Keep listing where you do now. ViewPal is where buyers organise their search, so your viewing times and listings reach buyers who are already looking.",
   ],
   [
     "Do buyers see my phone number?",
@@ -56,7 +56,7 @@ const FAQS = [
 function AgentsPage() {
   const mailto = CONTACT_EMAIL
     ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
-        "PropertySearch sign-up code for agents"
+        "ViewPal sign-up code for agents"
       )}&body=${encodeURIComponent(
         "Hello,\n\nI'd like a sign-up code for our branch.\n\nAgency:\nBranch:\nHow many people need access:\nYour name:\nPhone:\n"
       )}`
@@ -65,10 +65,10 @@ function AgentsPage() {
   return (
     <div className="booking-shell agents-page">
       <header className="booking-header agents-hero">
-        <p className="eyebrow">PropertySearch for estate agents</p>
+        <p className="eyebrow">ViewPal for estate agents</p>
         <h1>Proceedable buyers, booked into your viewings</h1>
         <p className="agents-lead">
-          Buyers in your area already use PropertySearch to save homes and plan viewings. Add your
+          Buyers in your area already use ViewPal to save homes and plan viewings. Add your
           listings and the times you can show them, and the buyers who are ready to move book
           themselves in.
         </p>
@@ -122,7 +122,7 @@ function AgentsPage() {
             Email us for a code
           </a>
         ) : (
-          <p className="muted">Ask the person who told you about PropertySearch for your code.</p>
+          <p className="muted">Ask the person who told you about ViewPal for your code.</p>
         )}
       </section>
 

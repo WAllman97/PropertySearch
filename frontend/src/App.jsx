@@ -85,7 +85,7 @@ function App() {
     return <PublicViewingPage listingId={viewingsMatch[1]} />;
   }
 
-  // An agent who isn't on PropertySearch answering a buyer's viewing request.
+  // An agent who isn't on ViewPal answering a buyer's viewing request.
   const requestMatch = window.location.pathname.match(/^\/request\/([0-9a-f-]{36})\/?$/i);
   if (requestMatch) {
     return <ViewingRequestPage token={requestMatch[1]} />;
@@ -259,7 +259,7 @@ function MainApp() {
     <div className={`app-shell${signedIn ? " signed-in" : ""}`}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">PropertySearch</p>
+          <p className="eyebrow">ViewPal</p>
           <h1>Home-buying command centre</h1>
         </div>
 

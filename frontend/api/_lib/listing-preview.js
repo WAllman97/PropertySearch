@@ -3,7 +3,7 @@
 //
 // Cheapest source first, so each listing is read from a portal at most once
 // for everyone (migration 011):
-//   1. an agent on PropertySearch listed it -> their details, no fetch
+//   1. an agent on ViewPal listed it -> their details, no fetch
 //   2. listing_cache has it                 -> stored copy
 //   3. read that one page's link-preview tags now (what messaging apps show
 //      when a link is shared; _lib/listing-page.js) and cache the result
