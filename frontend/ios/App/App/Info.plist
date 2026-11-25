@@ -26,6 +26,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>ViewPal uses the camera so you can take photos at a viewing and keep them with that home.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ViewPal lets you choose photos from your library to keep with a home you've viewed.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
