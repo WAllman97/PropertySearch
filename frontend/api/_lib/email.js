@@ -22,10 +22,58 @@ function icsText(value) {
     .replace(/\r?\n/g, "\\n");
 }
 
+// The bare address out of "PropertySearch <bookings@example.com>", for the
+// invite's ORGANIZER line.
+function addressOf(value) {
+  const match = String(value || "").match(/<([^>]+)>/);
+  return (match ? match[1] : String(value || "")).trim();
+}
+
+function displayNameOf(value) {
+  const match = String(value || "").match(/^\s*"?([^"<]*?)"?\s*</);
+  return match ? match[1].trim() : "";
+}
+
+// RFC 5545 caps lines at 75 octets: longer ones are split with CRLF + one
+// space. Counted in bytes, and never through the middle of a UTF-8 character
+// (addresses with "é" or "£" in a note would otherwise corrupt).
+function foldLine(line) {
+  if (Buffer.byteLength(line) <= 75) return line;
+  const parts = [];
+  let current = "";
+  let size = 0;
+  let limit = 75;
+  for (const ch of line) {
+    const n = Buffer.byteLength(ch);
+    if (size + n > limit) {
+      parts.push(current);
+      current = "";
+      size = 0;
+      limit = 74; // the leading space counts towards the 75
+    }
+    current += ch;
+    size += n;
+  }
+  parts.push(current);
+  return parts.join("\r\n ");
+}
+
+function attendeeLine(email) {
+  return `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;RSVP=FALSE:mailto:${addressOf(email)}`;
+}
+
+function organizerLine() {
+  const name = displayNameOf(fromEmail).replace(/[";:,]/g, "");
+  return `ORGANIZER${name ? `;CN="${name}"` : ""}:mailto:${addressOf(fromEmail)}`;
+}
+
 // cancelled: the same event (same UID, later SEQUENCE) marked cancelled, so
 // a calendar that added the original invite removes it instead of keeping a
 // viewing that isn't happening.
-export function buildIcs({ uid, start, end, summary, description, location, cancelled = false }) {
+// ORGANIZER/ATTENDEE: Outlook and Gmail ignore a cancellation that doesn't
+// say who organised it and who it's for. attendee is optional here: when a
+// caller leaves it out, sendEmail fills in the recipient.
+export function buildIcs({ uid, start, end, summary, description, location, cancelled = false, attendee }) {
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -38,6 +86,8 @@ export function buildIcs({ uid, start, end, summary, description, location, canc
     `DTSTAMP:${icsDate(new Date())}`,
     `DTSTART:${icsDate(start)}`,
     `DTEND:${icsDate(end)}`,
+    organizerLine(),
+    attendee ? attendeeLine(attendee) : null,
     `SUMMARY:${icsText(summary)}`,
     location ? `LOCATION:${icsText(location)}` : null,
     `DESCRIPTION:${icsText(description)}`,
@@ -45,7 +95,15 @@ export function buildIcs({ uid, start, end, summary, description, location, canc
     "END:VCALENDAR",
   ]
     .filter(Boolean)
+    .map(foldLine)
     .join("\r\n");
+}
+
+// Callers that build one invite for one recipient often don't pass attendee;
+// add the actual recipient so every invite we send names who it's for.
+function withAttendee(ics, to) {
+  if (/\r\nATTENDEE[;:]/.test(ics)) return ics;
+  return ics.replace("\r\nEND:VEVENT", `\r\n${foldLine(attendeeLine(to))}\r\nEND:VEVENT`);
 }
 
 // Plain, consistent wrapper so every booking email looks the same.
@@ -90,7 +148,7 @@ export async function sendEmail({ to, subject, html, replyTo, ics, unsubscribe }
     body.attachments = [
       {
         filename: cancelled ? "cancelled.ics" : "invite.ics",
-        content: Buffer.from(ics).toString("base64"),
+        content: Buffer.from(withAttendee(ics, to)).toString("base64"),
       },
     ];
   }

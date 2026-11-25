@@ -2454,6 +2454,15 @@ button.link-button:hover {
   z-index: 2;
 }
 
+/* The star looks 34px but the tap area is 44px (Apple's minimum), via an
+   invisible ring around it. */
+.property-tile .tile-fav::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+}
+
 .property-tile .tile-fav:hover {
   color: #b08d57;
   transform: none;

@@ -133,7 +133,7 @@ function getAgeClass(days) {
 
 function getAgeLabel(days) {
   if (days === null) return null;
-  return days === 0 ? "Added today" : `Added ${days} days ago`;
+  return days === 0 ? "Added today" : `Added ${days} ${days === 1 ? "day" : "days"} ago`;
 }
 
 function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
@@ -709,7 +709,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
                 <div className="property-meta">
                   <span>{property.source}</span>
 
-                  {property.bedrooms != null && <span>{property.bedrooms === 0 ? "Studio" : `${property.bedrooms} beds`}</span>}
+                  {property.bedrooms != null && <span>{property.bedrooms === 0 ? "Studio" : `${property.bedrooms} bed${property.bedrooms === 1 ? "" : "s"}`}</span>}
 
                   {propertyAgeDays !== null && (
                     <span className={getAgeClass(propertyAgeDays)}>

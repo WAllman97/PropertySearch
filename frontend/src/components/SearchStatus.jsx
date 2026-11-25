@@ -19,10 +19,17 @@ const PAUSES = [
   { days: null, label: "Until I switch back" },
 ];
 
+// Local calendar date as YYYY-MM-DD. toISOString() is UTC, which is still
+// yesterday between midnight and 1am in British Summer Time.
+function localDateString(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function addDays(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return localDateString(date);
 }
 
 function niceDate(iso) {

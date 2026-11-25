@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
+import { friendlyError } from "../lib/errors";
 import ViewingRequest from "./ViewingRequest";
 import "../views/AgentPortal.css";
 
@@ -98,15 +99,22 @@ function ViewingSlots({ property, slots, request, onChanged }) {
   async function send(body) {
     setBusy(true);
     setMessage("");
-    const response = await postAuthed("/api/viewings", body);
-    const result = await response.json().catch(() => ({}));
-    setBusy(false);
-    if (!response.ok) {
-      setMessage(result.error || "Something went wrong");
-      onChanged();
+    try {
+      const response = await postAuthed("/api/viewings", body);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(result.error || "Something went wrong");
+        onChanged();
+        return false;
+      }
+      return true;
+    } catch (err) {
+      // Network dropped: say so rather than leaving "Booking..." up forever.
+      setMessage(friendlyError(err));
       return false;
+    } finally {
+      setBusy(false);
     }
-    return true;
   }
 
   async function book(event) {

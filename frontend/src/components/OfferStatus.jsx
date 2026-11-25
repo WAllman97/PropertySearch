@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { postAuthed } from "../lib/api";
+import { friendlyError } from "../lib/errors";
 import { resumeSearches } from "./SearchStatus";
 
 // "Offer accepted" on a saved home (migration 015, /api/offers). It only
@@ -22,9 +23,18 @@ export function OfferStatus({ offer, onChanged }) {
   async function withdraw() {
     if (!window.confirm("Withdraw this accepted offer? Use this if the sale fell through or it was a mistake.")) return;
     setBusy(true);
-    const response = await postAuthed("/api/offers", { action: "withdraw", offerId: offer.id });
-    const body = await response.json().catch(() => ({}));
-    setBusy(false);
+    let response;
+    let body;
+    try {
+      response = await postAuthed("/api/offers", { action: "withdraw", offerId: offer.id });
+      body = await response.json().catch(() => ({}));
+    } catch (err) {
+      // Network dropped: tell them, and don't leave the button disabled.
+      window.alert(friendlyError(err));
+      return;
+    } finally {
+      setBusy(false);
+    }
     if (!response.ok) window.alert(body.error || "Could not withdraw the offer");
     else if (body.lookingAgain) {
       window.alert("Withdrawn. You're looking again, so agents will send you matching homes.");
@@ -59,13 +69,21 @@ export function OfferAcceptedButton({ property, onChanged }) {
       return;
     }
     setBusy(true);
-    const response = await postAuthed("/api/offers", {
-      action: "report",
-      propertyId: property.id,
-      amount,
-    });
-    const body = await response.json().catch(() => ({}));
-    setBusy(false);
+    let response;
+    let body;
+    try {
+      response = await postAuthed("/api/offers", {
+        action: "report",
+        propertyId: property.id,
+        amount,
+      });
+      body = await response.json().catch(() => ({}));
+    } catch (err) {
+      window.alert(friendlyError(err));
+      return;
+    } finally {
+      setBusy(false);
+    }
     if (!response.ok) {
       window.alert(body.error || "Could not save the offer");
       return;

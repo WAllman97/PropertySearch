@@ -28,6 +28,13 @@ function toForm(details = {}) {
   };
 }
 
+// Local calendar date as YYYY-MM-DD. toISOString() is UTC, which is still
+// yesterday between midnight and 1am in British Summer Time.
+function localDateString(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function SaveLinkForm({ onSaved, initialUrl = null }) {
   const [url, setUrl] = useState(initialUrl || "");
   const [preview, setPreview] = useState(null);
@@ -111,7 +118,7 @@ function SaveLinkForm({ onSaved, initialUrl = null }) {
         longitude: d.longitude ?? null,
         description: d.description || null,
         listing_status: d.listing_status || null,
-        date_found: new Date().toISOString().split("T")[0],
+        date_found: localDateString(),
         status: "favourite",
       })
       .select()

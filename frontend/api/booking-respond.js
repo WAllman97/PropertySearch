@@ -160,14 +160,16 @@ async function handler(req, res) {
       return res.status(200).json({ success: true, status: "declined" });
     }
 
-    const propertyId = await linkProperty(request, user.householdId);
+    // Accepting a time that has gone would send both sides an invite for the past.
+    if (start.getTime() <= Date.now()) {
+      return res.status(410).json({ error: "That time has already passed. Ask the agent to send a new one." });
+    }
 
     const { data: updated } = await supabaseAdmin
       .from("booking_requests")
       .update({
         status: "accepted",
         responded_at: new Date().toISOString(),
-        property_id: propertyId,
       })
       .eq("id", request.id)
       .eq("status", "pending")
@@ -175,6 +177,17 @@ async function handler(req, res) {
 
     if (!updated?.length) {
       return res.status(409).json({ error: "This request was already answered" });
+    }
+
+    // Only once the accept has won: a double tap that loses the race above
+    // mustn't leave an extra home in the list.
+    const propertyId = await linkProperty(request, user.householdId);
+    if (propertyId) {
+      const { error: linkError } = await supabaseAdmin
+        .from("booking_requests")
+        .update({ property_id: propertyId })
+        .eq("id", request.id);
+      if (linkError) console.error("Could not link property to request:", linkError);
     }
 
     // Viewings go straight into the existing viewing calendar, which also

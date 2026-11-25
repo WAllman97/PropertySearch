@@ -7,12 +7,14 @@
 // and everything in it (properties, notes, price history, commute addresses)
 // is deleted too.
 //
+// Anyone with upcoming viewings booked as a buyer: those are cancelled first
+// so each agent is told.
+//
 // Agents: future viewings are cancelled first so every buyer is emailed;
 // then the auth user is deleted, which cascades to the agent profile,
 // listings, times and bookings (migration 006).
 import { householdMemberIds, requireUser, supabaseAdmin } from "./_lib/household.js";
-import { cancelSlotAndNotify, loadSlot } from "./_lib/viewings.js";
-import { appBaseUrl } from "./_lib/booking.js";
+import { cancelBuyerBookingsForDeletion, cancelSlotAndNotify, loadSlot } from "./_lib/viewings.js";
 import { withCors } from "./_lib/cors.js";
 
 export default withCors(handler);
@@ -60,6 +62,14 @@ async function handler(req, res) {
     }
   }
 
+  // Their own upcoming bookings as a buyer: the booking rows cascade away
+  // with the login, so cancel them first and the agent gets the usual
+  // cancellation email and calendar removal.
+  // A failure telling an agent mustn't stop someone deleting their account.
+  await cancelBuyerBookingsForDeletion(user.id).catch((error) =>
+    console.error("Cancelling bookings before account deletion failed:", error)
+  );
+
   if (agent) {
     const { data: slots } = await supabaseAdmin
       .from("viewing_slots")
@@ -68,9 +78,11 @@ async function handler(req, res) {
       .is("cancelled_at", null)
       .gt("starts_at", new Date().toISOString());
 
+    // No base URL: the listing pages are deleted with the account, so buyers
+    // are told the agent has left rather than sent to a dead rebooking link.
     for (const { id } of slots || []) {
       const slot = await loadSlot(id);
-      if (slot) await cancelSlotAndNotify(slot, appBaseUrl(req), { notifyAgent: false });
+      if (slot) await cancelSlotAndNotify(slot, null, { notifyAgent: false, agentLeft: true });
     }
   }
 

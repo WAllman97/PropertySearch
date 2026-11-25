@@ -14,6 +14,7 @@ Contains HM Land Registry data (c) Crown copyright and database right.
 Licensed under the Open Government Licence v3.0.
 """
 
+import os
 import re
 import statistics
 from datetime import date, datetime, timedelta, timezone
@@ -75,9 +76,11 @@ SELECT ?paon ?saon ?street ?postcode ?amount ?date ?ptype ?estate ?newbuild WHER
 
 _session = requests.Session()
 _session.headers["User-Agent"] = "property-search/1.0 (sold-price comparisons)"
-# Matches the scrapers: the office network intercepts TLS. GitHub Actions /
-# Vercel verify normally.
-_session.verify = False
+# The office network intercepts TLS, so a run there needs
+# INSECURE_OFFICE_TLS=1. Everywhere else (GitHub Actions, Vercel) verifies.
+if os.getenv("INSECURE_OFFICE_TLS") == "1":
+    _session.verify = False
+    print("WARNING: INSECURE_OFFICE_TLS=1, sold-price lookups skip TLS certificate checks.")
 
 
 def find_postcode(text):
@@ -279,6 +282,22 @@ def _days_since(value):
     return (datetime.now(timezone.utc) - then).days
 
 
+def _stamp_skipped(row, retry_in_days):
+    """Date a row we couldn't do, so it moves behind the others.
+
+    Without this, rows with no location (or that always fail) keep
+    comps_updated_at null, sort first forever and can fill the batch.
+    Backdated so it comes up again in retry_in_days; any comps it had stay.
+    """
+    stamp = datetime.now(timezone.utc) - timedelta(days=MAX_AGE_DAYS - retry_in_days)
+    try:
+        supabase.table("properties").update(
+            {"comps_updated_at": stamp.isoformat()}
+        ).eq("id", row["id"]).execute()
+    except Exception as error:
+        print(f"Could not date skipped comps row {row.get('id')}: {error}")
+
+
 def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
     result = (
         supabase.table("properties")
@@ -301,6 +320,7 @@ def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
 
         if row.get("latitude") is None and not (row.get("postcode") or find_postcode(row.get("address"))):
             stats["no_location"] += 1
+            _stamp_skipped(row, retry_in_days=MAX_AGE_DAYS)
             continue
 
         try:
@@ -308,10 +328,13 @@ def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
         except Exception as error:
             stats["failed"] += 1
             print(f"Sold-price comps failed for {row.get('address')}: {error}")
+            # Try again tomorrow (may be a passing outage), behind the others.
+            _stamp_skipped(row, retry_in_days=1)
             continue
 
         if comps is None:
             stats["no_location"] += 1
+            _stamp_skipped(row, retry_in_days=MAX_AGE_DAYS)
             continue
 
         supabase.table("properties").update({
@@ -325,5 +348,10 @@ def refresh_comps(limit=60, max_age_days=MAX_AGE_DAYS, force=False):
             f"| {comps['count']} {comps.get('bedrooms_basis') or 'any'}-bed {comps['type_basis']} sales "
             f"within {comps['radius_m']}m | median {comps['median']} | asking {comps.get('asking_vs_median_pct')}%"
         )
+
+    # Every lookup failing means the source is down or the code is broken:
+    # fail the run so GitHub emails about it.
+    if stats["failed"] and not stats["computed"]:
+        raise RuntimeError(f"every sold-price lookup failed: {stats}")
 
     return stats

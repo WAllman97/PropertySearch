@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
+import { friendlyError } from "../lib/errors";
 import { liveSiteUrl } from "../lib/platform";
 
 // Ask the agent for a viewing when they aren't on PropertySearch (migration
@@ -87,18 +88,27 @@ function RequestForm({ property, onSent, onCancel }) {
       // Private mode: just don't remember it.
     }
     setBusy(true);
-    const response = await postAuthed("/api/viewings", {
-      action: "request",
-      propertyId: property.id,
-      agentEmail: form.agentEmail,
-      agentName: form.agentName,
-      options,
-      durationMinutes: Number(form.duration),
-      phone: form.phone,
-      message: form.message,
-    });
-    const result = await response.json().catch(() => ({}));
-    setBusy(false);
+    let response;
+    let result;
+    try {
+      response = await postAuthed("/api/viewings", {
+        action: "request",
+        propertyId: property.id,
+        agentEmail: form.agentEmail,
+        agentName: form.agentName,
+        options,
+        durationMinutes: Number(form.duration),
+        phone: form.phone,
+        message: form.message,
+      });
+      result = await response.json().catch(() => ({}));
+    } catch (err) {
+      // Network dropped: show why instead of a button stuck on "Sending...".
+      setError(friendlyError(err));
+      return;
+    } finally {
+      setBusy(false);
+    }
     if (!response.ok) {
       setError(result.error || "Could not send the request");
       return;
@@ -247,11 +257,16 @@ function ViewingRequest({ property, request, onChanged }) {
     if (confirmText && !window.confirm(confirmText)) return;
     setBusy(true);
     setError("");
-    const response = await postAuthed("/api/viewings", body);
-    const result = await response.json().catch(() => ({}));
-    setBusy(false);
-    if (!response.ok) setError(result.error || "Something went wrong");
-    onChanged();
+    try {
+      const response = await postAuthed("/api/viewings", body);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) setError(result.error || "Something went wrong");
+      onChanged();
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   const stop = (event) => event.stopPropagation();

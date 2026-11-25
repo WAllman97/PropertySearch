@@ -89,19 +89,26 @@ async function loadOwn(user, requestId) {
   return data;
 }
 
-function ics(request, start, forAgent) {
+// cancelled: the removal for the invite sent at confirm time (same UID), so
+// the viewing comes out of the agent's and the household's calendars.
+function ics(request, start, forAgent, cancelled = false) {
   const address = request.properties.address;
   return buildIcs({
     uid: `request-${request.id}`,
     start: new Date(start),
     end: new Date(new Date(start).getTime() + request.duration_minutes * 60000),
-    summary: forAgent ? `Viewing: ${address} (${request.buyer_name})` : `Viewing: ${address}`,
-    description: forAgent
-      ? [`Buyer: ${request.buyer_name}`, request.buyer_phone ? `Phone: ${request.buyer_phone}` : "", `Email: ${request.buyer_email}`]
-          .filter(Boolean)
-          .join("\n")
-      : [`Agent: ${request.agent_name || request.agent_email}`, `Email: ${request.agent_email}`].join("\n"),
+    summary: cancelled
+      ? `Cancelled: viewing at ${address}`
+      : forAgent ? `Viewing: ${address} (${request.buyer_name})` : `Viewing: ${address}`,
+    description: cancelled
+      ? "This viewing has been cancelled."
+      : forAgent
+        ? [`Buyer: ${request.buyer_name}`, request.buyer_phone ? `Phone: ${request.buyer_phone}` : "", `Email: ${request.buyer_email}`]
+            .filter(Boolean)
+            .join("\n")
+        : [`Agent: ${request.agent_name || request.agent_email}`, `Email: ${request.agent_email}`].join("\n"),
     location: address,
+    cancelled,
   });
 }
 
@@ -336,11 +343,19 @@ export async function handleCancelRequest(req, res) {
   if (["cancelled", "declined"].includes(request.status)) return res.status(200).json({ success: true });
 
   const now = new Date().toISOString();
-  await supabaseAdmin
+  // Only from the status we read: if the agent confirmed in the meantime, a
+  // cancel based on "pending" would skip the calendar removals below.
+  const { data: updated } = await supabaseAdmin
     .from("viewing_requests")
     .update({ status: "cancelled", updated_at: now })
-    .eq("id", request.id);
+    .eq("id", request.id)
+    .eq("status", request.status)
+    .select("id")
+    .maybeSingle();
+  if (!updated) return res.status(409).json({ error: "This request has just changed. Refresh and try again." });
 
+  // Property status is left as it is: no other cancel path moves a home back
+  // from "Viewing booked", and the buyer may have moved it on by hand.
   const wasConfirmed = request.status === "confirmed";
   if (wasConfirmed) {
     await supabaseAdmin
@@ -351,19 +366,38 @@ export async function handleCancelRequest(req, res) {
   }
 
   const address = request.properties.address;
-  await sendEmail({
-    to: request.agent_email,
-    replyTo: request.buyer_email,
-    subject: wasConfirmed
-      ? `Viewing cancelled: ${address}, ${when(request.confirmed_start)}`
-      : `Viewing request withdrawn: ${address}`,
-    html: emailLayout(
-      wasConfirmed ? "Viewing cancelled" : "Request withdrawn",
-      `<p style="margin:0;">${escapeHtml(request.buyer_name)} has ${
-        wasConfirmed ? `cancelled the viewing of <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when(request.confirmed_start))}` : `withdrawn their request to view <strong>${escapeHtml(address)}</strong>`
-      }. No need to do anything. Reply to this email to reach them.</p>`
+  // Everyone who got the invite at confirm time gets the matching removal.
+  const { emails } = wasConfirmed ? await memberContacts(request.household_id) : { emails: [] };
+  await Promise.all([
+    sendEmail({
+      to: request.agent_email,
+      replyTo: request.buyer_email,
+      subject: wasConfirmed
+        ? `Viewing cancelled: ${address}, ${when(request.confirmed_start)}`
+        : `Viewing request withdrawn: ${address}`,
+      html: emailLayout(
+        wasConfirmed ? "Viewing cancelled" : "Request withdrawn",
+        `<p style="margin:0;">${escapeHtml(request.buyer_name)} has ${
+          wasConfirmed ? `cancelled the viewing of <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when(request.confirmed_start))}` : `withdrawn their request to view <strong>${escapeHtml(address)}</strong>`
+        }. No need to do anything${wasConfirmed ? ": the attached update takes it out of your calendar" : ""}. Reply to this email to reach them.</p>`
+      ),
+      ics: wasConfirmed ? ics(request, request.confirmed_start, true, true) : undefined,
+    }),
+    ...emails.map((to) =>
+      sendEmail({
+        to,
+        replyTo: request.agent_email,
+        subject: `Cancelled: ${address}, ${when(request.confirmed_start)}`,
+        html: emailLayout(
+          "Your viewing is cancelled",
+          `<p style="margin:0;">The viewing of <strong>${escapeHtml(address)}</strong> on
+          ${escapeHtml(when(request.confirmed_start))} is cancelled and the agent has been told. The attached
+          update takes it out of your calendar.</p>`
+        ),
+        ics: ics(request, request.confirmed_start, false, true),
+      })
     ),
-  });
+  ]);
   return res.status(200).json({ success: true });
 }
 
@@ -561,11 +595,19 @@ export async function handleProposalAnswer(req, res) {
 
   // Can't make it: close the request and let the agent know.
   const now = new Date().toISOString();
-  await supabaseAdmin
+  // A stale page must not cancel a newer suggestion: also check the time
+  // being declined is still the one on the request.
+  const { data: updated } = await supabaseAdmin
     .from("viewing_requests")
     .update({ status: "cancelled", updated_at: now })
     .eq("id", request.id)
-    .eq("status", "proposed");
+    .eq("status", "proposed")
+    .eq("proposed_start", request.proposed_start)
+    .select("id")
+    .maybeSingle();
+  if (!updated) {
+    return res.status(409).json({ error: "This has just changed. Refresh the page to see the latest." });
+  }
   await sendEmail({
     to: request.agent_email,
     replyTo: request.buyer_email,

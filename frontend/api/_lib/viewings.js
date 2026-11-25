@@ -219,13 +219,20 @@ async function rebookUrl(slot, booking, base) {
 
 // The agent cancelled a buyer's viewing: tell them, take it out of their
 // calendar, and give them one tap to pick another time.
-export async function sendCancelledToBuyer({ slot, booking, base }) {
+// agentLeft: the agent is deleting their account, so their listing page is
+// about to disappear; say so instead of linking to a dead rebooking page.
+export async function sendCancelledToBuyer({ slot, booking, base, agentLeft = false }) {
   const address = slot.agent_listings.address;
   const when = slotLabel(slot);
   const agent = slot.agents;
   const status = slot.agent_listings.market_status;
   const stillOn = !status || status === "available" || status === "under_offer";
-  const url = stillOn && base ? await rebookUrl(slot, booking, base) : null;
+  const url = stillOn && base && !agentLeft ? await rebookUrl(slot, booking, base) : null;
+  const why = agentLeft
+    ? " The agent has left PropertySearch, so please contact them directly to arrange another viewing."
+    : stillOn
+      ? ""
+      : " The home is no longer on the market.";
 
   return sendEmail({
     to: booking.buyer_email,
@@ -234,9 +241,7 @@ export async function sendCancelledToBuyer({ slot, booking, base }) {
     html: emailLayout(
       "Your viewing has been cancelled",
       `<p style="margin:0 0 16px;">${escapeHtml(agentLabel(agent))} has cancelled the viewing of
-      <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}.${
-        stillOn ? "" : " The home is no longer on the market."
-      } The attached update takes it out of your calendar.</p>
+      <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}.${why} The attached update takes it out of your calendar.</p>
       ${
         url
           ? `<p style="margin:0 0 16px;"><a href="${escapeHtml(url)}" style="background:#223a33;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">Pick another time</a></p>`
@@ -251,7 +256,9 @@ export async function sendCancelledToBuyer({ slot, booking, base }) {
 // The agent withdraws a time: cancel it and every booking on it, and tell
 // each buyer. Used by "Cancel time" and by agent account deletion.
 // Returns how many bookings were cancelled.
-export async function cancelSlotAndNotify(slot, base, { notifyAgent = true } = {}) {
+// agentLeft: account deletion; buyers are told the agent has gone and get no
+// rebooking link (see sendCancelledToBuyer).
+export async function cancelSlotAndNotify(slot, base, { notifyAgent = true, agentLeft = false } = {}) {
   const now = new Date().toISOString();
 
   await supabaseAdmin.from("viewing_slots").update({ cancelled_at: now }).eq("id", slot.id);
@@ -270,7 +277,7 @@ export async function cancelSlotAndNotify(slot, base, { notifyAgent = true } = {
   await Promise.all(
     (cancelled || []).map(async (booking) => {
       await clearCalendarViewing(booking.property_id, slot);
-      await sendCancelledToBuyer({ slot, booking, base });
+      await sendCancelledToBuyer({ slot, booking, base, agentLeft });
     })
   );
   // The agent's own diary entries go too (not when they're deleting their
@@ -292,4 +299,59 @@ export async function cancelSlotAndNotify(slot, base, { notifyAgent = true } = {
   );
 
   return cancelled?.length || 0;
+}
+
+// A buyer deleting their account: cancel each of their upcoming bookings the
+// way a buyer cancel does (same status change, calendar clear-up, agent push
+// and email with the calendar removal), so the agent isn't left with a
+// viewing that silently vanished when the booking row cascades away.
+// No email to the buyer: they're leaving. Returns how many were cancelled.
+export async function cancelBuyerBookingsForDeletion(userId) {
+  const now = new Date().toISOString();
+  const { data: bookings } = await supabaseAdmin
+    .from("viewing_bookings")
+    .select("*")
+    .eq("buyer_id", userId)
+    .eq("status", "confirmed");
+
+  let count = 0;
+  for (const booking of bookings || []) {
+    const slot = await loadSlot(booking.slot_id);
+    // Past viewings need no cancellation; a withdrawn time already told the agent.
+    if (!slot || slot.cancelled_at || new Date(slot.starts_at).getTime() <= Date.now()) continue;
+
+    const { data: updated } = await supabaseAdmin
+      .from("viewing_bookings")
+      .update({ status: "cancelled", cancelled_by: "buyer", cancelled_at: now })
+      .eq("id", booking.id)
+      .eq("status", "confirmed")
+      .select("id");
+    if (!updated?.length) continue;
+    count += 1;
+
+    await clearCalendarViewing(booking.property_id, slot);
+
+    const address = slot.agent_listings.address;
+    const when = slotLabel(slot);
+    await Promise.all([
+      sendToUsers([slot.agent_id], {
+        title: "Viewing cancelled",
+        body: `${booking.buyer_name} cancelled ${address}, ${when}`,
+        url: "/agent",
+      }).catch((error) => console.error("Agent cancel push failed:", error)),
+      sendEmail({
+        to: slot.agents.email,
+        replyTo: booking.buyer_email,
+        subject: `Viewing cancelled: ${address}, ${when}`,
+        html: emailLayout(
+          "Viewing cancelled by the buyer",
+          `<p style="margin:0;">${escapeHtml(booking.buyer_name)} has cancelled their viewing of
+          <strong>${escapeHtml(address)}</strong> on ${escapeHtml(when)}. The space is free again,
+          and the attached update takes it out of your calendar.</p>`
+        ),
+        ics: cancelledIcs(slot, booking.id),
+      }),
+    ]);
+  }
+  return count;
 }

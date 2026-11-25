@@ -56,19 +56,36 @@ def run_viewing_reminders():
 
     if not viewings:
         print("No viewings need a reminder right now.")
-        return
+        return 0
 
     print(
         f"Found {len(viewings)} viewing(s) within {REMINDER_WINDOW_HOURS}h "
         f"without a reminder."
     )
-
-
+    failed = 0
     for viewing in viewings:
         property_data = viewing.get("properties") or {}
         address = property_data.get("address", "unknown property")
         when = viewing.get("viewing_datetime")
         household_id = property_data.get("household_id")
+
+        # Claim the reminder before sending: if marking it failed after the
+        # email went, every hourly run would send it again. Only the run
+        # whose update finds it still unset goes on to send.
+        try:
+            claimed = (
+                supabase.table("property_notes")
+                .update({"reminder_sent_at": now.isoformat()})
+                .eq("id", viewing["id"])
+                .is_("reminder_sent_at", "null")
+                .execute()
+            ).data
+        except Exception as error:
+            print(f"Could not claim reminder for {address} @ {when}: {error}")
+            failed += 1
+            continue
+        if not claimed:
+            continue  # Another run already has it.
 
         try:
             # Every household, the original one included, is emailed at its
@@ -77,16 +94,18 @@ def run_viewing_reminders():
             if not recipients:
                 raise RuntimeError("no member emails for this household")
             send_viewing_reminder(viewing, recipients=recipients)
-
-            supabase.table("property_notes").update(
-                {"reminder_sent_at": now.isoformat()}
-            ).eq("id", viewing["id"]).execute()
-
             print(f"Reminder sent and marked: {address} @ {when}")
 
         except Exception as error:
-            # Leave reminder_sent_at unset so the next run retries.
+            # Release the claim so the next run retries.
             print(f"Failed to send reminder for {address} @ {when}: {error}")
+            failed += 1
+            try:
+                supabase.table("property_notes").update(
+                    {"reminder_sent_at": None}
+                ).eq("id", viewing["id"]).execute()
+            except Exception as release_error:
+                print(f"Could not release reminder claim for {address} @ {when}: {release_error}")
             continue
 
         # Phone notification too. Best effort: the email already went and is
@@ -103,6 +122,8 @@ def run_viewing_reminders():
                 print(f"Push sent to {pushed} phone(s).")
         except Exception as error:
             print(f"Push failed for {address} @ {when}: {error}")
+
+    return failed
 
 
 RUNSHEET_FROM_HOUR = 7  # London time
@@ -121,7 +142,7 @@ def send_agent_runsheets():
     """
     london_now = datetime.now(LONDON)
     if not (RUNSHEET_FROM_HOUR <= london_now.hour < RUNSHEET_UNTIL_HOUR):
-        return
+        return 0
     today = london_now.date()
     day_start = datetime.combine(today, datetime.min.time(), LONDON).astimezone(timezone.utc)
     day_end = day_start + timedelta(days=1)
@@ -145,7 +166,7 @@ def send_agent_runsheets():
         if booked:
             by_agent.setdefault(slot["agent_id"], []).append((slot, booked))
     if not by_agent:
-        return
+        return 0
 
     agents = (
         supabase.table("agents")
@@ -154,6 +175,7 @@ def send_agent_runsheets():
         .execute()
     ).data or []
 
+    failed = 0
     for agent in agents:
         if agent.get("runsheet_sent_on") == today.isoformat() or not agent.get("email"):
             continue
@@ -183,14 +205,37 @@ def send_agent_runsheets():
 <table style="border-collapse:collapse;font-size:14px;margin-bottom:16px;">{''.join(rows)}</table>
 <p style="margin:0;color:#6b7280;font-size:13px;">Buyers can cancel up to the last minute; you'll get an email and a notification if they do.</p>
 </div></body></html>"""
+        # Claim today's run-sheet before sending, so a failed mark can't
+        # cause a second copy on the next hourly run.
+        previous = agent.get("runsheet_sent_on")
+        try:
+            claimed = (
+                supabase.table("agents")
+                .update({"runsheet_sent_on": today.isoformat()})
+                .eq("user_id", agent["user_id"])
+                .or_(f"runsheet_sent_on.is.null,runsheet_sent_on.neq.{today.isoformat()}")
+                .execute()
+            ).data
+        except Exception as error:
+            print(f"Could not claim run-sheet for agent {agent['user_id'][:8]}: {error}")
+            failed += 1
+            continue
+        if not claimed:
+            continue  # Already sent today.
         try:
             send_resend_email(f"Today: {count} viewing{'s' if count != 1 else ''}", body, [agent["email"]])
-            supabase.table("agents").update({"runsheet_sent_on": today.isoformat()}).eq(
-                "user_id", agent["user_id"]
-            ).execute()
             print(f"Run-sheet sent to agent {agent['user_id'][:8]} ({count} viewing(s)).")
         except Exception as error:
             print(f"Run-sheet failed for agent {agent['user_id'][:8]}: {error}")
+            failed += 1
+            # Release the claim so the next run (before noon) retries.
+            try:
+                supabase.table("agents").update({"runsheet_sent_on": previous}).eq(
+                    "user_id", agent["user_id"]
+                ).execute()
+            except Exception as release_error:
+                print(f"Could not release run-sheet claim for agent {agent['user_id'][:8]}: {release_error}")
+    return failed
 
 
 def mark_past_viewings_viewed():
@@ -236,11 +281,14 @@ def roll_weekly_hours_forward():
 
 if __name__ == "__main__":
     # Each step runs even if an earlier one fails, but any failure fails the
-    # run, so GitHub emails about it instead of it going unnoticed.
+    # run, so GitHub emails about it instead of it going unnoticed. Steps that
+    # send per item return how many items failed; those count too.
     failures = []
     for step in (roll_weekly_hours_forward, mark_past_viewings_viewed, send_agent_runsheets, run_viewing_reminders):
         try:
-            step()
+            item_failures = step()
+            if item_failures:
+                failures.append(f"{step.__name__} ({item_failures} item(s))")
         except Exception as error:
             print(f"{step.__name__} failed: {error}")
             failures.append(step.__name__)

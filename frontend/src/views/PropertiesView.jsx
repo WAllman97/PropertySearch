@@ -82,8 +82,10 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
     loadProperties();
   }, []);
 
-  async function loadProperties() {
-    setLoading(true);
+  // quiet: refresh in place after an action, without the full-page
+  // "Loading..." that would wipe the list and jump the scroll position.
+  async function loadProperties({ quiet = false } = {}) {
+    if (!quiet) setLoading(true);
 
     const { data, error } = await supabase
       .from("properties")
@@ -93,7 +95,8 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
 
     if (error) {
       console.error("Error loading properties:", error);
-      setLoadError(error);
+      // A failed background refresh keeps the list already on screen.
+      if (!quiet) setLoadError(error);
     } else {
       setLoadError(null);
       setProperties(data || []);
@@ -167,7 +170,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
       alert(friendlyError(error));
       return;
     }
-    await loadProperties();
+    await loadProperties({ quiet: true });
   }
 
   // The note fades after a few seconds.
@@ -243,7 +246,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
     );
   }
 
-  if (loadError) return <LoadError error={loadError} onRetry={loadProperties} />;
+  if (loadError) return <LoadError error={loadError} onRetry={() => loadProperties()} />;
 
   return (
     <>
@@ -301,7 +304,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
                 // with a way to go and see it.
                 setSavedNote(saved || {});
                 setSaves((n) => n + 1);
-                await loadProperties();
+                await loadProperties({ quiet: true });
               }}
             />
           </div>
@@ -334,7 +337,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
               onUpdate={async () => {
                 setShowScoreModal(false);
                 setSelectedProperty(null);
-                await loadProperties();
+                await loadProperties({ quiet: true });
               }}
             />
           </div>
@@ -433,7 +436,11 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
                   property={property}
                   slots={viewingsByProperty[property.id]}
                   request={requestsByProperty[property.id]}
-                  onChanged={reloadViewings}
+                  onChanged={() => {
+                    reloadViewings();
+                    // A booked home leaves "new", so refresh the list too.
+                    loadProperties({ quiet: true });
+                  }}
                 />
 
                 <div className="property-score-strip">
@@ -460,14 +467,14 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
                 <div className="property-meta">
                   <span>{property.source}</span>
 
-                  {property.bedrooms != null && <span>{property.bedrooms === 0 ? "Studio" : `${property.bedrooms} beds`}</span>}
+                  {property.bedrooms != null && <span>{property.bedrooms === 0 ? "Studio" : `${property.bedrooms} bed${property.bedrooms === 1 ? "" : "s"}`}</span>}
 
                   {propertyAgeDays !== null && (
                     <span className={getAgeClass(propertyAgeDays)}>
                       Added{" "}
                       {propertyAgeDays === 0
                         ? "today"
-                        : `${propertyAgeDays} days ago`}
+                        : `${propertyAgeDays} ${propertyAgeDays === 1 ? "day" : "days"} ago`}
                     </span>
                   )}
 
