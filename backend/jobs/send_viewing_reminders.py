@@ -10,9 +10,9 @@ from supabase import create_client
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BACKEND_DIR)
 
-from core.emailer import format_viewing_datetime, send_resend_email, send_viewing_reminder
+from core.emailer import APP_URL, format_viewing_datetime, send_resend_email, send_viewing_reminder
 from core.households import member_emails
-from core.push import send_to_household
+from core.push import send_to_household, send_to_tokens
 
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
@@ -128,30 +128,53 @@ def run_viewing_reminders():
 
 RUNSHEET_FROM_HOUR = 7  # London time
 RUNSHEET_UNTIL_HOUR = 12
+# The evening run-sheet for tomorrow goes on the first run in this window.
+EVENING_FROM_HOUR = 18
+EVENING_UNTIL_HOUR = 21
+# "How was it?" goes this long after the viewing ends; older ones are left
+# alone, so a job that was down for a day doesn't ask about last week.
+FEEDBACK_AFTER_HOURS = 2
+FEEDBACK_GIVE_UP_HOURS = 26
 
 
 def _esc(value):
     return html.escape(str(value or ""))
 
 
-def send_agent_runsheets():
-    """Each morning, email every agent the day's booked viewings in one list.
+def _parse(value):
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
-    Runs hourly with the reminders; sends once per agent per day (agents.
-    runsheet_sent_on, migration 027) on the first run after 7am London.
-    """
-    london_now = datetime.now(LONDON)
-    if not (RUNSHEET_FROM_HOUR <= london_now.hour < RUNSHEET_UNTIL_HOUR):
-        return 0
-    today = london_now.date()
-    day_start = datetime.combine(today, datetime.min.time(), LONDON).astimezone(timezone.utc)
-    day_end = day_start + timedelta(days=1)
 
+def _agent_push(user_id, title, body, url="/agent"):
+    """Every phone the agent has the app on. Best effort: returns how many."""
+    rows = (
+        supabase.table("device_tokens").select("token").eq("user_id", user_id).execute().data or []
+    )
+    return send_to_tokens(supabase, [r["token"] for r in rows], title, body, url)
+
+
+def _email_page(heading, inner):
+    return f"""<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f8f6f2;font-family:Arial,sans-serif;color:#1f2937;">
+<div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4ddd2;border-radius:14px;padding:24px;">
+<div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">PropertySearch</div>
+<h1 style="font-family:Georgia,serif;font-size:21px;color:#223a33;margin:0 0 12px;">{_esc(heading)}</h1>
+{inner}
+</div></body></html>"""
+
+
+def _london_day_bounds(day):
+    start = datetime.combine(day, datetime.min.time(), LONDON).astimezone(timezone.utc)
+    return start, start + timedelta(days=1)
+
+
+def _booked_by_agent(day):
+    """{agent_id: [(slot, [confirmed bookings])]} for one London day."""
+    day_start, day_end = _london_day_bounds(day)
     slots = (
         supabase.table("viewing_slots")
         .select(
             "id, agent_id, starts_at, ends_at, agent_listings(address), "
-            "viewing_bookings(buyer_name, buyer_phone, buyer_email, status)"
+            "viewing_bookings(id, buyer_name, buyer_phone, buyer_email, status, created_at, agent_notified_late_at)"
         )
         .is_("cancelled_at", "null")
         .gte("starts_at", day_start.isoformat())
@@ -165,12 +188,55 @@ def send_agent_runsheets():
         booked = [b for b in (slot.get("viewing_bookings") or []) if b.get("status") == "confirmed"]
         if booked:
             by_agent.setdefault(slot["agent_id"], []).append((slot, booked))
+    return by_agent
+
+
+def _runsheet_rows(items):
+    """HTML table rows (time, address, buyer, phone) and the viewing count."""
+    rows = []
+    count = 0
+    for slot, booked in items:
+        start = _parse(slot["starts_at"]).astimezone(LONDON)
+        address = (slot.get("agent_listings") or {}).get("address", "")
+        for b in booked:
+            count += 1
+            phone = b.get("buyer_phone") or ""
+            phone_html = (
+                f'<a href="tel:{_esc(phone.replace(" ", ""))}" style="color:#223a33;">{_esc(phone)}</a>'
+                if phone else ""
+            )
+            rows.append(
+                f'<tr><td style="padding:8px 12px 8px 0;font-weight:bold;vertical-align:top;">{start:%H:%M}</td>'
+                f'<td style="padding:8px 0;"><strong>{_esc(address)}</strong><br>'
+                f'{_esc(b.get("buyer_name"))} {phone_html}</td></tr>'
+            )
+    return rows, count
+
+
+def _plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def send_agent_runsheets():
+    """Each morning, email every agent the day's booked viewings in one list.
+
+    Runs hourly with the reminders; sends once per agent per day (agents.
+    runsheet_sent_on, migration 027) on the first run after 7am London.
+    runsheet_sent_at (035) records when the bookings were read, so anything
+    booked after that gets a "New today" push instead (send_late_booking_pushes).
+    """
+    london_now = datetime.now(LONDON)
+    if not (RUNSHEET_FROM_HOUR <= london_now.hour < RUNSHEET_UNTIL_HOUR):
+        return 0
+    today = london_now.date()
+    read_at = datetime.now(timezone.utc)
+    by_agent = _booked_by_agent(today)
     if not by_agent:
         return 0
 
     agents = (
         supabase.table("agents")
-        .select("user_id, name, email, runsheet_sent_on")
+        .select("user_id, name, email, runsheet_sent_on, runsheet_sent_at")
         .in_("user_id", list(by_agent))
         .execute()
     ).data or []
@@ -179,39 +245,24 @@ def send_agent_runsheets():
     for agent in agents:
         if agent.get("runsheet_sent_on") == today.isoformat() or not agent.get("email"):
             continue
-        rows = []
-        count = 0
-        for slot, booked in by_agent[agent["user_id"]]:
-            start = datetime.fromisoformat(slot["starts_at"].replace("Z", "+00:00")).astimezone(LONDON)
-            address = (slot.get("agent_listings") or {}).get("address", "")
-            for b in booked:
-                count += 1
-                phone = b.get("buyer_phone") or ""
-                phone_html = (
-                    f'<a href="tel:{_esc(phone.replace(" ", ""))}" style="color:#223a33;">{_esc(phone)}</a>'
-                    if phone else ""
-                )
-                rows.append(
-                    f'<tr><td style="padding:8px 12px 8px 0;font-weight:bold;vertical-align:top;">{start:%H:%M}</td>'
-                    f'<td style="padding:8px 0;"><strong>{_esc(address)}</strong><br>'
-                    f'{_esc(b.get("buyer_name"))} {phone_html}</td></tr>'
-                )
+        rows, count = _runsheet_rows(by_agent[agent["user_id"]])
         first = (agent.get("name") or "").split(" ")[0]
-        body = f"""<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f8f6f2;font-family:Arial,sans-serif;color:#1f2937;">
-<div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4ddd2;border-radius:14px;padding:24px;">
-<div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">PropertySearch</div>
-<h1 style="font-family:Georgia,serif;font-size:21px;color:#223a33;margin:0 0 12px;">Today's viewings</h1>
-<p style="margin:0 0 12px;">Morning{(' ' + _esc(first)) if first else ''}. You have {count} viewing{'s' if count != 1 else ''} today:</p>
+        body = _email_page(
+            "Today's viewings",
+            f"""<p style="margin:0 0 12px;">Morning{(' ' + _esc(first)) if first else ''}. You have {_plural(count, 'viewing')} today:</p>
 <table style="border-collapse:collapse;font-size:14px;margin-bottom:16px;">{''.join(rows)}</table>
-<p style="margin:0;color:#6b7280;font-size:13px;">Buyers can cancel up to the last minute; you'll get an email and a notification if they do.</p>
-</div></body></html>"""
+<p style="margin:0;color:#6b7280;font-size:13px;">Buyers can cancel up to the last minute; you'll get an email and a notification if they do.</p>""",
+        )
         # Claim today's run-sheet before sending, so a failed mark can't
         # cause a second copy on the next hourly run.
-        previous = agent.get("runsheet_sent_on")
+        previous = {
+            "runsheet_sent_on": agent.get("runsheet_sent_on"),
+            "runsheet_sent_at": agent.get("runsheet_sent_at"),
+        }
         try:
             claimed = (
                 supabase.table("agents")
-                .update({"runsheet_sent_on": today.isoformat()})
+                .update({"runsheet_sent_on": today.isoformat(), "runsheet_sent_at": read_at.isoformat()})
                 .eq("user_id", agent["user_id"])
                 .or_(f"runsheet_sent_on.is.null,runsheet_sent_on.neq.{today.isoformat()}")
                 .execute()
@@ -223,18 +274,268 @@ def send_agent_runsheets():
         if not claimed:
             continue  # Already sent today.
         try:
-            send_resend_email(f"Today: {count} viewing{'s' if count != 1 else ''}", body, [agent["email"]])
+            send_resend_email(f"Today: {_plural(count, 'viewing')}", body, [agent["email"]])
             print(f"Run-sheet sent to agent {agent['user_id'][:8]} ({count} viewing(s)).")
         except Exception as error:
             print(f"Run-sheet failed for agent {agent['user_id'][:8]}: {error}")
             failed += 1
             # Release the claim so the next run (before noon) retries.
             try:
-                supabase.table("agents").update({"runsheet_sent_on": previous}).eq(
+                supabase.table("agents").update(previous).eq("user_id", agent["user_id"]).execute()
+            except Exception as release_error:
+                print(f"Could not release run-sheet claim for agent {agent['user_id'][:8]}: {release_error}")
+    return failed
+
+
+def send_agent_evening_sheets():
+    """Between 6pm and 9pm London, tell each agent tomorrow's viewings.
+
+    One push and one email per agent per evening (agents.evening_sheet_sent_on
+    = today's date, migration 035), only when they have bookings tomorrow.
+    """
+    london_now = datetime.now(LONDON)
+    if not (EVENING_FROM_HOUR <= london_now.hour < EVENING_UNTIL_HOUR):
+        return 0
+    today = london_now.date()
+    by_agent = _booked_by_agent(today + timedelta(days=1))
+    if not by_agent:
+        return 0
+
+    agents = (
+        supabase.table("agents")
+        .select("user_id, name, email, evening_sheet_sent_on")
+        .in_("user_id", list(by_agent))
+        .execute()
+    ).data or []
+
+    failed = 0
+    for agent in agents:
+        if agent.get("evening_sheet_sent_on") == today.isoformat():
+            continue
+        items = by_agent[agent["user_id"]]
+        rows, count = _runsheet_rows(items)
+        first_slot = _parse(items[0][0]["starts_at"]).astimezone(LONDON)
+        previous = agent.get("evening_sheet_sent_on")
+        try:
+            claimed = (
+                supabase.table("agents")
+                .update({"evening_sheet_sent_on": today.isoformat()})
+                .eq("user_id", agent["user_id"])
+                .or_(f"evening_sheet_sent_on.is.null,evening_sheet_sent_on.neq.{today.isoformat()}")
+                .execute()
+            ).data
+        except Exception as error:
+            print(f"Could not claim evening sheet for agent {agent['user_id'][:8]}: {error}")
+            failed += 1
+            continue
+        if not claimed:
+            continue  # Another run has it.
+
+        title = f"Tomorrow: {_plural(count, 'viewing')}"
+        emailed = email_failed = False
+        if agent.get("email"):
+            body = _email_page(
+                "Tomorrow's viewings",
+                f"""<p style="margin:0 0 12px;">You have {_plural(count, 'viewing')} tomorrow, the first at {first_slot:%H:%M}:</p>
+<table style="border-collapse:collapse;font-size:14px;margin-bottom:16px;">{''.join(rows)}</table>
+<p style="margin:0;color:#6b7280;font-size:13px;">The final list comes in the morning, with anything booked overnight.</p>""",
+            )
+            try:
+                send_resend_email(title, body, [agent["email"]])
+                emailed = True
+            except Exception as error:
+                email_failed = True
+                print(f"Evening sheet email failed for agent {agent['user_id'][:8]}: {error}")
+        pushed = 0
+        try:
+            pushed = _agent_push(
+                agent["user_id"], title, f"First at {first_slot:%H:%M}. Tap for the list.", "/agent?view=calendar"
+            )
+        except Exception as error:
+            print(f"Evening sheet push failed for agent {agent['user_id'][:8]}: {error}")
+
+        if emailed or pushed:
+            print(f"Evening sheet sent to agent {agent['user_id'][:8]} ({count} viewing(s)).")
+        elif email_failed:
+            # Nothing reached them: release so the next run (before 9pm) retries.
+            failed += 1
+            try:
+                supabase.table("agents").update({"evening_sheet_sent_on": previous}).eq(
                     "user_id", agent["user_id"]
                 ).execute()
             except Exception as release_error:
-                print(f"Could not release run-sheet claim for agent {agent['user_id'][:8]}: {release_error}")
+                print(f"Could not release evening sheet claim for agent {agent['user_id'][:8]}: {release_error}")
+    return failed
+
+
+def send_late_booking_pushes():
+    """After the morning run-sheet, push agents what's been booked for today since.
+
+    "New today: 14:00 Jane Smith, 12 Oak Road". Each booking is claimed
+    (viewing_bookings.agent_notified_late_at, migration 035) before the push,
+    so it's mentioned once at most; only viewings still to come are included.
+    """
+    now = datetime.now(timezone.utc)
+    today = datetime.now(LONDON).date()
+    by_agent = _booked_by_agent(today)
+    if not by_agent:
+        return 0
+    agents = (
+        supabase.table("agents")
+        .select("user_id, runsheet_sent_on, runsheet_sent_at")
+        .in_("user_id", list(by_agent))
+        .eq("runsheet_sent_on", today.isoformat())
+        .execute()
+    ).data or []
+
+    failed = 0
+    for agent in agents:
+        if not agent.get("runsheet_sent_at"):
+            continue
+        sheet_at = _parse(agent["runsheet_sent_at"])
+        late = []
+        for slot, booked in by_agent[agent["user_id"]]:
+            if _parse(slot["starts_at"]) <= now:
+                continue
+            for b in booked:
+                if b.get("agent_notified_late_at") or _parse(b["created_at"]) <= sheet_at:
+                    continue
+                try:
+                    claimed = (
+                        supabase.table("viewing_bookings")
+                        .update({"agent_notified_late_at": now.isoformat()})
+                        .eq("id", b["id"])
+                        .is_("agent_notified_late_at", "null")
+                        .execute()
+                    ).data
+                except Exception as error:
+                    print(f"Could not claim late booking {b['id'][:8]}: {error}")
+                    failed += 1
+                    continue
+                if claimed:
+                    start = _parse(slot["starts_at"]).astimezone(LONDON)
+                    address = (slot.get("agent_listings") or {}).get("address", "")
+                    late.append(f"{start:%H:%M} {b.get('buyer_name') or 'A buyer'}, {address}")
+        if not late:
+            continue
+        # Best effort, never retried: each booking already had its own email.
+        try:
+            _agent_push(agent["user_id"], "New today", "; ".join(late), "/agent?view=calendar")
+            print(f"Late-booking push to agent {agent['user_id'][:8]} ({len(late)} booking(s)).")
+        except Exception as error:
+            print(f"Late-booking push failed for agent {agent['user_id'][:8]}: {error}")
+    return failed
+
+
+def ask_for_viewing_feedback():
+    """About 2 hours after a viewing ends, ask the buyer "How was 12 Oak Road?".
+
+    One push and one email per booking, linking to the Dashboard where the
+    three one-tap answers are (migration 035). Claimed before sending
+    (viewing_bookings.feedback_asked_at) so it's never asked twice; skipped
+    if the household has already answered.
+    """
+    now = datetime.now(timezone.utc)
+    rows = (
+        supabase.table("viewing_bookings")
+        .select(
+            "id, buyer_id, property_id, "
+            "viewing_slots!inner(starts_at, ends_at, cancelled_at, agent_listings(address))"
+        )
+        .eq("status", "confirmed")
+        .is_("feedback_asked_at", "null")
+        .not_.is_("buyer_id", "null")
+        .not_.is_("property_id", "null")
+        .is_("viewing_slots.cancelled_at", "null")
+        .gte("viewing_slots.ends_at", (now - timedelta(hours=FEEDBACK_GIVE_UP_HOURS)).isoformat())
+        .lte("viewing_slots.ends_at", (now - timedelta(hours=FEEDBACK_AFTER_HOURS)).isoformat())
+        .execute()
+    ).data or []
+
+    failed = 0
+    for booking in rows:
+        slot = booking.get("viewing_slots") or {}
+        address = (slot.get("agent_listings") or {}).get("address") or "your viewing"
+        member = (
+            supabase.table("household_members")
+            .select("household_id")
+            .eq("user_id", booking["buyer_id"])
+            .limit(1)
+            .execute()
+        ).data or []
+        if not member:
+            continue
+        household_id = member[0]["household_id"]
+
+        try:
+            claimed = (
+                supabase.table("viewing_bookings")
+                .update({"feedback_asked_at": now.isoformat()})
+                .eq("id", booking["id"])
+                .is_("feedback_asked_at", "null")
+                .execute()
+            ).data
+        except Exception as error:
+            print(f"Could not claim feedback ask for booking {booking['id'][:8]}: {error}")
+            failed += 1
+            continue
+        if not claimed:
+            continue  # Another run has it.
+
+        # Answered already (e.g. in the app straight after): nothing to ask.
+        starts = _parse(slot["starts_at"])
+        answered = (
+            supabase.table("viewing_feedback")
+            .select("id")
+            .eq("household_id", household_id)
+            .eq("property_id", booking["property_id"])
+            .gte("viewing_at", (starts - timedelta(hours=1)).isoformat())
+            .lte("viewing_at", (starts + timedelta(hours=1)).isoformat())
+            .execute()
+        ).data
+        if answered:
+            continue
+
+        link = f"{APP_URL.rstrip('/')}/?view=dashboard"
+        title = f"How was {address}?"
+        emailed = email_failed = False
+        try:
+            recipients = member_emails(supabase, household_id)
+            if recipients:
+                body = _email_page(
+                    title,
+                    f"""<p style="margin:0 0 16px;">One tap tells the agent how it went: <strong>Not for us</strong>, <strong>Maybe</strong> or <strong>Want a second look</strong>.</p>
+<p style="margin:0 0 16px;"><a href="{_esc(link)}" style="background:#223a33;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">Say how it went</a></p>
+<p style="margin:0;color:#6b7280;font-size:13px;">The agent sees your answer and any note, and the seller sees it without your name.</p>""",
+                )
+                send_resend_email(title, body, recipients)
+                emailed = True
+        except Exception as error:
+            email_failed = True
+            print(f"Feedback email failed for booking {booking['id'][:8]}: {error}")
+        pushed = 0
+        try:
+            pushed = send_to_household(
+                supabase,
+                household_id,
+                title=title,
+                body="Not for us, maybe, or a second look? One tap.",
+                url="/?view=dashboard",
+            )
+        except Exception as error:
+            print(f"Feedback push failed for booking {booking['id'][:8]}: {error}")
+
+        if emailed or pushed:
+            print(f"Asked for feedback on booking {booking['id'][:8]}.")
+        elif email_failed:
+            # Nothing reached them: release so the next run tries again.
+            failed += 1
+            try:
+                supabase.table("viewing_bookings").update({"feedback_asked_at": None}).eq(
+                    "id", booking["id"]
+                ).execute()
+            except Exception as release_error:
+                print(f"Could not release feedback claim for booking {booking['id'][:8]}: {release_error}")
     return failed
 
 
@@ -284,7 +585,15 @@ if __name__ == "__main__":
     # run, so GitHub emails about it instead of it going unnoticed. Steps that
     # send per item return how many items failed; those count too.
     failures = []
-    for step in (roll_weekly_hours_forward, mark_past_viewings_viewed, send_agent_runsheets, run_viewing_reminders):
+    for step in (
+        roll_weekly_hours_forward,
+        mark_past_viewings_viewed,
+        send_agent_runsheets,
+        send_late_booking_pushes,
+        send_agent_evening_sheets,
+        run_viewing_reminders,
+        ask_for_viewing_feedback,
+    ):
         try:
             item_failures = step()
             if item_failures:

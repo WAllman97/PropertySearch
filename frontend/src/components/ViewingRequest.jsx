@@ -247,6 +247,152 @@ function RequestForm({ property, onSent, onCancel }) {
   );
 }
 
+// Invite the home's agent to PropertySearch (migration 034): they get a
+// single-use link for a 14-day free trial, and once they join the buyer can
+// book their times straight in. With no email for the agent, the buyer gets
+// the link to send themselves.
+function InviteAgent({ property, request }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ email: request?.agent_email || "", name: request?.agent_name || "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(""); // what to say once it's sent
+  const [share, setShare] = useState(null); // { text, copied? }
+
+  // Fill in the agent from the home's notes, like the request form.
+  useEffect(() => {
+    if (!open) return undefined;
+    let live = true;
+    supabase
+      .from("property_notes")
+      .select("estate_agent, estate_agent_email")
+      .eq("property_id", property.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!live || !data) return;
+        setForm((f) => ({
+          email: f.email || data.estate_agent_email || "",
+          name: f.name || data.estate_agent || "",
+        }));
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, property.id]);
+
+  async function send(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await postAuthed("/api/agent-signup", {
+        action: "send_invite",
+        propertyId: property.id,
+        agentEmail: form.email,
+        agentName: form.name,
+        viewingRequestId: request?.id,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(result.error || "Could not send the invite");
+      } else if (result.shareText) {
+        setShare({ text: result.shareText });
+      } else if (result.already) {
+        setDone("You've already invited this agent. Their link lasts 30 days.");
+      } else {
+        setDone("Invite sent. Once they join, you can book their times straight in.");
+      }
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function shareIt() {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: share.text });
+        return;
+      }
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(share.text);
+      setShare({ ...share, copied: true });
+    } catch {
+      setError("Couldn't copy. Press and hold the message to copy it.");
+    }
+  }
+
+  if (done) return <p className="viewing-note">{done}</p>;
+
+  if (share) {
+    return (
+      <div className="viewing-request-form viewing-request-share">
+        <p>
+          <strong>Your invite is ready.</strong> Send it to the agent by WhatsApp, text or the listing's contact form.
+        </p>
+        <textarea readOnly rows={5} value={share.text} onFocus={(e) => e.target.select()} />
+        <div className="viewing-request-actions">
+          <button type="button" className="primary-button" onClick={shareIt}>
+            {share.copied ? "Copied" : "Share"}
+          </button>
+          <button type="button" className="link-button" onClick={() => setDone("Invite ready. Once they join, you can book their times straight in.")}>
+            Done
+          </button>
+        </div>
+        {error && <p className="booking-error">{error}</p>}
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <div className="viewing-slots-head">
+        <span className="viewing-note">Want to book this agent in one tap next time?</span>
+        <button type="button" className="link-button" onClick={() => setOpen(true)}>
+          Invite this agent to PropertySearch
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form className="viewing-request-form" onSubmit={send}>
+      <p className="viewing-note">
+        We'll email the agent a free 14-day trial, from PropertySearch, mentioning your first name and this home.
+      </p>
+      <div className="viewing-request-grid">
+        <label>
+          Agent's email (if you have it)
+          <input
+            type="email"
+            maxLength={254}
+            placeholder="Leave blank and we'll give you a link to send"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+        </label>
+        <label>
+          Agent's name or agency
+          <input maxLength={100} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </label>
+      </div>
+      <div className="viewing-request-actions">
+        <button type="submit" className="primary-button" disabled={busy}>
+          {busy ? "Sending..." : form.email.trim() ? "Send invite" : "Create invite link"}
+        </button>
+        <button type="button" className="link-button" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      {error && <p className="booking-error">{error}</p>}
+    </form>
+  );
+}
+
 function ViewingRequest({ property, request, onChanged }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -354,6 +500,7 @@ function ViewingRequest({ property, request, onChanged }) {
           </div>
         )}
         {error && <p className="booking-error">{error}</p>}
+        <InviteAgent property={property} request={request} />
       </div>
     );
   }
@@ -388,6 +535,7 @@ function ViewingRequest({ property, request, onChanged }) {
           onCancel={() => setOpen(false)}
         />
       )}
+      {!open && <InviteAgent property={property} request={request} />}
     </div>
   );
 }

@@ -40,7 +40,7 @@ async function loadEverything() {
   const weekAgo = new Date(now - 7 * DAY).toISOString();
   const weekAhead = new Date(now.getTime() + 7 * DAY).toISOString();
 
-  const [homes, viewings, requests, offers, position, recent, household] = await Promise.all([
+  const [homes, viewings, requests, offers, position, recent, household, feedback] = await Promise.all([
     supabase
       .from("properties")
       .select("id, address, title, price, initial_price, status, listing_status, last_price_change_at"),
@@ -67,12 +67,23 @@ async function loadEverything() {
       .order("viewing_datetime", { ascending: false }),
     // Paused or found somewhere (migration 029).
     supabase.rpc("my_household"),
+    // One-tap answers to "How was it?" (migration 035; fails quietly before).
+    supabase
+      .from("viewing_feedback")
+      .select("property_id, viewing_at, answer")
+      .gte("viewing_at", new Date(now - 14 * DAY).toISOString()),
   ]);
   // A failed load should say so, not look like an empty dashboard.
   const failed = [homes, viewings, requests, offers].find((r) => r.error);
   if (failed) throw failed.error;
 
   const allHomes = homes.data || [];
+  const seen = (recent.data || []).filter(
+    (v) => v.properties && ["viewing_booked", "viewed"].includes(v.properties.status)
+  );
+  // Before migration 035 there's nowhere to save an answer: just ask for notes.
+  const canAnswer = !feedback.error;
+  const answered = new Set((canAnswer ? feedback.data || [] : []).map((f) => feedbackKey(f.property_id, f.viewing_at)));
   const changed = allHomes.filter(
     (p) => p.last_price_change_at && p.last_price_change_at >= weekAgo && !RULED_OUT.includes(p.status)
   );
@@ -104,11 +115,12 @@ async function loadEverything() {
     position: position.data || null,
     searchStatus: household.data?.search_status || "searching",
     pausedUntil: household.data?.paused_until || null,
-    // Been to see it, nothing written down yet.
-    toReview: (recent.data || []).filter(
+    // Been to see it and not said how it went (one tap), then nothing
+    // written down yet.
+    toAnswer: canAnswer ? seen.filter((v) => !answered.has(feedbackKey(v.properties.id, v.viewing_datetime))) : [],
+    toReview: seen.filter(
       (v) =>
-        v.properties &&
-        ["viewing_booked", "viewed"].includes(v.properties.status) &&
+        (!canAnswer || answered.has(feedbackKey(v.properties.id, v.viewing_datetime))) &&
         !v.positives &&
         !v.negatives &&
         !v.general_notes &&
@@ -116,6 +128,93 @@ async function loadEverything() {
         !Object.keys(v.checklist || {}).length
     ),
   };
+}
+
+// Same viewing whichever way the time is written (Postgres vs JS ISO).
+function feedbackKey(propertyId, at) {
+  return `${propertyId}|${new Date(at).getTime()}`;
+}
+
+const ANSWERS = [
+  { value: "not_for_us", label: "Not for us" },
+  { value: "maybe", label: "Maybe" },
+  { value: "second_look", label: "Want a second look" },
+];
+
+// "How was 12 Oak Road?" Not for us / Maybe / Want a second look: one tap
+// saves it (the agent sees it on their listing), then an optional note.
+function FeedbackAsk({ viewing, onDone }) {
+  const [answer, setAnswer] = useState(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(value, text) {
+    setBusy(true);
+    setError("");
+    const { error: saveError } = await supabase.rpc("save_viewing_feedback", {
+      p_property: viewing.properties.id,
+      p_viewing_at: viewing.viewing_datetime,
+      p_answer: value,
+      p_note: text || null,
+    });
+    setBusy(false);
+    if (saveError) {
+      console.error("Could not save viewing feedback:", saveError);
+      setError("Couldn't save that. Please try again.");
+      return false;
+    }
+    return true;
+  }
+
+  return (
+    <li className="dash-need act dash-feedback">
+      <span className="dash-dot" aria-hidden="true" />
+      <div className="dash-text">
+        <span>How was {place(viewing.properties)}?</span>
+        {answer === null ? (
+          <div className="feedback-answers" role="group" aria-label="How was the viewing?">
+            {ANSWERS.map((a) => (
+              <button
+                key={a.value}
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+                onClick={async () => {
+                  if (await save(a.value, "")) setAnswer(a.value);
+                }}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <form
+            className="feedback-note"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (!note.trim() || (await save(answer, note.trim()))) onDone();
+            }}
+          >
+            <span className="muted">
+              Saved: {ANSWERS.find((a) => a.value === answer).label}. Anything to remember?
+            </span>
+            <input
+              maxLength={140}
+              placeholder="Optional, e.g. small garden"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              aria-label="Optional note"
+            />
+            <button type="submit" className="secondary-button" disabled={busy}>
+              {note.trim() ? "Save" : "Done"}
+            </button>
+          </form>
+        )}
+        {error && <span className="booking-error">{error}</span>}
+      </div>
+    </li>
+  );
 }
 
 function Section({ title, children, action }) {
@@ -393,8 +492,13 @@ function DashboardView({ onNavigate }) {
             </button>
           </p>
         )}
-        {needs.length ? (
+        {needs.length || data.toAnswer.length ? (
           <ul className="dash-list">
+            {/* Same viewing as the "How was it?" answer: lets the agent and
+                the vendor's report know how it went, in one tap. */}
+            {data.toAnswer.map((v) => (
+              <FeedbackAsk key={`ask-${v.id}`} viewing={v} onDone={load} />
+            ))}
             {needs.map((n) => (
               <li key={n.key} className={`dash-need ${n.tone}`}>
                 <span className="dash-dot" aria-hidden="true" />

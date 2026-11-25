@@ -10,6 +10,8 @@ import { openProof, proofLabel } from "../components/PositionProof";
 import AgentHours from "./AgentHours";
 import NavigationTabs from "../components/NavigationTabs";
 import { CheckYourEmail } from "../components/ConfirmEmail";
+import { AgentTrialBanner } from "../components/AgentTrial";
+import AgentInviteSignup, { inviteFromLink } from "../components/AgentInviteSignup";
 import "./AgentPortal.css";
 
 // Estate agent area at /agent: sign up or log in, add listings, publish
@@ -35,6 +37,54 @@ function timeRange(slot) {
   )}`;
 }
 
+// "Are you sure? [Confirm] [Keep]" shown in place of the button that asked,
+// instead of a browser pop-up (which the iPhone app shows as a bare system
+// alert with the site's address on it).
+function InlineConfirm({ text, confirmLabel = "Confirm", keepLabel = "Keep", busy, danger = true, onConfirm, onKeep, children }) {
+  return (
+    <div className="inline-confirm" role="alertdialog" aria-label={text}>
+      <span className="inline-confirm-text">{text}</span>
+      {children}
+      <span className="inline-confirm-buttons">
+        <button
+          type="button"
+          className={danger ? "danger-button" : "primary-button"}
+          disabled={busy}
+          onClick={onConfirm}
+        >
+          {busy ? "Please wait..." : confirmLabel}
+        </button>
+        <button type="button" className="secondary-button" disabled={busy} onClick={onKeep}>
+          {keepLabel}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+// Buyers' one-tap answer after a viewing (migration 035).
+const FEEDBACK_TEXT = {
+  not_for_us: "Not for us",
+  maybe: "Maybe",
+  second_look: "Want a second look",
+};
+
+// "Maybe · 'small garden'"
+function feedbackText(f) {
+  if (!f) return "";
+  return `${FEEDBACK_TEXT[f.answer] || f.answer}${f.note ? ` · "${f.note}"` : ""}`;
+}
+
+function FeedbackTag({ feedback, earlier }) {
+  if (!feedback) return null;
+  return (
+    <span className={`feedback-tag feedback-${feedback.answer}`}>
+      {earlier ? "Last time: " : ""}
+      {feedbackText(feedback)}
+    </span>
+  );
+}
+
 function todayInputValue() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -51,7 +101,12 @@ function codeFromLink() {
   return (params.get("code") || "").trim().toUpperCase();
 }
 
+// A buyer's invite link (/agent?invite=...): free-trial sign-up, no code.
 function AgentAuth() {
+  return inviteFromLink() ? <AgentInviteSignup /> : <AgentCodeAuth />;
+}
+
+function AgentCodeAuth() {
   const [linkCode] = useState(codeFromLink);
   const [mode, setMode] = useState(() =>
     linkCode || new URLSearchParams(window.location.search).get("mode") === "signup" ? "signup" : "login"
@@ -646,14 +701,14 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
       return;
     }
 
-    // A new price goes straight to buyers who saved the home.
+    // A new price goes straight to buyers who saved the home. The card
+    // shows how many were told (the form closes on save).
+    let note = "";
     if (listing && row.price && row.price !== listing.price) {
       const response = await postAuthed("/api/send-listing", { action: "price_update", listingId: listing.id });
       const result = await response.json().catch(() => ({}));
       if (response.ok && result.notified) {
-        window.alert(
-          `New price saved. ${result.notified} household${result.notified === 1 ? " that saved this home has" : "s that saved this home have"} been told.`
-        );
+        note = `New price saved. ${result.notified} household${result.notified === 1 ? " that saved this home has" : "s that saved this home have"} been told.`;
       }
     }
 
@@ -668,7 +723,7 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
         if (matches > 0 && saved.auto_send !== false) await sendNow({ listing: saved, matches });
       }
     }
-    onSaved();
+    onSaved(note);
   }
 
   async function sendNow(added = justAdded) {
@@ -1163,10 +1218,13 @@ function BuyerPositionFacts({ position }) {
 // Offers buyers say this agent accepted: confirm or correct them.
 function OfferRequests({ offers, positions, onChanged }) {
   const [busy, setBusy] = useState(null);
+  // { offerId, text }: shown under the offer it's about.
+  const [error, setError] = useState(null);
   if (!offers.length) return null;
 
   async function respond(offer, confirm) {
     setBusy(offer.offer_id);
+    setError(null);
     const response = await postAuthed("/api/offers", {
       action: "respond",
       offerId: offer.offer_id,
@@ -1174,7 +1232,7 @@ function OfferRequests({ offers, positions, onChanged }) {
     });
     const body = await response.json().catch(() => ({}));
     setBusy(null);
-    if (!response.ok) window.alert(body.error || "Something went wrong");
+    if (!response.ok) setError({ offerId: offer.offer_id, text: body.error || "Something went wrong. Please try again." });
     onChanged();
   }
 
@@ -1193,6 +1251,7 @@ function OfferRequests({ offers, positions, onChanged }) {
               {offer.buyer_name} · <a href={`mailto:${offer.buyer_email}`}>{offer.buyer_email}</a>
               <br />
               <BuyerPosition position={positions[offer.buyer_id]} />
+              {error?.offerId === offer.offer_id && <p className="booking-error">{error.text}</p>}
             </div>
             <div className="agent-offer-actions">
               {offer.status === "awaiting_agent" ? (
@@ -1237,32 +1296,34 @@ function OfferRequests({ offers, positions, onChanged }) {
   );
 }
 
-function SlotRow({ slot, bookings, positions, onChanged }) {
+function SlotRow({ slot, bookings, positions, feedbackFor, onOpenBooking, onChanged }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  // null | "slot" | a booking id: which "Are you sure?" is showing.
+  const [confirming, setConfirming] = useState(null);
   const isOpenHouse = slot.capacity > 1;
 
-  async function call(body, confirmText) {
-    if (confirmText && !window.confirm(confirmText)) return;
+  async function call(body) {
     setBusy(true);
+    setError("");
     const response = await postAuthed("/api/viewings", body);
     const result = await response.json().catch(() => ({}));
     setBusy(false);
-    if (!response.ok) window.alert(result.error || "Something went wrong");
+    setConfirming(null);
+    if (!response.ok) setError(result.error || "Something went wrong. Please try again.");
     onChanged();
   }
 
   async function removeSlot() {
     if (bookings.length) {
-      await call(
-        { action: "cancel_slot", slotId: slot.id },
-        `Cancel this time? ${bookings.length} buyer${bookings.length === 1 ? "" : "s"} will be emailed that it's cancelled.`
-      );
+      setConfirming("slot");
       return;
     }
     setBusy(true);
-    const { error } = await supabase.rpc("agent_remove_slots", { p_slots: [slot.id] });
+    setError("");
+    const { error: removeError } = await supabase.rpc("agent_remove_slots", { p_slots: [slot.id] });
     setBusy(false);
-    if (error) window.alert(error.message);
+    if (removeError) setError(removeError.message);
     onChanged();
   }
 
@@ -1277,59 +1338,87 @@ function SlotRow({ slot, bookings, positions, onChanged }) {
               ? "Booked"
               : "Free"}
         </span>
-        <button
-          type="button"
-          className="link-button"
-          disabled={busy}
-          onClick={removeSlot}
-        >
-          {bookings.length ? "Cancel time" : "Remove"}
-        </button>
-      </div>
-      {bookings.map((booking) => (
-        <div key={booking.id} className="agent-booking">
-          <span>
-            <strong>{booking.buyer_name}</strong>
-            {!booking.buyer_id && <span className="agent-via"> via your link</span>}
-            {booking.buyer_phone && (
-              <>
-                {" · "}
-                <a href={`tel:${booking.buyer_phone}`}>{booking.buyer_phone}</a>
-              </>
-            )}
-            {" · "}
-            <a href={`mailto:${booking.buyer_email}`}>{booking.buyer_email}</a>
-            {booking.buyer_id && (
-              <>
-                <br />
-                <BuyerPosition position={positions[booking.buyer_id]} />
-              </>
-            )}
-          </span>
-          <button
-            type="button"
-            className="link-button"
-            disabled={busy}
-            onClick={() =>
-              call(
-                { action: "cancel", bookingId: booking.id },
-                `Cancel ${booking.buyer_name}'s viewing? They'll get an email.`
-              )
-            }
-          >
-            Cancel booking
+        {confirming !== "slot" && (
+          <button type="button" className="link-button" disabled={busy} onClick={removeSlot}>
+            {bookings.length ? "Cancel time" : "Remove"}
           </button>
-        </div>
-      ))}
+        )}
+      </div>
+      {confirming === "slot" && (
+        <InlineConfirm
+          text={`Cancel this time? ${bookings.length} buyer${bookings.length === 1 ? "" : "s"} will be emailed that it's cancelled.`}
+          confirmLabel="Cancel time"
+          busy={busy}
+          onConfirm={() => call({ action: "cancel_slot", slotId: slot.id })}
+          onKeep={() => setConfirming(null)}
+        />
+      )}
+      {bookings.map((booking) => {
+        const fb = feedbackFor?.(booking);
+        return (
+          <div key={booking.id} className="agent-booking">
+            <span>
+              {onOpenBooking ? (
+                <button type="button" className="link-button agent-booking-name" onClick={() => onOpenBooking(booking)}>
+                  {booking.buyer_name}
+                </button>
+              ) : (
+                <strong>{booking.buyer_name}</strong>
+              )}
+              {!booking.buyer_id && <span className="agent-via"> via your link</span>}
+              {booking.buyer_phone && (
+                <>
+                  {" · "}
+                  <a href={`tel:${booking.buyer_phone}`}>{booking.buyer_phone}</a>
+                </>
+              )}
+              {" · "}
+              <a href={`mailto:${booking.buyer_email}`}>{booking.buyer_email}</a>
+              {booking.buyer_id && (
+                <>
+                  <br />
+                  <BuyerPosition position={positions[booking.buyer_id]} />
+                </>
+              )}
+              {fb && (
+                <>
+                  <br />
+                  <FeedbackTag feedback={fb.feedback} earlier={fb.earlier} />
+                </>
+              )}
+            </span>
+            {confirming === booking.id ? (
+              <InlineConfirm
+                text={`Cancel ${booking.buyer_name}'s viewing? They'll get an email.`}
+                confirmLabel="Cancel viewing"
+                busy={busy}
+                onConfirm={() => call({ action: "cancel", bookingId: booking.id })}
+                onKeep={() => setConfirming(null)}
+              />
+            ) : (
+              <button
+                type="button"
+                className="link-button"
+                disabled={busy}
+                onClick={() => setConfirming(booking.id)}
+              >
+                Cancel booking
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {error && <p className="booking-error">{error}</p>}
     </li>
   );
 }
 
 // The public booking link for one listing, with quick ways to send it.
-function ShareLink({ listing }) {
+// Copy to the clipboard; where that's blocked, select the link in a box so
+// it can be copied by hand (no pop-up). -> [copied, copy, fallbackBox]
+function useCopy(url) {
   const [copied, setCopied] = useState(false);
-  const url = `${siteUrl}/viewings/${listing.id}`;
-  const text = `Book a viewing of ${listing.address} here: ${url}`;
+  const [manual, setManual] = useState(false);
 
   async function copy() {
     try {
@@ -1337,9 +1426,27 @@ function ShareLink({ listing }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      window.prompt("Copy this link:", url);
+      setManual(true);
     }
   }
+
+  const box = manual ? (
+    <input
+      className="agent-copy-box"
+      readOnly
+      autoFocus
+      value={url}
+      aria-label="Link to copy"
+      onFocus={(event) => event.target.select()}
+    />
+  ) : null;
+  return [copied, copy, box];
+}
+
+function ShareLink({ listing }) {
+  const url = `${siteUrl}/viewings/${listing.id}`;
+  const text = `Book a viewing of ${listing.address} here: ${url}`;
+  const [copied, copy, copyBox] = useCopy(url);
 
   async function share() {
     try {
@@ -1386,6 +1493,86 @@ Thanks`
           </button>
         )}
       </div>
+      {copyBox}
+    </div>
+  );
+}
+
+// The vendor's private report link (/report/<token>, migration 035):
+// viewings, anonymised feedback, offers and prices, kept up to date.
+function SellerReportLink({ listing, onChanged }) {
+  const url = `${siteUrl}/report/${listing.report_token}`;
+  const [copied, copy, copyBox] = useCopy(url);
+  const canShare = typeof navigator !== "undefined" && navigator.share;
+  const [renewing, setRenewing] = useState(false);
+  const [renewBusy, setRenewBusy] = useState(false);
+  const [renewError, setRenewError] = useState("");
+
+  // Replace the link, e.g. after the sale or if it was forwarded on.
+  async function renew() {
+    setRenewBusy(true);
+    setRenewError("");
+    try {
+      const response = await postAuthed("/api/send-listing", { action: "new_report_link", listingId: listing.id });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Could not make a new link");
+      setRenewing(false);
+      onChanged?.();
+    } catch (err) {
+      setRenewError(err.message);
+    }
+    setRenewBusy(false);
+  }
+
+  async function share() {
+    try {
+      await navigator.share({
+        title: `How ${listing.address} is doing`,
+        text: `Here's how ${listing.address} is doing: viewings, feedback and offers, kept up to date.`,
+        url,
+      });
+    } catch {
+      // Cancelled: nothing to do.
+    }
+  }
+
+  if (!listing.report_token) return null;
+  return (
+    <div className="agent-share agent-seller-report">
+      <span className="agent-share-label">Seller report:</span>
+      <a href={url} target="_blank" rel="noreferrer" className="agent-share-url">
+        Open the vendor's view ↗
+      </a>
+      <div className="agent-share-buttons">
+        <button type="button" className="secondary-button" onClick={copy}>
+          {copied ? "Copied" : "Copy link"}
+        </button>
+        {canShare && (
+          <button type="button" className="secondary-button" onClick={share}>
+            Share
+          </button>
+        )}
+        {!renewing && (
+          <button type="button" className="link-button" onClick={() => setRenewing(true)}>
+            New link
+          </button>
+        )}
+      </div>
+      {renewing && (
+        <div className="inline-confirm" role="group" aria-label="Replace the seller report link">
+          <span className="inline-confirm-text">The old link stops working. Send the vendor the new one.</span>
+          <div className="inline-confirm-buttons">
+            <button type="button" className="secondary-button" disabled={renewBusy} onClick={renew}>
+              {renewBusy ? "Making..." : "Make a new link"}
+            </button>
+            <button type="button" className="link-button" disabled={renewBusy} onClick={() => setRenewing(false)}>
+              Keep this one
+            </button>
+          </div>
+        </div>
+      )}
+      {renewError && <p className="booking-error">{renewError}</p>}
+      {copyBox}
     </div>
   );
 }
@@ -1395,12 +1582,16 @@ Thanks`
 // viewing (plus travel) or inside your shortest notice.
 function FreeTimes({ slots, blocked, onChanged }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [clearing, setClearing] = useState(false);
 
   async function remove(ids) {
     setBusy(true);
-    const { error } = await supabase.rpc("agent_remove_slots", { p_slots: ids });
+    setError("");
+    const { error: removeError } = await supabase.rpc("agent_remove_slots", { p_slots: ids });
     setBusy(false);
-    if (error) window.alert(error.message);
+    setClearing(false);
+    if (removeError) setError(removeError.message);
     onChanged();
   }
 
@@ -1429,18 +1620,21 @@ function FreeTimes({ slots, blocked, onChanged }) {
           );
         })}
       </ul>
-      {slots.length > 1 && (
-        <button
-          type="button"
-          className="link-button"
-          disabled={busy}
-          onClick={() => {
-            if (window.confirm(`Remove all ${slots.length} free times on this day?`)) remove(slots.map((s) => s.id));
-          }}
-        >
-          Clear free times
-        </button>
-      )}
+      {slots.length > 1 &&
+        (clearing ? (
+          <InlineConfirm
+            text={`Remove all ${slots.length} free times on this day?`}
+            confirmLabel="Remove them"
+            busy={busy}
+            onConfirm={() => remove(slots.map((s) => s.id))}
+            onKeep={() => setClearing(false)}
+          />
+        ) : (
+          <button type="button" className="link-button" disabled={busy} onClick={() => setClearing(true)}>
+            Clear free times
+          </button>
+        ))}
+      {error && <p className="booking-error">{error}</p>}
     </div>
   );
 }
@@ -1479,10 +1673,34 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
   const [message, setMessage] = useState("");
   const [reducing, setReducing] = useState(false);
   const [newPrice, setNewPrice] = useState("");
+  // Sold STC / Off market waiting for "Are you sure?", with the booked
+  // viewings the agent has chosen to cancel (all, by default).
+  const [closing, setClosing] = useState(null);
+  const [cancelIds, setCancelIds] = useState(new Set());
   const status = listing.market_status || "available";
 
-  async function setStatus(value) {
+  function pick(value) {
     if (value === status || busy) return;
+    setMessage("");
+    // Closing takes the home's times away and tells buyers: ask first.
+    if (value === "sold_stc" || value === "off_market") {
+      setClosing(value);
+      setCancelIds(new Set(upcomingBookings.map((b) => b.id)));
+      return;
+    }
+    setStatus(value, []);
+  }
+
+  function toggleCancel(id) {
+    setCancelIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function setStatus(value, toCancel) {
     setBusy(true);
     setMessage("");
     const { error } = await supabase.from("agent_listings").update({ market_status: value }).eq("id", listing.id);
@@ -1509,23 +1727,22 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
       note = "Saved, but buyers' lists couldn't be updated just now.";
     }
 
-    // Sold or withdrawn with viewings still booked: offer to cancel them
-    // (each buyer is emailed).
-    const closing = value === "sold_stc" || value === "off_market";
-    if (closing && upcomingBookings.length) {
-      const n = upcomingBookings.length;
-      if (window.confirm(`${n} viewing${n === 1 ? " is" : "s are"} still booked on this home. Cancel ${n === 1 ? "it" : "them"} and let the buyer${n === 1 ? "" : "s"} know?`)) {
-        const results = await Promise.all(
-          upcomingBookings.map((b) =>
-            postAuthed("/api/viewings", { action: "cancel", bookingId: b.id })
-              .then((r) => r.ok)
-              .catch(() => false)
-          )
-        );
-        const done = results.filter(Boolean).length;
-        note += ` ${done} viewing${done === 1 ? "" : "s"} cancelled and the buyer${done === 1 ? " has" : "s have"} been told.`;
-      }
+    // The viewings the agent chose to cancel (each buyer is emailed).
+    if (toCancel.length) {
+      const results = await Promise.all(
+        toCancel.map((id) =>
+          postAuthed("/api/viewings", { action: "cancel", bookingId: id })
+            .then((r) => r.ok)
+            .catch(() => false)
+        )
+      );
+      const done = results.filter(Boolean).length;
+      note += ` ${done} viewing${done === 1 ? "" : "s"} cancelled and the buyer${done === 1 ? " has" : "s have"} been told.`;
+      if (done < toCancel.length) note += ` ${toCancel.length - done} couldn't be cancelled: try again from the times below.`;
     }
+    const kept = upcomingBookings.length - toCancel.length;
+    if (closing && kept > 0) note += ` ${kept} viewing${kept === 1 ? " is" : "s are"} still booked.`;
+    setClosing(null);
     setMessage(note);
     setBusy(false);
     onChanged();
@@ -1574,7 +1791,7 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
               aria-checked={status === s.value}
               className={`status-${s.value}${status === s.value ? " selected" : ""}`}
               disabled={busy}
-              onClick={() => setStatus(s.value)}
+              onClick={() => pick(s.value)}
             >
               {s.label}
             </button>
@@ -1594,6 +1811,52 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
           </button>
         )}
       </div>
+      {closing && (
+        <InlineConfirm
+          text={`Mark it ${MARKET_STATUSES.find((s) => s.value === closing).label}? Buyers who saved it are told, and its free times come off.`}
+          confirmLabel={
+            cancelIds.size
+              ? `Confirm and cancel ${cancelIds.size} viewing${cancelIds.size === 1 ? "" : "s"}`
+              : "Confirm"
+          }
+          keepLabel="Keep it for sale"
+          busy={busy}
+          onConfirm={() => setStatus(closing, [...cancelIds])}
+          onKeep={() => setClosing(null)}
+        >
+          {upcomingBookings.length > 0 && (
+            <div className="agent-closing-bookings">
+              <p>
+                {upcomingBookings.length} viewing{upcomingBookings.length === 1 ? " is" : "s are"} still booked.
+                Tick the ones to cancel (the buyer is emailed):
+              </p>
+              <ul>
+                {upcomingBookings.map((b) => (
+                  <li key={b.id}>
+                    <label className="agent-auto">
+                      <input type="checkbox" checked={cancelIds.has(b.id)} onChange={() => toggleCancel(b.id)} />
+                      {b.starts_at ? `${dayFormatter.format(new Date(b.starts_at))}, ${timeFormatter.format(new Date(b.starts_at))} · ` : ""}
+                      {b.buyer_name}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="agent-closing-all">
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setCancelIds(new Set(upcomingBookings.map((b) => b.id)))}
+                >
+                  Cancel all
+                </button>
+                <button type="button" className="link-button" onClick={() => setCancelIds(new Set())}>
+                  Keep all
+                </button>
+              </div>
+            </div>
+          )}
+        </InlineConfirm>
+      )}
       {reducing && (
         <form className="agent-reduce" onSubmit={reducePrice}>
           <label>
@@ -1620,13 +1883,70 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
   );
 }
 
-function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach, hoursOn, blocked, startOpen = true, onChanged }) {
+// What buyers said after their viewings: a tally, then the latest few.
+function ListingFeedback({ feedback }) {
+  const [all, setAll] = useState(false);
+  if (!feedback.length) return null;
+  const tally = Object.keys(FEEDBACK_TEXT)
+    .map((key) => ({ key, n: feedback.filter((f) => f.answer === key).length }))
+    .filter((t) => t.n)
+    .map((t) => `${t.n} ${FEEDBACK_TEXT[t.key]}`)
+    .join(" · ");
+  const shown = all ? feedback : feedback.slice(0, 3);
+  return (
+    <div className="agent-feedback">
+      <p>
+        <strong>Feedback</strong> <span className="muted">{tally}</span>
+      </p>
+      <ul>
+        {shown.map((f) => (
+          <li key={f.booking_id}>
+            <FeedbackTag feedback={f} />
+            <span className="muted">
+              {" "}
+              {f.buyer_name}, {dayFormatter.format(new Date(f.viewing_at))}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {feedback.length > 3 && (
+        <button type="button" className="link-button" onClick={() => setAll(!all)}>
+          {all ? "Show less" : `Show all ${feedback.length}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ListingCard({
+  listing,
+  slots,
+  bookingsBySlot,
+  positions,
+  agentId,
+  reach,
+  hoursOn,
+  blocked,
+  startOpen = true,
+  feedback = [],
+  feedbackFor,
+  onOpenBooking,
+  focus,
+  onChanged,
+}) {
   // Compact (head + one-line summary) until opened, when there are lots.
   const [open, setOpen] = useState(startOpen);
   const [adding, setAdding] = useState(slots.length === 0 && !hoursOn);
   const [editing, setEditing] = useState(false);
   const [allDays, setAllDays] = useState(false);
   const [savingAuto, setSavingAuto] = useState(false);
+  // "New price saved, 3 households told" after Edit details closes.
+  const [savedNote, setSavedNote] = useState("");
+
+  // "Open listing" from a booking in the Calendar or Today: open this card.
+  useEffect(() => {
+    if (focus?.id === listing.id) setOpen(true);
+  }, [focus, listing.id]);
 
   const days = useMemo(() => {
     const groups = new Map();
@@ -1741,12 +2061,18 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
         <ListingForm
           agentId={agentId}
           listing={listing}
-          onSaved={() => {
+          onSaved={(note) => {
             setEditing(false);
+            setSavedNote(note || "");
             onChanged();
           }}
           onCancel={() => setEditing(false)}
         />
+      )}
+      {savedNote && !editing && (
+        <p className="agent-status-message" aria-live="polite">
+          {savedNote}
+        </p>
       )}
 
       <ListingStatus
@@ -1754,11 +2080,15 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
         agentId={agentId}
         upcomingBookings={slots
           .filter((slot) => new Date(slot.starts_at) > new Date())
-          .flatMap((slot) => bookingsBySlot[slot.id] || [])}
+          .flatMap((slot) => (bookingsBySlot[slot.id] || []).map((b) => ({ ...b, starts_at: slot.starts_at })))}
         onChanged={onChanged}
       />
 
       <ListingReach listing={listing} reach={reach} onSent={onChanged} />
+
+      <ListingFeedback feedback={feedback} />
+
+      <SellerReportLink listing={listing} onChanged={onChanged} />
 
       {listing.is_active ? (
         <ShareLink listing={listing} />
@@ -1802,6 +2132,8 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
                       slot={slot}
                       bookings={bookingsBySlot[slot.id] || []}
                       positions={positions}
+                      feedbackFor={feedbackFor}
+                      onOpenBooking={onOpenBooking && ((booking) => onOpenBooking({ booking, slot, listing }))}
                       onChanged={onChanged}
                     />
                   ))}
@@ -1986,7 +2318,7 @@ function londonDaysFromToday(n) {
   return new Date(Date.UTC(y, m - 1, d + n, 12));
 }
 
-function AgentAgenda({ listings, slots, bookingsBySlot, positions }) {
+function AgentAgenda({ listings, slots, bookingsBySlot, positions, feedbackFor, onOpen }) {
   const now = Date.now();
   const weekAhead = now + 7 * 864e5;
   const listingById = Object.fromEntries(listings.map((l) => [l.id, l]));
@@ -2029,14 +2361,24 @@ function AgentAgenda({ listings, slots, bookingsBySlot, positions }) {
           <ul>
             {day.items.map(({ slot, booking }) => {
               const listing = listingById[slot.listing_id];
+              const fb = feedbackFor?.(booking);
               return (
                 <li key={booking.id} className="agent-agenda-row">
                   <strong className="agent-agenda-time">{agendaTime.format(new Date(slot.starts_at))}</strong>
-                  <div className="agent-agenda-main">
+                  {/* Tap for call, email, position, feedback and cancel. */}
+                  <button
+                    type="button"
+                    className="agent-agenda-main agent-open-booking"
+                    onClick={() => onOpen?.({ booking, slot, listing })}
+                  >
                     <strong>{booking.buyer_name}</strong>
-                    <span>{listing?.address || "Viewing"}</span>
+                    <span>
+                      {listing?.address || "Viewing"}
+                      {slot.capacity > 1 ? " · open house" : ""}
+                    </span>
                     {booking.buyer_id && <BuyerPosition position={positions[booking.buyer_id]} />}
-                  </div>
+                    {fb && <FeedbackTag feedback={fb.feedback} earlier={fb.earlier} />}
+                  </button>
                   {booking.buyer_phone && (
                     <a className="secondary-button agent-agenda-call" href={`tel:${booking.buyer_phone.replace(/\s+/g, "")}`}>
                       Call
@@ -2064,7 +2406,7 @@ function mapsUrl(listing) {
   return where ? `https://maps.apple.com/?q=${encodeURIComponent(where)}` : "";
 }
 
-function AgentCalendar({ listings, slots, bookingsBySlot, positions, timeOff }) {
+function AgentCalendar({ listings, slots, bookingsBySlot, positions, timeOff, feedbackFor, onOpen }) {
   const [showFree, setShowFree] = useState(false);
   const now = Date.now();
   const listingById = Object.fromEntries(listings.map((l) => [l.id, l]));
@@ -2186,7 +2528,7 @@ function AgentCalendar({ listings, slots, bookingsBySlot, positions, timeOff }) 
                       <div className={`agenda-row-button agent-calendar-row${buyers.length ? "" : " free"}`}>
                         <div className="agenda-time">
                           <strong>{agendaTime.format(new Date(slot.starts_at))}</strong>
-                          <span>{buyers.length ? "Viewing" : "Free"}</span>
+                          <span>{slot.capacity > 1 ? "Open house" : buyers.length ? "Viewing" : "Free"}</span>
                         </div>
                         {listing?.image_url ? (
                           <img className="agenda-thumb" src={listing.image_url} alt="" />
@@ -2196,15 +2538,46 @@ function AgentCalendar({ listings, slots, bookingsBySlot, positions, timeOff }) 
                           </div>
                         )}
                         <div className="agenda-main">
-                          <strong>{buyers.length ? buyers.map((b) => b.buyer_name).join(", ") : listing?.address || "Viewing time"}</strong>
-                          {buyers.length > 0 && <span>{listing?.address || "Viewing"}</span>}
-                          {buyers.map((b) =>
-                            b.buyer_id ? (
-                              <span key={b.id} className="agent-calendar-position">
-                                <BuyerPosition position={positions[b.buyer_id]} />
-                              </span>
-                            ) : null
+                          {buyers.length ? (
+                            // Each buyer opens their booking: call, email, cancel.
+                            <strong className="agent-calendar-buyers">
+                              {buyers.map((b, i) => (
+                                <span key={b.id}>
+                                  {i > 0 && ", "}
+                                  <button
+                                    type="button"
+                                    className="link-button agent-booking-name"
+                                    onClick={() => onOpen?.({ booking: b, slot, listing })}
+                                  >
+                                    {b.buyer_name}
+                                  </button>
+                                </span>
+                              ))}
+                            </strong>
+                          ) : (
+                            <strong>{listing?.address || "Viewing time"}</strong>
                           )}
+                          {buyers.length > 0 && <span>{listing?.address || "Viewing"}</span>}
+                          {slot.capacity > 1 && (
+                            <span>
+                              Open house · {buyers.length} of {slot.capacity} booked
+                            </span>
+                          )}
+                          {buyers.map((b) => {
+                            const fb = feedbackFor?.(b);
+                            return b.buyer_id || fb ? (
+                              <span key={b.id} className="agent-calendar-position">
+                                {buyers.length > 1 && <>{b.buyer_name.split(" ")[0]}: </>}
+                                {b.buyer_id && <BuyerPosition position={positions[b.buyer_id]} />}
+                                {fb && (
+                                  <>
+                                    {" "}
+                                    <FeedbackTag feedback={fb.feedback} earlier={fb.earlier} />
+                                  </>
+                                )}
+                              </span>
+                            ) : null;
+                          })}
                         </div>
                         {phone ? (
                           <a className="secondary-button agent-agenda-call" href={`tel:${phone.replace(/\s+/g, "")}`}>
@@ -2352,10 +2725,204 @@ function TimeSaved({ refreshKey }) {
   );
 }
 
+// Tapping a booked viewing (Calendar, Today, a listing's times): everything
+// to act on in one small sheet. Call, email, their position, what they said,
+// the listing, or cancel (the same /api/viewings cancel as the listing card).
+function BookingSheet({ item, positions, feedbackFor, onClose, onOpenListing, onChanged }) {
+  const { booking, slot, listing } = item;
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [cancelled, setCancelled] = useState(false);
+  const fb = feedbackFor?.(booking);
+  const past = new Date(slot.ends_at).getTime() < Date.now();
+  const first = booking.buyer_name?.split(" ")[0] || "buyer";
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function cancel() {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await postAuthed("/api/viewings", { action: "cancel", bookingId: booking.id });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Couldn't cancel it. Please try again.");
+      setCancelled(true);
+      setConfirming(false);
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal-card agent-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agent-sheet-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">
+              {dayFormatter.format(new Date(slot.starts_at))}, {timeRange(slot)}
+              {slot.capacity > 1 ? " · open house" : ""}
+            </p>
+            <h3 id="agent-sheet-title">{booking.buyer_name}</h3>
+            <p className="muted">{listing?.address || "Viewing"}</p>
+          </div>
+          <button type="button" className="link-button" onClick={onClose} aria-label="Close">
+            Close
+          </button>
+        </div>
+
+        {cancelled ? (
+          <p className="agent-status-message" role="status">
+            Cancelled. {first} has been emailed and the time is free again.
+          </p>
+        ) : (
+          <>
+            <div className="agent-sheet-actions">
+              {booking.buyer_phone && (
+                <a className="primary-button" href={`tel:${booking.buyer_phone.replace(/\s+/g, "")}`}>
+                  Call {first}
+                </a>
+              )}
+              <a
+                className="secondary-button"
+                href={`mailto:${booking.buyer_email}?subject=${encodeURIComponent(`Viewing: ${listing?.address || ""}`)}`}
+              >
+                Email {first}
+              </a>
+            </div>
+
+            {booking.buyer_id ? (
+              <p className="agent-sheet-row">
+                <BuyerPosition position={positions[booking.buyer_id]} />
+              </p>
+            ) : (
+              <p className="agent-sheet-row muted">Booked through your link, so no buying position.</p>
+            )}
+
+            {fb ? (
+              <p className="agent-sheet-row">
+                <FeedbackTag feedback={fb.feedback} earlier={fb.earlier} />
+              </p>
+            ) : past && booking.buyer_id ? (
+              <p className="agent-sheet-row muted">No feedback yet. We ask them a couple of hours after.</p>
+            ) : null}
+
+            <div className="agent-sheet-actions">
+              {listing && (
+                <button type="button" className="secondary-button" onClick={() => onOpenListing(listing.id)}>
+                  Open listing
+                </button>
+              )}
+              {!past && !confirming && (
+                <button type="button" className="link-button agent-sheet-cancel" onClick={() => setConfirming(true)}>
+                  Cancel viewing
+                </button>
+              )}
+            </div>
+            {confirming && (
+              <InlineConfirm
+                text={`Cancel ${first}'s viewing? They'll get an email.`}
+                confirmLabel="Cancel viewing"
+                busy={busy}
+                onConfirm={cancel}
+                onKeep={() => setConfirming(false)}
+              />
+            )}
+            {error && <p className="booking-error">{error}</p>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// The latest answers buyers gave after viewings, across every listing, so
+// the agent sees them without opening each card.
+function RecentFeedback({ feedback, listings }) {
+  const fortnight = Date.now() - 14 * 864e5;
+  const recent = feedback.filter((f) => new Date(f.answered_at).getTime() > fortnight).slice(0, 5);
+  if (!recent.length) return null;
+  const address = Object.fromEntries(listings.map((l) => [l.id, l.address]));
+  return (
+    <section className="card agent-feedback agent-recent-feedback">
+      <h3>How viewings went</h3>
+      <ul>
+        {recent.map((f) => (
+          <li key={f.booking_id}>
+            <FeedbackTag feedback={f} />
+            <span className="muted">
+              {" "}
+              {f.buyer_name} · {address[f.listing_id] || "a listing"}, {dayFormatter.format(new Date(f.viewing_at))}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// "Your branch" this month (migration 035): only for agents who share a
+// branch sign-up code with someone else. Totals only, never per agent.
+function BranchStats({ agent, refreshKey }) {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    if (!agent.signup_code) return;
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    supabase.rpc("branch_stats", { p_since: start.toISOString() }).then(({ data, error }) => {
+      // Before migration 035 this fails: show nothing.
+      if (error) return;
+      setStats(Array.isArray(data) ? data[0] : data);
+    });
+  }, [agent.signup_code, refreshKey]);
+
+  if (!agent.signup_code || !stats || stats.agents < 2) return null;
+  const monthName = new Date().toLocaleDateString("en-GB", { month: "long" });
+  const feedbackPct = stats.viewings_done ? Math.round((stats.feedback_received * 100) / stats.viewings_done) : null;
+  const rows = [
+    [stats.bookings, `viewing${stats.bookings === 1 ? "" : "s"} booked without a call`],
+    [stats.homes_sent, `home${stats.homes_sent === 1 ? "" : "s"} sent to matching buyers`],
+    [feedbackPct === null ? "–" : `${feedbackPct}%`, "of viewings got feedback"],
+    [stats.offers, `offer${stats.offers === 1 ? "" : "s"}`],
+    [stats.minutes_saved ? hoursAndMinutes(stats.minutes_saved) : "–", "saved, roughly"],
+  ];
+  return (
+    <section className="card agent-branch">
+      <h3>
+        Your branch <span className="muted">· {monthName}, {stats.agents} agents</span>
+      </h3>
+      <ul className="agent-branch-stats">
+        {rows.map(([value, label]) => (
+          <li key={label}>
+            <strong>{value}</strong>
+            <span>{label}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 // Which tab each getting-started step's target lives on.
 const TARGET_VIEW = { "agent-add-listing": "listings", "agent-listings": "listings", "agent-hours": "settings" };
 
-function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
+function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut, onAgentChanged }) {
   const [listings, setListings] = useState([]);
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -2368,6 +2935,12 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
   const [blocked, setBlocked] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [addingListing, setAddingListing] = useState(false);
+  // Buyers' answers after viewings (migration 035), newest first.
+  const [feedback, setFeedback] = useState([]);
+  // The booking sheet: { booking, slot, listing } or null.
+  const [sheet, setSheet] = useState(null);
+  // "Open listing" from the sheet: which card to open ({ id }, new each time).
+  const [focus, setFocus] = useState(null);
 
   const load = useCallback(async () => {
     const since = new Date(Date.now() - 2 * 3600000).toISOString();
@@ -2385,6 +2958,7 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
       timeOffResult,
       blockedResult,
       statusesResult,
+      feedbackResult,
     ] = await Promise.all([
       supabase.from("agent_listings").select("*").order("created_at", { ascending: false }),
       supabase
@@ -2407,12 +2981,15 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
       supabase.rpc("agent_blocked_slots"),
       // Paused or found somewhere (migration 029); fails quietly before it.
       supabase.rpc("agent_buyer_statuses"),
+      // Feedback after viewings (migration 035); fails quietly before it.
+      supabase.rpc("agent_viewing_feedback"),
     ]);
     setAvailability(availabilityResult.data || null);
     setHours(hoursResult.data || []);
     setTimeOff(timeOffResult.data || []);
     setBlocked(new Set((blockedResult.data || []).map((row) => (typeof row === "string" ? row : Object.values(row)[0]))));
     setOffers(offersResult.data || []);
+    setFeedback(feedbackResult.error ? [] : feedbackResult.data || []);
     // Each buyer's position (if shared) and search status, under one key.
     const byBuyer = {};
     for (const p of positionsResult.data || []) byBuyer[p.buyer_id] = { ...p };
@@ -2444,6 +3021,42 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
     for (const slot of slots) (map[slot.listing_id] ||= []).push(slot);
     return map;
   }, [slots]);
+
+  // A booking's own feedback, or failing that what the same buyer said last
+  // time they saw this home ("Last time: Want a second look").
+  const feedbackFor = useMemo(() => {
+    const byBooking = {};
+    const latest = {};
+    for (const f of feedback) {
+      byBooking[f.booking_id] = f;
+      const key = `${f.listing_id}|${(f.buyer_email || "").toLowerCase()}`;
+      if (!latest[key]) latest[key] = f;
+    }
+    const listingOfSlot = Object.fromEntries(slots.map((s) => [s.id, s.listing_id]));
+    return (booking) => {
+      if (byBooking[booking.id]) return { feedback: byBooking[booking.id], earlier: false };
+      const earlier = latest[`${listingOfSlot[booking.slot_id]}|${(booking.buyer_email || "").toLowerCase()}`];
+      return earlier ? { feedback: earlier, earlier: true } : null;
+    };
+  }, [feedback, slots]);
+
+  const feedbackByListing = useMemo(() => {
+    const map = {};
+    for (const f of feedback) (map[f.listing_id] ||= []).push(f);
+    return map;
+  }, [feedback]);
+
+  const closeSheet = useCallback(() => setSheet(null), []);
+
+  function openListing(listingId) {
+    setSheet(null);
+    setFocus({ id: listingId });
+    if (view !== "listings") setView("listings");
+    setTimeout(
+      () => document.getElementById(`listing-${listingId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      60
+    );
+  }
 
   const upcomingBooked = slots.filter((slot) => bookingsBySlot[slot.id]?.length).length;
   const bookedCount = slots.reduce((sum, slot) => sum + (bookingsBySlot[slot.id]?.length || 0), 0);
@@ -2505,7 +3118,11 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
               : "No bookings yet. Buyers who've saved one of your listings will see the times you add."
           )}
 
+          <AgentTrialBanner agent={agent} onChanged={onAgentChanged} />
+
           <TimeSaved refreshKey={listings.length + bookedCount + offers.length} />
+
+          <BranchStats agent={agent} refreshKey={listings.length + bookedCount + offers.length} />
 
           <AgentGettingStarted
             agentId={agent.user_id}
@@ -2520,8 +3137,17 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
           <OfferRequests offers={offers} positions={positions} onChanged={load} />
 
           {listings.length > 0 && (
-            <AgentAgenda listings={listings} slots={slots} bookingsBySlot={bookingsBySlot} positions={positions} />
+            <AgentAgenda
+              listings={listings}
+              slots={slots}
+              bookingsBySlot={bookingsBySlot}
+              positions={positions}
+              feedbackFor={feedbackFor}
+              onOpen={setSheet}
+            />
           )}
+
+          <RecentFeedback feedback={feedback} listings={listings} />
 
           {listings.length > 0 && (
             <button type="button" className="secondary-button agent-today-more" onClick={() => setView("calendar")}>
@@ -2587,6 +3213,10 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
               blocked={blocked}
               // A few listings: show them in full. Lots: compact, tap to open.
               startOpen={listings.length <= 2}
+              feedback={feedbackByListing[listing.id] || []}
+              feedbackFor={feedbackFor}
+              onOpenBooking={setSheet}
+              focus={focus}
               onChanged={load}
             />
           ))}
@@ -2602,6 +3232,8 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
             bookingsBySlot={bookingsBySlot}
             positions={positions}
             timeOff={timeOff}
+            feedbackFor={feedbackFor}
+            onOpen={setSheet}
           />
         </div>
       )}
@@ -2609,8 +3241,21 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
         "settings",
         <div className="agent-dashboard">
           {heading("Settings")}
+          <AgentTrialBanner agent={agent} onChanged={onAgentChanged} />
           <AgentSettings agent={agent} email={email} hoursCard={hoursCard} isBuyer={isBuyer} onLogOut={onLogOut} />
         </div>
+      )}
+      {sheet && (
+        <BookingSheet
+          // A fresh sheet for each booking (no leftover "Are you sure?").
+          key={sheet.booking.id}
+          item={sheet}
+          positions={positions}
+          feedbackFor={feedbackFor}
+          onClose={closeSheet}
+          onOpenListing={openListing}
+          onChanged={load}
+        />
       )}
     </>
   );
@@ -2840,6 +3485,7 @@ function AgentPortal() {
             setView={setView}
             isBuyer={isBuyer}
             onLogOut={logOut}
+            onAgentChanged={loadAgent}
           />
         )}
       </main>

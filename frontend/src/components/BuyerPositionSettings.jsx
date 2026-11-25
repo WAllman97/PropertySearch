@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import PositionProof from "./PositionProof";
+import { DEFAULT_MORTGAGE_RATE, DEFAULT_MORTGAGE_TERM } from "./TotalCost";
 
 // The household's "ready to proceed" position (migration 015). Agents you
 // book viewings with see it, marked as your own declaration, so they know
@@ -35,9 +36,25 @@ const EMPTY = {
   solicitor_ready: false,
   move_timeframe: "",
   share_with_agents: true,
+  // For the cost of each home (migration 036). Blank rate or term means the
+  // defaults (4.5%, 25 years), so the estimates work before anything is set.
+  first_time_buyer: false,
+  mortgage_rate: "",
+  mortgage_term_years: "",
 };
 
 const toNumber = (v) => (v === "" || v === null ? null : Math.round(Number(String(v).replace(/[£,\s]/g, ""))));
+const toDecimal = (v) => (v === "" || v === null ? null : Number(String(v).replace(/[%\s]/g, "")));
+
+// Before migration 036 these columns don't exist: save everything else.
+const COST_FIELDS = ["first_time_buyer", "mortgage_rate", "mortgage_term_years"];
+function withoutCostFields(row) {
+  const copy = { ...row };
+  for (const field of COST_FIELDS) delete copy[field];
+  return copy;
+}
+const isMissingCostColumn = (error) =>
+  error && (error.code === "PGRST204" || COST_FIELDS.some((field) => String(error.message || "").includes(field)));
 
 function BuyerPositionSettings() {
   const [form, setForm] = useState(EMPTY);
@@ -61,6 +78,8 @@ function BuyerPositionSettings() {
         setForm({
           ...EMPTY,
           ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v ?? EMPTY[k] ?? ""])),
+          // Not set yet: go by "first-time buyer" as their selling status.
+          first_time_buyer: data.first_time_buyer ?? data.selling_status === "first_time",
         });
       }
     }
@@ -87,9 +106,28 @@ function BuyerPositionSettings() {
       solicitor_ready: form.solicitor_ready,
       move_timeframe: form.move_timeframe || null,
       share_with_agents: form.share_with_agents,
+      first_time_buyer: Boolean(form.first_time_buyer),
+      mortgage_rate: toDecimal(form.mortgage_rate),
+      mortgage_term_years: toNumber(form.mortgage_term_years),
       updated_at: new Date().toISOString(),
       updated_by: auth?.user?.id,
     };
+  }
+
+  // Insert or update the household's row; before migration 036, again
+  // without the cost fields. Returns { data, error, costSkipped }.
+  async function writeRow(row, { insert, select } = {}) {
+    const run = async (values) => {
+      let query = insert
+        ? supabase.from("buyer_positions").insert(values)
+        : supabase.from("buyer_positions").update(values).not("household_id", "is", null);
+      if (select) query = query.select(select).single();
+      return query;
+    };
+    const first = await run(row);
+    if (!isMissingCostColumn(first.error)) return first;
+    const second = await run(withoutCostFields(row));
+    return { ...second, costSkipped: !second.error };
   }
 
   // The proof hangs off the position row. If the buyer uploads before ever
@@ -97,11 +135,7 @@ function BuyerPositionSettings() {
   // a blank position. Returns the household id.
   async function ensurePosition() {
     if (saved?.household_id) return saved.household_id;
-    const { data, error } = await supabase
-      .from("buyer_positions")
-      .insert(await formRow())
-      .select("household_id")
-      .single();
+    const { data, error } = await writeRow(await formRow(), { insert: true, select: "household_id" });
     if (error) throw error;
     setExists(true);
     return data.household_id;
@@ -115,15 +149,21 @@ function BuyerPositionSettings() {
 
   async function save(event) {
     event.preventDefault();
+    const row = await formRow();
+    if (row.mortgage_rate != null && !(row.mortgage_rate >= 0 && row.mortgage_rate < 30)) {
+      setMessage("Enter the mortgage rate as a percentage, e.g. 4.5");
+      return;
+    }
+    if (row.mortgage_term_years != null && !(row.mortgage_term_years >= 1 && row.mortgage_term_years <= 40)) {
+      setMessage("Enter a mortgage term between 1 and 40 years.");
+      return;
+    }
+
     setSaving(true);
     setMessage("");
 
-    const row = await formRow();
-
     // One row per household; the household id fills itself in on insert.
-    const { error } = exists
-      ? await supabase.from("buyer_positions").update(row).not("household_id", "is", null)
-      : await supabase.from("buyer_positions").insert(row);
+    const { error, costSkipped } = await writeRow(row, { insert: !exists });
 
     setSaving(false);
     if (error) {
@@ -132,7 +172,7 @@ function BuyerPositionSettings() {
       return;
     }
     setExists(true);
-    setMessage("Saved.");
+    setMessage(costSkipped ? "Saved, apart from the cost settings (they need database update 036)." : "Saved.");
     load(false);
   }
 
@@ -197,7 +237,16 @@ function BuyerPositionSettings() {
 
         <label>
           Home to sell?
-          <select value={form.selling_status} onChange={set("selling_status")}>
+          <select
+            value={form.selling_status}
+            onChange={(event) => {
+              set("selling_status")(event);
+              // Saying "first-time buyer" here is the same answer below.
+              if (event.target.value === "first_time") {
+                setForm((current) => ({ ...current, first_time_buyer: true }));
+              }
+            }}
+          >
             <option value="">Choose...</option>
             <option value="first_time">First-time buyer</option>
             <option value="nothing_to_sell">Nothing to sell (e.g. renting)</option>
@@ -218,6 +267,39 @@ function BuyerPositionSettings() {
           </select>
         </label>
       </div>
+
+      <fieldset className="position-costs">
+        <legend>For cost estimates</legend>
+        <p className="muted">
+          Used to estimate each home's stamp duty and monthly mortgage. Only your household sees these.
+        </p>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={Boolean(form.first_time_buyer)} onChange={set("first_time_buyer")} />
+          First-time buyer (lower stamp duty up to £500,000)
+        </label>
+        {form.buying_with !== "cash" && (
+          <div className="position-grid">
+            <label>
+              Mortgage rate (%)
+              <input
+                inputMode="decimal"
+                value={form.mortgage_rate}
+                onChange={set("mortgage_rate")}
+                placeholder={String(DEFAULT_MORTGAGE_RATE)}
+              />
+            </label>
+            <label>
+              Term (years)
+              <input
+                inputMode="numeric"
+                value={form.mortgage_term_years}
+                onChange={set("mortgage_term_years")}
+                placeholder={String(DEFAULT_MORTGAGE_TERM)}
+              />
+            </label>
+          </div>
+        )}
+      </fieldset>
 
       {/* Shown for funding that has paperwork, and always while a document is
           attached, so it can be seen and removed whatever the form says. */}

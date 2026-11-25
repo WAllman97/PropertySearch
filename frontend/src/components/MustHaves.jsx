@@ -174,7 +174,9 @@ export function MustHaveSettings() {
 }
 
 // At a viewing: tick each must-have off, and jot notes. Saves as you go.
-export function ViewingChecklist({ propertyId, onOpenSettings }) {
+// withNotes={false}: just the ticks, for a screen that shows the viewing
+// notes itself (the Watchlist home's one Notes box).
+export function ViewingChecklist({ propertyId, onOpenSettings, withNotes = true }) {
   const { items, error } = useMustHaves();
   const [checklist, setChecklist] = useState({});
   const [notes, setNotes] = useState("");
@@ -336,18 +338,20 @@ export function ViewingChecklist({ propertyId, onOpenSettings }) {
         </ul>
       )}
 
-      <label className="viewing-notes-field">
-        Viewing notes
-        <textarea
-          value={notes}
-          onChange={(event) => changeNotes(event.target.value)}
-          onBlur={() => saveNotes()}
-          placeholder="How did it feel? Light, noise, the neighbours, what the agent said..."
-          rows={4}
-        />
-      </label>
+      {withNotes && (
+        <label className="viewing-notes-field">
+          Viewing notes
+          <textarea
+            value={notes}
+            onChange={(event) => changeNotes(event.target.value)}
+            onBlur={() => saveNotes()}
+            placeholder="How did it feel? Light, noise, the neighbours, what the agent said..."
+            rows={4}
+          />
+        </label>
+      )}
       <div className="viewing-checklist-foot">
-        {notes !== savedNotes.current && (
+        {withNotes && notes !== savedNotes.current && (
           <button type="button" className="secondary-button" onClick={() => saveNotes()}>
             Save notes
           </button>

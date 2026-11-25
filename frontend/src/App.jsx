@@ -3,6 +3,7 @@ import { ConfirmEmailPage } from "./components/ConfirmEmail";
 import { onSharedLink } from "./lib/sharedLinks";
 import ViewingRequestPage from "./views/ViewingRequestPage";
 import OfferConfirmPage from "./views/OfferConfirmPage";
+import SellerReportPage from "./views/SellerReportPage";
 import SuggestedTimePage from "./views/SuggestedTimePage";
 import { arrivedFromPasswordReset, supabase } from "./lib/supabaseClient";
 import AuthForm, { SEEN_ACCOUNT_KEY } from "./components/AuthForm";
@@ -94,6 +95,12 @@ function App() {
   const offerMatch = window.location.pathname.match(/^\/offer\/([0-9a-f-]{36})\/?$/i);
   if (offerMatch) {
     return <OfferConfirmPage token={offerMatch[1]} />;
+  }
+
+  // The seller report an agent shares with the vendor (no login).
+  const reportMatch = window.location.pathname.match(/^\/report\/([0-9a-f-]{36})\/?$/i);
+  if (reportMatch) {
+    return <SellerReportPage token={reportMatch[1]} />;
   }
 
   // A buyer answering a time the agent suggested, from the email (no login).
@@ -227,7 +234,15 @@ function MainApp() {
   useEffect(() => {
     if (!userId) return;
     refreshPushRegistration();
-    shouldOfferPush().then(setOfferPush).catch(() => {});
+    // New buyers are asked right after saving their first search, when the
+    // reason is obvious (BuyerSearches). Only buyers who already have a
+    // search, and so won't see that, are asked here.
+    supabase
+      .from("buyer_searches")
+      .select("id", { count: "exact", head: true })
+      .then(({ count }) => (count ? shouldOfferPush() : false))
+      .then(setOfferPush)
+      .catch(() => {});
   }, [userId]);
 
   async function logOut() {
