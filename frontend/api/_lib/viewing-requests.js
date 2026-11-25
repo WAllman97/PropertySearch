@@ -1,4 +1,4 @@
-// Viewing requests to agents who aren't on PropertySearch (migration 023),
+// Viewing requests to agents who aren't on ViewPal (migration 023),
 // handled by /api/viewings:
 //   buyer (signed in, household):
 //     { action: "request", propertyId, agentEmail, agentName?, options: [iso, ...],
@@ -177,7 +177,7 @@ async function confirm(request, start, req) {
             ${detailRow("Agent", escapeHtml(request.agent_name || request.agent_email || "The agent"))}
             ${detailRow("Agent's note", escapeHtml(request.agent_note))}
           </table>
-          <p style="margin:0;">It's in your PropertySearch calendar. Reply to this email to reach the agent.</p>`
+          <p style="margin:0;">It's in your ViewPal calendar. Reply to this email to reach the agent.</p>`
         ),
         ics: ics(request, start, false),
       })
@@ -209,7 +209,7 @@ export async function handleRequest(req, res) {
   if (agentEmail && !EMAIL_RE.test(agentEmail)) {
     return res.status(400).json({ error: "That agent email doesn't look right. Leave it blank to send the request yourself." });
   }
-  if (agentEmail.endsWith("@viewpal.co.uk")) return res.status(400).json({ error: "That's one of our addresses, not the agent's" });
+  if (/@viewpal\.(app|co\.uk)$/i.test(agentEmail)) return res.status(400).json({ error: "That's one of our addresses, not the agent's" });
 
   const now = Date.now();
   const raw = Array.isArray(body.options) ? body.options.slice(0, 3) : [];
@@ -234,7 +234,7 @@ export async function handleRequest(req, res) {
     ? await supabaseAdmin.from("viewing_request_opt_outs").select("email").eq("email", agentEmail).maybeSingle()
     : { data: null };
   if (optedOut) {
-    return res.status(409).json({ error: "This agent has asked not to get requests through PropertySearch. Please contact them directly." });
+    return res.status(409).json({ error: "This agent has asked not to get requests through ViewPal. Please contact them directly." });
   }
   if (!(await underRateLimit(user.id, "viewing_request", MAX_REQUESTS_PER_DAY, 24 * 60))) {
     return res.status(429).json({ error: "That's a lot of requests today. Please try again tomorrow." });
@@ -326,7 +326,7 @@ export async function handleRequest(req, res) {
       <p style="margin:0 0 4px;font-size:13px;color:#6b7280;">Tap a time to confirm it on the next page. Once confirmed, you both get a calendar invite.
       Or reply to this email to reach ${escapeHtml(buyerName)} directly.</p>
       <hr style="border:0;border-top:1px solid #e4ddd2;margin:16px 0;">
-      <p style="margin:0;font-size:12px;color:#9a9186;">Sent by PropertySearch for a buyer viewing homes you're marketing. Agents on PropertySearch publish their viewing times once and buyers book themselves:
+      <p style="margin:0;font-size:12px;color:#9a9186;">Sent by ViewPal for a buyer viewing homes you're marketing. Agents on ViewPal publish their viewing times once and buyers book themselves:
       <a href="${escapeHtml(appBaseUrl(req))}/agents" style="color:#9a9186;">see how it works</a>.
       Don't want these? <a href="${escapeHtml(page)}?stop=1" style="color:#9a9186;">Stop requests to this address</a>.</p>`
     ),

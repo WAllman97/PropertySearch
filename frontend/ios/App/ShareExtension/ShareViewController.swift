@@ -1,9 +1,9 @@
 import UIKit
 import UniformTypeIdentifiers
 
-// Share → PropertySearch from Rightmove, Zoopla, OnTheMarket or Safari.
+// Share → ViewPal from Rightmove, Zoopla, OnTheMarket or Safari.
 // Finds the listing link in what was shared and opens the app with it
-// (propertysearch://add?url=...), where Add Property fills in the details
+// (viewpal://add?url=...), where Add Property fills in the details
 // (src/lib/sharedLinks.js). If iOS won't let us open the app, the link is
 // copied instead, ready for the Paste button in Add Property.
 final class ShareViewController: UIViewController {
@@ -25,7 +25,7 @@ final class ShareViewController: UIViewController {
         titleLabel.font = .preferredFont(forTextStyle: .headline)
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 0
-        titleLabel.text = "Opening PropertySearch…"
+        titleLabel.text = "Opening ViewPal…"
 
         detailLabel.font = .preferredFont(forTextStyle: .subheadline)
         detailLabel.textColor = .secondaryLabel
@@ -69,7 +69,7 @@ final class ShareViewController: UIViewController {
             return
         }
         var components = URLComponents()
-        components.scheme = "propertysearch"
+        components.scheme = "viewpal"
         components.host = "add"
         components.queryItems = [URLQueryItem(name: "url", value: link.absoluteString)]
 
@@ -77,7 +77,7 @@ final class ShareViewController: UIViewController {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.close() }
         } else {
             UIPasteboard.general.string = link.absoluteString
-            show("Link copied", "Open PropertySearch, tap + Add Property, then Paste.")
+            show("Link copied", "Open ViewPal, tap + Add Property, then Paste.")
         }
     }
 

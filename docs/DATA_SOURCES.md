@@ -1,4 +1,4 @@
-# Where PropertySearch's data comes from
+# Where ViewPal's data comes from
 
 The rule: **the product never depends on crawling a property portal.**
 Agents' homes come from the agents themselves. Portal pages are only read
@@ -23,9 +23,9 @@ Controls (Vercel environment variables, no code change needed):
 
 - `PORTAL_PREVIEWS=off` stops every portal fetch immediately. Pasting a link
   still works: the form opens for the buyer or agent to fill in, and agents'
-  own listings still fill in from PropertySearch.
+  own listings still fill in from ViewPal.
 - `LINK_PREVIEW_USER_AGENT` sets how the preview identifies itself. By
-  default it says who we are (`PropertySearchLinkPreview/1.0 (+…/support)`),
+  default it says who we are (`ViewPalLinkPreview/1.0 (+…/support)`),
   like any messaging app, rather than posing as a browser.
 
 ## No scrapers
@@ -38,12 +38,12 @@ before that date if ever needed for reference. The company runs no scraper.
 
 ## How the app gets better data without scraping
 
-1. **Agents supply it.** Every agent on PropertySearch keeps their own listings
+1. **Agents supply it.** Every agent on ViewPal keeps their own listings
    current (status, price cuts, auto-send). The more agents, the less any
    buyer depends on a portal link.
 2. **CRM feeds, with the agent's permission.** Agents own their listing data
    and already send it to the portals from their CRM (Reapit, Alto, Street,
-   etc.). The same feed can come to PropertySearch: the CRM integrations in
+   etc.). The same feed can come to ViewPal: the CRM integrations in
    the business plan.
 3. **Licensed data if ever needed.** Sold prices with bedrooms are available
    under licence (e.g. from data resellers), if Land Registry by type isn't

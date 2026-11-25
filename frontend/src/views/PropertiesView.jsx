@@ -44,7 +44,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  // A link shared to the app (Share → PropertySearch, or /?add=) to fill in.
+  // A link shared to the app (Share → ViewPal, or /?add=) to fill in.
   const [addLink, setAddLink] = useState(null);
 
   useEffect(() => {
@@ -414,7 +414,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
           <p>
             Paste a link to a home you like from Rightmove, Zoopla or OnTheMarket, and we'll fill
             in the details for you to check. Homes that agents send you appear here too, and when an
-            agent on PropertySearch cuts the price of a home you saved, you're told straight away.
+            agent on ViewPal cuts the price of a home you saved, you're told straight away.
           </p>
           <button type="button" className="primary-button" onClick={() => setShowAddModal(true)}>
             + Add your first home

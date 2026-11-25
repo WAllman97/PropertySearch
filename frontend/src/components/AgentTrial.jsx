@@ -9,7 +9,7 @@ import "./AgentTrial.css";
 // until the agent adds their branch's code, so both ways to get one are
 // right here: type a code, or ask us for one.
 
-const CONTACT_EMAIL = "hello@viewpal.co.uk";
+const CONTACT_EMAIL = "hello@viewpal.app";
 const DAY = 24 * 3600 * 1000;
 
 async function post(body) {

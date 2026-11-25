@@ -12,6 +12,9 @@
 	     Add any custom domain here too, as another applinks: entry. -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:viewpal.app</string>
+		<string>applinks:www.viewpal.app</string>
+		<!-- The old address, for links in emails sent before the rename. -->
 		<string>applinks:property-search-4jcc.vercel.app</string>
 	</array>
 </dict>

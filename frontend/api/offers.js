@@ -9,7 +9,7 @@
 //
 // A buyer's word alone isn't proof, so an offer only counts as verified when
 // the agent selling the home confirms it. If the home is one of an agent's
-// listings on PropertySearch, that agent is emailed and asked; otherwise the
+// listings on ViewPal, that agent is emailed and asked; otherwise the
 // offer stays "unverified".
 import { householdMemberIds, requireHouseholdUser, requireUser, supabaseAdmin, underRateLimit } from "./_lib/household.js";
 import { appBaseUrl } from "./_lib/booking.js";
@@ -47,7 +47,7 @@ async function handler(req, res) {
   }
 }
 
-// The agent listing on PropertySearch for this home, if there is one.
+// The agent listing on ViewPal for this home, if there is one.
 async function findAgentListing(listingUrl) {
   const key = listingKey(listingUrl);
   if (!key) return null;

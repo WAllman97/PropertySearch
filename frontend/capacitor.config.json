@@ -1,6 +1,6 @@
 {
   "appId": "com.wallman97.propertysearch",
-  "appName": "PropertySearch",
+  "appName": "ViewPal",
   "webDir": "dist",
   "ios": {
     "contentInset": "never",

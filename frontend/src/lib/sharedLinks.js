@@ -1,7 +1,7 @@
 // Links handed to the app from outside:
 //   * a property link to open "Add Property" with it already filled in:
-//     - the iPhone share sheet: Share → PropertySearch opens
-//       propertysearch://add?url=<listing link> (ios/App/ShareExtension)
+//     - the iPhone share sheet: Share → ViewPal opens
+//       viewpal://add?url=<listing link> (ios/App/ShareExtension)
 //     - the website: /?add=<listing link> (bookmarks, other apps)
 //     The link waits here until the Properties view (after log-in) takes it.
 //   * a link to our own website that iOS opened in the app (universal
@@ -9,8 +9,11 @@
 import { App as CapApp } from "@capacitor/app";
 import { isNativeApp, liveSiteUrl } from "./platform";
 
-// Our website's host: links to it open here (universal links).
-const siteHost = new URL(liveSiteUrl).host;
+// Our website's hosts: links to them open here (universal links). The old
+// Vercel address is kept for links in emails sent before the rename.
+const siteHosts = new Set([new URL(liveSiteUrl).host, "viewpal.app", "www.viewpal.app", "property-search-4jcc.vercel.app"]);
+// viewpal:// from the share extension; propertysearch:// from builds before the rename.
+const APP_SCHEMES = new Set(["viewpal:", "propertysearch:"]);
 
 let pending = null;
 const listeners = new Set();
@@ -45,9 +48,9 @@ function openSitePage(parsed) {
 function fromAppUrl(url) {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol === "propertysearch:" && (parsed.host === "add" || parsed.pathname.replace(/\//g, "") === "add")) {
+    if (APP_SCHEMES.has(parsed.protocol) && (parsed.host === "add" || parsed.pathname.replace(/\//g, "") === "add")) {
       offer(parsed.searchParams.get("url"));
-    } else if (parsed.protocol === "https:" && parsed.host === siteHost) {
+    } else if (parsed.protocol === "https:" && siteHosts.has(parsed.host)) {
       openSitePage(parsed);
     }
   } catch {

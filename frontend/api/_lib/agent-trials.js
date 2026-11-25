@@ -19,7 +19,7 @@
 //     { action: "admin_code_email", agentId }   email a trial agent their new code
 //
 // Why a trial at all: most homes buyers save are marketed by agents who
-// aren't on PropertySearch. The buyer is our best salesperson, so an invited
+// aren't on ViewPal. The buyer is our best salesperson, so an invited
 // agent can join without a branch code and take bookings for 14 days. After
 // that, new bookings stop (slot_blocked, migration 034) until they have a
 // code, which keeps billing per branch.
@@ -60,10 +60,10 @@ export async function lookUpCode(code) {
 }
 
 export const CODE_ERROR =
-  "That sign-up code isn't right. Ask PropertySearch for your agency's code.";
+  "That sign-up code isn't right. Ask ViewPal for your agency's code.";
 export const branchName = (found) => [found.agency, found.branch].filter(Boolean).join(" · ");
 export const fullError = (found) =>
-  `${branchName(found)} has used all its places on PropertySearch. Request a place and we'll add one.`;
+  `${branchName(found)} has used all its places on ViewPal. Request a place and we'll add one.`;
 
 // --- Invites ------------------------------------------------------------------------
 
@@ -78,7 +78,7 @@ const MAX_EMAILS_PER_ADDRESS_PER_WEEK = 3;
 // favour to a real buyer, never a mailing list.
 const MAX_INVITES_PER_HOUSEHOLD_EVER = 40;
 const MAX_INVITE_EMAILS_PER_DAY = 200;
-const CONTACT_EMAIL = "hello@viewpal.co.uk";
+const CONTACT_EMAIL = "hello@viewpal.app";
 
 const isLive = (invite) => invite && !invite.used_at && new Date(invite.expires_at).getTime() > Date.now();
 const firstWord = (value) => String(value || "").trim().split(/\s+/)[0] || "";
@@ -182,10 +182,10 @@ function inviteEmailHtml(req, invite, { buyer: rawBuyer, address: rawAddress }) 
   return emailLayout(
     `${buyer || "A buyer"} would like to book viewings with you`,
     `<p style="font-size:15px;line-height:1.5;margin:0 0 12px;">${hi ? `Hi ${escapeHtml(hi)},` : "Hello,"}</p>
-    <p style="font-size:15px;line-height:1.5;margin:0 0 12px;">${who} is buying a home with PropertySearch${
+    <p style="font-size:15px;line-height:1.5;margin:0 0 12px;">${who} is buying a home with ViewPal${
       address ? ` and has saved <strong>${escapeHtml(address)}</strong>, which you're marketing` : ""
     }. They asked us to invite you.</p>
-    <p style="font-size:15px;line-height:1.5;margin:0 0 12px;">On PropertySearch, buyers book viewings straight into your diary.
+    <p style="font-size:15px;line-height:1.5;margin:0 0 12px;">On ViewPal, buyers book viewings straight into your diary.
     You set your viewing hours once. You see each buyer's position before they arrive. No phone tag.</p>
     <p style="font-size:15px;line-height:1.5;margin:0 0 20px;"><strong>Try it free for 14 days.</strong> No branch code needed.</p>
     <p style="margin:0 0 20px;">${button(url, "Start free trial")}</p>
@@ -206,7 +206,7 @@ export async function handleSendInvite(req, res, body) {
   if (email && !EMAIL_RE.test(email)) {
     return res.status(400).json({ error: "That email doesn't look right. Leave it blank to send the invite yourself." });
   }
-  if (email.endsWith("@viewpal.co.uk")) {
+  if (/@viewpal\.(app|co\.uk)$/i.test(email)) {
     return res.status(400).json({ error: "That's one of our addresses, not the agent's" });
   }
 
@@ -231,10 +231,10 @@ export async function handleSendInvite(req, res, body) {
   }
 
   if (email && (await isAgentEmail(email))) {
-    return res.status(409).json({ error: "This agent is already on PropertySearch.", onApp: true });
+    return res.status(409).json({ error: "This agent is already on ViewPal.", onApp: true });
   }
   if (await optedOut(email)) {
-    return res.status(409).json({ error: "This agent has asked not to get emails from PropertySearch. Please contact them directly." });
+    return res.status(409).json({ error: "This agent has asked not to get emails from ViewPal. Please contact them directly." });
   }
 
   const now = Date.now();
@@ -328,7 +328,7 @@ export async function handleSendInvite(req, res, body) {
   // agent, or ours didn't go.
   const url = inviteUrl(req, invite.token);
   const shareText = [
-    `Hi${agentName ? ` ${firstWord(agentName)}` : ""}, I use PropertySearch to book viewings${property.address ? ` and I've saved ${property.address}` : ""}.`,
+    `Hi${agentName ? ` ${firstWord(agentName)}` : ""}, I use ViewPal to book viewings${property.address ? ` and I've saved ${property.address}` : ""}.`,
     "If you join, I can book your viewing times straight into your diary. It's free for 14 days, no code needed:",
     url,
     buyer ? `Thanks, ${buyer}` : "Thanks",
@@ -341,7 +341,7 @@ export async function handleSendInvite(req, res, body) {
   try {
     sent = await sendEmail({
       to: email,
-      subject: `${plainText(buyer, 30) || "A buyer"} invited you to PropertySearch`,
+      subject: `${plainText(buyer, 30) || "A buyer"} invited you to ViewPal`,
       html: inviteEmailHtml(req, invite, { buyer, address: property.address }),
     });
   } catch (sendError) {
@@ -714,7 +714,7 @@ export async function handleAdminCodeEmail(req, res, body) {
   const joinUrl = `${base}/agent?code=${encodeURIComponent(agent.signup_code)}`;
   const result = await sendEmail({
     to: agent.email,
-    subject: "Your PropertySearch branch code",
+    subject: "Your ViewPal branch code",
     html: emailLayout(
       "Your branch code",
       `<p style="font-size:15px;line-height:1.5;margin:0 0 12px;">Hi ${escapeHtml(firstWord(agent.name))},</p>

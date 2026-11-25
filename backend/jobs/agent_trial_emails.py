@@ -36,7 +36,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 SITE = (os.getenv("APP_URL") or APP_URL).rstrip("/")
-CONTACT_EMAIL = "hello@viewpal.co.uk"
+CONTACT_EMAIL = "hello@viewpal.app"
 LONDON = ZoneInfo("Europe/London")
 
 
@@ -61,18 +61,18 @@ def which_email(ends_at, now):
 def build_email(agent, key, bookings):
     first = (agent.get("name") or "").split(" ")[0]
     if key == "day10":
-        subject = "4 days left on your PropertySearch trial"
+        subject = "4 days left on your ViewPal trial"
         title = "4 days left on your free trial"
         lead = "Your free trial ends in 4 days."
     else:
-        subject = "Your PropertySearch trial ends tomorrow"
+        subject = "Your ViewPal trial ends tomorrow"
         title = "Last day tomorrow"
         lead = "Your free trial ends tomorrow."
 
     if bookings:
         booked = (
             f"Buyers have booked <strong>{bookings} viewing{'s' if bookings != 1 else ''}</strong> "
-            "with you through PropertySearch so far."
+            "with you through ViewPal so far."
         )
     else:
         booked = "Add your viewing hours and buyers who've saved your listings can book themselves in."
@@ -80,7 +80,7 @@ def build_email(agent, key, bookings):
     settings_url = f"{SITE}/agent?view=settings"
     body = f"""<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f8f6f2;font-family:Arial,sans-serif;color:#1f2937;">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4ddd2;border-radius:14px;padding:24px;">
-<div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">PropertySearch</div>
+<div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">ViewPal</div>
 <h1 style="font-family:Georgia,serif;font-size:21px;color:#223a33;margin:0 0 16px;">{esc(title)}</h1>
 <p style="font-size:15px;line-height:1.5;margin:0 0 12px;">{('Hi ' + esc(first) + ',') if first else 'Hello,'}</p>
 <p style="font-size:15px;line-height:1.5;margin:0 0 12px;">{esc(lead)} {booked}</p>

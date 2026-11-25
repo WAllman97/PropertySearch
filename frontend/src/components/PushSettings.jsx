@@ -27,8 +27,8 @@ function PushSettings() {
   if (status === "denied") {
     return (
       <p className="push-note">
-        Notifications are switched off for PropertySearch. To turn them on, open the iPhone
-        Settings app → PropertySearch → Notifications.
+        Notifications are switched off for ViewPal. To turn them on, open the iPhone
+        Settings app → ViewPal → Notifications.
       </p>
     );
   }

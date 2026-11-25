@@ -96,16 +96,16 @@ jobs:
           stamp=$(date -u +%Y-%m-%d)
           tar -czf - -C backup . | gpg --batch --yes --pinentry-mode loopback \
             --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" \
-            --output "propertysearch-backup-$stamp.tar.gz.gpg"
+            --output "viewpal-backup-$stamp.tar.gz.gpg"
           rm -rf backup
-          ls -la propertysearch-backup-*.gpg
+          ls -la viewpal-backup-*.gpg
           echo "STAMP=$stamp" >> "$GITHUB_ENV"
 
       - name: Keep for 30 days
         uses: actions/upload-artifact@v4
         with:
           name: backup-${{ env.STAMP }}
-          path: propertysearch-backup-*.tar.gz.gpg
+          path: viewpal-backup-*.tar.gz.gpg
           retention-days: 30
           compression-level: 0
           if-no-files-found: error

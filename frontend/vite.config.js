@@ -90,7 +90,7 @@ function loadEnvFile(file) {
 }
 
 // Universal links: tell iPhones that links to this site (booking links in
-// emails, viewing pages...) should open the PropertySearch app when it's
+// emails, viewing pages...) should open the ViewPal app when it's
 // installed. Apple fetches /.well-known/apple-app-site-association from the
 // site; it names the app as "<Team ID>.<bundle ID>". The Team ID comes from
 // APNS_TEAM_ID (already set in Vercel for push), so nothing is hard-coded.

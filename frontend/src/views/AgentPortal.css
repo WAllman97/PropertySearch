@@ -1152,7 +1152,7 @@
   margin: 0;
 }
 
-/* Viewing requests to agents who aren't on PropertySearch */
+/* Viewing requests to agents who aren't on ViewPal */
 .viewing-request-form {
   display: flex;
   flex-direction: column;
@@ -1337,7 +1337,7 @@
   color: #223a33;
 }
 
-/* Time PropertySearch saved this agent (migration 030) */
+/* Time ViewPal saved this agent (migration 030) */
 .agent-time-saved {
   padding: 12px 16px;
 }

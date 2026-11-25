@@ -12,7 +12,7 @@ function PrivacyPage() {
   return (
     <div className="booking-shell privacy-page">
       <header className="booking-header">
-        <p className="eyebrow">PropertySearch</p>
+        <p className="eyebrow">ViewPal</p>
         <h1>Privacy policy</h1>
         <p className="muted">Last updated {UPDATED}</p>
       </header>

@@ -634,10 +634,10 @@ function AgentCodes() {
   }
 
   function approvalEmail(request) {
-    const subject = "Your PropertySearch place is ready";
+    const subject = "Your ViewPal place is ready";
     const body =
       `Hi ${request.name.split(" ")[0]},\n\n` +
-      `There's now a place for you at ${[request.agency, request.branch].filter(Boolean).join(", ")} on PropertySearch. ` +
+      `There's now a place for you at ${[request.agency, request.branch].filter(Boolean).join(", ")} on ViewPal. ` +
       `Sign up here with your work email (${request.email}):\n\n${linkFor(request.code)}\n\nThanks`;
     return `mailto:${request.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
@@ -820,7 +820,7 @@ function NotFound() {
       <section className="card">
         <h1>Page not found</h1>
         <p>
-          <a href="/">Go to PropertySearch</a>
+          <a href="/">Go to ViewPal</a>
         </p>
       </section>
     </div>
@@ -857,7 +857,7 @@ function AdminPage() {
       <div className="app-shell">
         <header className="app-header">
           <div>
-            <p className="eyebrow">PropertySearch</p>
+            <p className="eyebrow">ViewPal</p>
             <h1>Home-buying command centre</h1>
           </div>
         </header>
@@ -874,7 +874,7 @@ function AdminPage() {
     <div className="app-shell admin-page">
       <header className="app-header">
         <div>
-          <p className="eyebrow">PropertySearch</p>
+          <p className="eyebrow">ViewPal</p>
           <h1>Admin</h1>
         </div>
         <a className="secondary-button" href="/">

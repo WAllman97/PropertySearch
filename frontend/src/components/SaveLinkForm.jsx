@@ -205,7 +205,7 @@ function SaveLinkForm({ onSaved, initialUrl = null }) {
           {gotDetails ? (
             <p className="save-link-note">
               {preview.from === "agent"
-                ? "Details from the listing agent on PropertySearch. Check and save."
+                ? "Details from the listing agent on ViewPal. Check and save."
                 : `Details from ${portalName}. Check and save.`}
             </p>
           ) : (

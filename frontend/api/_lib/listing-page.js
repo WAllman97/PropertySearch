@@ -14,11 +14,11 @@
 // posing as a browser (docs/DATA_SOURCES.md). Vercel can override it.
 const UA =
   process.env.LINK_PREVIEW_USER_AGENT ||
-  "PropertySearchLinkPreview/1.0 (+https://property-search-4jcc.vercel.app/support)";
+  "ViewPalLinkPreview/1.0 (+https://viewpal.app/support)";
 
 // Off switch: PORTAL_PREVIEWS=off in Vercel stops every portal fetch at once
 // (say a portal asks us to). Saving a link still works: the buyer or agent
-// types the details, and agents' own listings on PropertySearch fill in as
+// types the details, and agents' own listings on ViewPal fill in as
 // before, since they never needed the portal.
 export const portalPreviewsOn = () => String(process.env.PORTAL_PREVIEWS || "on").toLowerCase() !== "off";
 const TIMEOUT_MS = 8000;

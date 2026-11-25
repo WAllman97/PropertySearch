@@ -276,12 +276,12 @@ function PublicViewingPage({ listingId }) {
           <p className="muted">
             {agentText} has your details. A confirmation with a calendar invite is on its way to{" "}
             {form.email}, with a link to cancel if you can't make it.
-            {state.buyer ? " It's in your PropertySearch calendar too." : ""}
+            {state.buyer ? " It's in your ViewPal calendar too." : ""}
           </p>
           {listing.notes && <p className="viewing-note">{listing.notes}</p>}
         </section>
         <p className="booking-footer muted">
-          House hunting? <a href="/">PropertySearch</a> tracks listings, price drops and local sold
+          House hunting? <a href="/">ViewPal</a> tracks listings, price drops and local sold
           prices for you.
         </p>
       </div>

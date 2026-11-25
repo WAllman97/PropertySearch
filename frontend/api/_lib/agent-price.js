@@ -1,5 +1,5 @@
 // An agent changed a listing's price: pass it on to every household that
-// saved that home. Agents on PropertySearch are the licensed source for
+// saved that home. Agents on ViewPal are the licensed source for
 // price changes (portals aren't read on a schedule for app users).
 //   POST /api/send-listing { action: "price_update", listingId }
 // Called by the agent portal after the agent saves a new price.
@@ -104,7 +104,7 @@ export async function handlePriceUpdate(req, res, listing, agentId) {
                 ${detailRow("Was", `<s>${escapeHtml(pounds(cut.old))}</s> (down ${escapeHtml(pounds(drop))}, ${pct}%)`)}
                 ${detailRow("Agent", escapeHtml(agent))}
               </table>
-              <p style="margin:0;"><a href="${escapeHtml(base)}/?view=${view}" style="color:#223a33;font-weight:bold;">Open it in PropertySearch</a>.
+              <p style="margin:0;"><a href="${escapeHtml(base)}/?view=${view}" style="color:#223a33;font-weight:bold;">Open it in ViewPal</a>.
               The agent's viewing times are there if you'd like another look. Reply to this email to reach the agent.</p>
               ${unsubscribeFooter(unsubscribe, "price_drops")}`
             ),

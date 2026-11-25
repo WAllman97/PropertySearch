@@ -21,13 +21,13 @@ App Store Connect text, privacy answers and review notes are in
 ## What's already done (on Windows)
 
 - Capacitor 8 installed; `frontend/capacitor.config.json` sets the app name
-  (PropertySearch) and bundle ID (`com.wallman97.propertysearch`, also set in
+  (ViewPal) and bundle ID (`com.wallman97.propertysearch`, also set in
   the Xcode project).
 - App icon and launch screen are in the Xcode asset catalog, made from
   `frontend/resources/icon.svg`. To change them, edit the SVG and run
   `npm run app:icons` (also updates the website's favicon).
 - Inside the app, `/api/*` calls and any link we share or email point at the
-  live site, `https://property-search-4jcc.vercel.app` (`src/lib/platform.js`).
+  live site, `https://viewpal.app` (`src/lib/platform.js`).
   Override with `VITE_PUBLIC_SITE_URL` in `frontend/.env` if the domain changes.
 - The API accepts requests from the app (`api/_lib/cors.js`). **This must be
   deployed to Vercel before the app can talk to the server.**
@@ -51,17 +51,17 @@ Do these once, in this order, at
 Identifiers & Profiles, and [App Store Connect](https://appstoreconnect.apple.com).
 
 1. **App ID:** Identifiers → **+** → App IDs → App. Description
-   "PropertySearch", Bundle ID **Explicit** `com.wallman97.propertysearch`,
+   "ViewPal", Bundle ID **Explicit** `com.wallman97.propertysearch`,
    tick **Push Notifications**, Continue → Register. (This can't be changed
    once a build is uploaded.)
-2. **Push key:** Keys → **+**, name "PropertySearch push", tick **Apple Push
+2. **Push key:** Keys → **+**, name "ViewPal push", tick **Apple Push
    Notifications service (APNs)**, Register → **Download** the `.p8` (only
    downloads once: keep a copy safe). Note its **Key ID** and your **Team ID**
    (Membership details). Add `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID` to
    Vercel and GitHub, see "Push notifications" below.
 3. **The app in App Store Connect:** Apps → **+** → New App. Platform iOS,
-   name "PropertySearch" (or an alternative if it's taken), language English
-   (UK), bundle ID `com.wallman97.propertysearch`, SKU `propertysearch-ios`,
+   name "ViewPal" (or an alternative if it's taken), language English
+   (UK), bundle ID `com.wallman97.propertysearch`, SKU `viewpal-ios`,
    Full Access.
 4. **App Store Connect API key** (lets GitHub sign and upload): Users and
    Access → **Integrations** → App Store Connect API → Team Keys → **+**
@@ -186,7 +186,7 @@ Settings → Phone Notifications), stores the phone's token in `device_tokens`
   opens the viewing times page.
 - **Viewing reminder** the day before (`backend/jobs/send_viewing_reminders.py`);
   tapping opens the Calendar.
-- **Price drop** when an agent on PropertySearch cuts the price of a home
+- **Price drop** when an agent on ViewPal cuts the price of a home
   you've saved (`api/_lib/agent-price.js`).
 - **Booking request** when an agent asks for a call or viewing through your
   booking page (`api/booking.js`); tapping opens the Calendar to accept or
@@ -199,7 +199,7 @@ below is set they skip sending and log `[push skipped: APNs not configured]`.
 One-time setup once the developer account is approved:
 
 1. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → **+**.
-   Name it e.g. "PropertySearch push", tick **Apple Push Notifications service
+   Name it e.g. "ViewPal push", tick **Apple Push Notifications service
    (APNs)**, Continue → Register → **Download**. The `.p8` file downloads only
    once: keep a copy somewhere safe (password manager or cloud drive).
 2. Note the **Key ID** (10 characters, on the key page) and your **Team ID**
@@ -234,7 +234,7 @@ invite link points at the live site, where the partner signs up, then logs
 in on their phone.
 
 Saved homes are never re-read from a portal. Price cuts and Under offer /
-Sold STC / Off market come from agents on PropertySearch updating their own
+Sold STC / Off market come from agents on ViewPal updating their own
 listings; sold-price comparisons come from HM Land Registry
 (`docs/DATA_SOURCES.md`).
 

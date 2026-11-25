@@ -68,13 +68,13 @@ function SuggestedTimePage({ token }) {
               <div className="offer-page-done" role="status">
                 <p>
                   ✅ Booked for <strong>{longFormatter.format(new Date(time))}</strong>. The agent has been
-                  told, it's in your PropertySearch calendar, and a calendar invite is on its way.
+                  told, it's in your ViewPal calendar, and a calendar invite is on its way.
                 </p>
               </div>
             ) : done === "cancelled" || ["cancelled", "declined"].includes(r.status) ? (
               <p className="muted">
                 {done ? "No problem. The agent has been told you can't make it." : "This request is closed."} You
-                can ask for another time from the home in PropertySearch.
+                can ask for another time from the home in ViewPal.
               </p>
             ) : (
               <>

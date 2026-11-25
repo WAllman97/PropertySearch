@@ -156,7 +156,7 @@ def _agent_push(user_id, title, body, url="/agent"):
 def _email_page(heading, inner):
     return f"""<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f8f6f2;font-family:Arial,sans-serif;color:#1f2937;">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4ddd2;border-radius:14px;padding:24px;">
-<div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">PropertySearch</div>
+<div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">ViewPal</div>
 <h1 style="font-family:Georgia,serif;font-size:21px;color:#223a33;margin:0 0 12px;">{_esc(heading)}</h1>
 {inner}
 </div></body></html>"""

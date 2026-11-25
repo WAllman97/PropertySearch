@@ -11,7 +11,7 @@ if (isNativeApp) document.documentElement.classList.add("native-app");
 
 // Before rendering, so a notification tap that launched the app is caught.
 listenForNotificationTaps();
-// Property links shared to the app (Share → PropertySearch, or /?add=).
+// Property links shared to the app (Share → ViewPal, or /?add=).
 listenForSharedLinks();
 
 ReactDOM.createRoot(document.getElementById("root")).render(

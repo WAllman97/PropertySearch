@@ -12,7 +12,7 @@ const STATUS_TEXT = {
   awaiting_agent: "Waiting for the agent to confirm",
   confirmed: "✓ Confirmed by the agent",
   disputed: "The agent says this isn't right: check with them",
-  unverified: "Not confirmed (this agent isn't on PropertySearch)",
+  unverified: "Not confirmed (this agent isn't on ViewPal)",
 };
 
 function pounds(amount) {

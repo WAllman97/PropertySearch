@@ -250,7 +250,7 @@ function AgentCodeAuth() {
         <h1>Let buyers book viewings themselves</h1>
         <p className="muted">
           Add your listings and the times you can show them. Buyers who have the home saved in
-          PropertySearch see those times and book straight in: no phone tag, and you get their
+          ViewPal see those times and book straight in: no phone tag, and you get their
           details and a calendar invite for every booking.
         </p>
       </header>
@@ -264,7 +264,7 @@ function AgentCodeAuth() {
         {mode === "signup" && full && !requested && (
           <p className="agent-joining agent-full">
             <strong>{codeAgency || "Your agency"}</strong> has used all its places on
-            PropertySearch. Add your details and request a place: once it's added, use the same
+            ViewPal. Add your details and request a place: once it's added, use the same
             link to sign up.
           </p>
         )}
@@ -375,7 +375,7 @@ function AgentCodeAuth() {
                   onChange={update("code")}
                 />
                 <span className="field-hint">
-                  Your branch's code from PropertySearch. No code?{" "}
+                  Your branch's code from ViewPal. No code?{" "}
                   <a href="/agents#get-a-code">Ask for one</a>.
                 </span>
               </label>
@@ -426,7 +426,7 @@ function AgentCodeAuth() {
       </section>
 
       <p className="muted agent-auth-foot">
-        New to PropertySearch? <a href="/agents">See how it works for agents</a>.
+        New to ViewPal? <a href="/agents">See how it works for agents</a>.
         <br />
         Buying a home? <a href="/">Log in to the buyer app</a>.
       </p>
@@ -757,7 +757,7 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
           </p>
         ) : matches > 0 ? (
           <p>
-            {matches} buyer{matches === 1 ? "" : "s"} on PropertySearch{" "}
+            {matches} buyer{matches === 1 ? "" : "s"} on ViewPal{" "}
             {matches === 1 ? "is" : "are"} looking for a home like this.
           </p>
         ) : (
@@ -921,7 +921,7 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
           ? "Add the postcode to see how many buyers this matches."
           : matchCount === 0
             ? "No buyers' searches match this yet. You can still share your booking link."
-            : `${matchCount} buyer${matchCount === 1 ? "" : "s"} on PropertySearch match${matchCount === 1 ? "es" : ""} this.`}
+            : `${matchCount} buyer${matchCount === 1 ? "" : "s"} on ViewPal match${matchCount === 1 ? "es" : ""} this.`}
       </p>
 
       {error && <p className="booking-error">{error}</p>}
@@ -1152,7 +1152,7 @@ function BuyerSearchStatus({ search }) {
         ? `Search paused until ${new Date(`${search.paused_until}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
         : "Search paused";
   return (
-    <span className={`buyer-search-status ${search.search_status}`} title="Set by the buyer in PropertySearch">
+    <span className={`buyer-search-status ${search.search_status}`} title="Set by the buyer in ViewPal">
       {text}
     </span>
   );
@@ -1206,7 +1206,7 @@ function BuyerPositionFacts({ position }) {
             type="button"
             className="link-button proof-link"
             onClick={() => openProof(position.proof_path)}
-            title="Uploaded by the buyer; not checked by PropertySearch"
+            title="Uploaded by the buyer; not checked by ViewPal"
           >
             📄 View {proofLabel(position)}
           </button>
@@ -2664,7 +2664,7 @@ function AgentSettings({ agent, email, hoursCard, isBuyer, onLogOut }) {
   );
 }
 
-// Roughly how much time PropertySearch saved this agent (migration 030):
+// Roughly how much time ViewPal saved this agent (migration 030):
 // the evidence for "is it worth it". Hidden until there's something to show.
 const SAVED_ROWS = [
   { kind: "bookings", label: (n) => `${n} viewing${n === 1 ? "" : "s"} booked without a phone call`, each: 10, unit: "booking" },
@@ -3415,7 +3415,7 @@ function AgentPortal() {
     <div className={`app-shell${user && agent ? " signed-in" : ""}`}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">PropertySearch for agents</p>
+          <p className="eyebrow">ViewPal for agents</p>
           <h1>{agent ? agent.name : "Viewing bookings"}</h1>
         </div>
         {/* With a profile, these live in the Settings tab instead. */}

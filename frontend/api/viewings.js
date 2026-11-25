@@ -2,7 +2,7 @@
 //   POST /api/viewings { action: "book", slotId, propertyId, phone }   buyer
 //   POST /api/viewings { action: "cancel", bookingId }                  buyer or agent
 //   POST /api/viewings { action: "cancel_slot", slotId }                agent
-//   Viewing requests to agents who aren't on PropertySearch: see
+//   Viewing requests to agents who aren't on ViewPal: see
 //   _lib/viewing-requests.js (request, cancel_request, accept_proposal,
 //   request_details, respond_request, request_opt_out).
 //
@@ -239,7 +239,7 @@ async function handler(req, res) {
   if (action === "book") return handleBook(req, res);
   if (action === "cancel") return handleCancel(req, res);
   if (action === "cancel_slot") return handleCancelSlot(req, res);
-  // Requests to agents who aren't on PropertySearch (_lib/viewing-requests.js).
+  // Requests to agents who aren't on ViewPal (_lib/viewing-requests.js).
   if (action === "request") return handleRequest(req, res);
   if (action === "cancel_request") return handleCancelRequest(req, res);
   if (action === "accept_proposal") return handleAcceptProposal(req, res);

@@ -86,7 +86,7 @@ function AgentInviteSignup() {
     <div className="booking-shell">
       <header className="booking-header">
         <p className="eyebrow">For estate agents</p>
-        <h1>{invite?.buyer ? `${invite.buyer} invited you to PropertySearch` : "You're invited to PropertySearch"}</h1>
+        <h1>{invite?.buyer ? `${invite.buyer} invited you to ViewPal` : "You're invited to ViewPal"}</h1>
         <p className="muted">
           Buyers book viewings straight into your diary. Set your viewing hours once, and see each buyer's position
           before they arrive. Free for {invite?.trialDays || 14} days, no code needed.
@@ -105,11 +105,11 @@ function AgentInviteSignup() {
     return shell(
       stopped ? (
         <p className="agent-joining" role="status">
-          Done. We won't email this address about PropertySearch again.
+          Done. We won't email this address about ViewPal again.
         </p>
       ) : (
         <>
-          <h3>Stop emails from PropertySearch?</h3>
+          <h3>Stop emails from ViewPal?</h3>
           <p className="muted">We won't send this address any more invites.</p>
           <button type="button" className="secondary-button" disabled={busy} onClick={stopEmails}>
             Don't email me again

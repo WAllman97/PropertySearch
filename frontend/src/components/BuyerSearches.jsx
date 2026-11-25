@@ -559,7 +559,7 @@ function BuyerSearches({ user }) {
         const result = await response.json().catch(() => ({}));
         if (result.sent) {
           setMessage(
-            `Search saved. ${result.sent} home${result.sent === 1 ? "" : "s"} already on PropertySearch ${
+            `Search saved. ${result.sent} home${result.sent === 1 ? "" : "s"} already on ViewPal ${
               result.sent === 1 ? "fits" : "fit"
             }: ${result.sent === 1 ? "it's" : "they're"} in your list, and we've emailed you the details.`
           );
@@ -591,7 +591,7 @@ function BuyerSearches({ user }) {
     try {
       const result = await enablePush();
       if (result === "denied") {
-        setPushError("Notifications are off for PropertySearch. Turn them on in the iPhone's Settings app.");
+        setPushError("Notifications are off for ViewPal. Turn them on in the iPhone's Settings app.");
         return;
       }
       setOfferPush(false);

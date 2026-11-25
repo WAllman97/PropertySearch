@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>PropertySearch</string>
+        <string>ViewPal</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -75,7 +75,7 @@
 			<string>com.wallman97.propertysearch</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>propertysearch</string>
+				<string>viewpal</string>
 			</array>
 		</dict>
 	</array>

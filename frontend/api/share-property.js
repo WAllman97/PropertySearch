@@ -2,7 +2,7 @@ import { requireHouseholdUser, supabaseAdmin, underRateLimit } from "./_lib/hous
 import { withCors } from "./_lib/cors.js";
 
 const resendApiKey = process.env.RESEND_API_KEY;
-const fromEmail = process.env.FROM_EMAIL || "PropertySearch <onboarding@resend.dev>";
+const fromEmail = process.env.FROM_EMAIL || "ViewPal <onboarding@resend.dev>";
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_SHARES_PER_DAY = 20;
@@ -85,7 +85,7 @@ function buildShareHtml(property, message, senderEmail) {
         </td></tr>
         <tr><td style="font-family:Arial,sans-serif;font-size:11px;color:#9ca3af;
                        text-align:center;padding:16px 0;">
-          Shared from PropertySearch.
+          Shared from ViewPal.
         </td></tr>
       </table>
     </td></tr>

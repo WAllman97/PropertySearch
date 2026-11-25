@@ -14,7 +14,7 @@
 // Replaces scraping: instead of us crawling portals, agents push listings
 // to buyers who want them (migrations 009 + 010). Each buyer gets a listing
 // at most once (listing_sends). Household buyers also get it added to their
-// PropertySearch list, where the agent's viewing times show up to book.
+// ViewPal list, where the agent's viewing times show up to book.
 // The agent only ever learns how many buyers it reached, never who.
 import { requireUser, supabaseAdmin, underRateLimit } from "./_lib/household.js";
 import { appBaseUrl } from "./_lib/booking.js";
@@ -119,9 +119,9 @@ function listingEmail(listing, agent, base, inList, token, unsubscribe) {
     </p>
     <p style="margin:0;color:#6b7280;font-size:13px;">${
       inList
-        ? "It's been added to your PropertySearch list. "
+        ? "It's been added to your ViewPal list. "
         : ""
-    }You're getting this because it fits one of your saved searches. Change them in PropertySearch → Settings.</p>
+    }You're getting this because it fits one of your saved searches. Change them in ViewPal → Settings.</p>
     ${unsubscribeFooter(unsubscribe, "matches")}`
   );
 }

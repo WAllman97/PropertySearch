@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { apiUrl } from "../lib/platform";
 import "./AgentPortal.css";
 
-// /request/<token>: an agent who isn't on PropertySearch answers a buyer's
+// /request/<token>: an agent who isn't on ViewPal answers a buyer's
 // viewing request (migration 023). No login: the token is the private link
 // from our email. Nothing changes until a button here is pressed, because
 // mail scanners open links in emails by themselves.
@@ -30,7 +30,7 @@ async function call(body) {
 }
 
 // A single-use free-trial link made from this request (migration 034), or
-// null if the agent is already on PropertySearch or opted out.
+// null if the agent is already on ViewPal or opted out.
 async function trialInvite(token) {
   try {
     const response = await fetch(apiUrl("/api/agent-signup"), {
@@ -79,7 +79,7 @@ function ViewingRequestPage({ token }) {
   }, []);
 
   // They've just done the job by hand: the best moment to show how
-  // PropertySearch would save them the trouble. Made only now, so an invite
+  // ViewPal would save them the trouble. Made only now, so an invite
   // isn't created for every page view.
   useEffect(() => {
     if (done !== "confirmed" && done !== "proposed") return undefined;
@@ -197,7 +197,7 @@ function ViewingRequestPage({ token }) {
       )}
       {request.optedOut && (
         <section className="card">
-          <p className="muted">You won't get more viewing requests through PropertySearch at this address.</p>
+          <p className="muted">You won't get more viewing requests through ViewPal at this address.</p>
         </section>
       )}
 
@@ -321,7 +321,7 @@ function ViewingRequestPage({ token }) {
         <section className="card request-pitch">
           <h3>Let {request.buyerName} book you directly next time</h3>
           <p className="muted">
-            This buyer uses PropertySearch to book viewings. Join free for 14 days and their next booking lands in
+            This buyer uses ViewPal to book viewings. Join free for 14 days and their next booking lands in
             your diary. No code needed.
           </p>
           <a className="primary-button" href={`/agent?invite=${invite}`}>
@@ -332,7 +332,7 @@ function ViewingRequestPage({ token }) {
         <section className="card request-pitch">
           <h3>Book viewings without the back-and-forth</h3>
           <p className="muted">
-            On PropertySearch you set your viewing hours once, buyers who've saved your listings book themselves in,
+            On ViewPal you set your viewing hours once, buyers who've saved your listings book themselves in,
             and you see their buying position before they arrive.
           </p>
           <a className="secondary-button" href="/agents">
