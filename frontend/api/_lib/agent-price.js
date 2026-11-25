@@ -41,6 +41,10 @@ export async function handlePriceUpdate(req, res, listing, agentId) {
     return res.status(429).json({ error: "Too many price changes today. Please try again tomorrow." });
   }
 
+  // A hidden listing (or a stale copy another agent left behind) mustn't
+  // rewrite the price on buyers' saved homes.
+  if (!listing.is_active) return res.status(200).json({ success: true, updated: 0, notified: 0 });
+
   const key = listingKey(listing.listing_url);
   const portalId = key?.split(":")[1];
   if (!portalId) return res.status(200).json({ success: true, updated: 0, notified: 0 });

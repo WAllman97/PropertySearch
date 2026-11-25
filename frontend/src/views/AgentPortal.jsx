@@ -1782,7 +1782,7 @@ function ListingCard({ listing, slots, bookingsBySlot, positions, agentId, reach
       {days.length === 0 ? (
         <p className="muted">
           {hoursOn && listing.auto_times && listing.is_active
-            ? "No free times in your weekly hours coming up. Check your hours and time off above."
+            ? "No free times in your weekly hours coming up. Check your hours and time off in Settings."
             : hoursOn
               ? "No upcoming viewing times. Add some by hand below."
               : "No upcoming viewing times yet. Set your viewing hours above and times appear here automatically, or add some by hand."}
@@ -1978,6 +1978,14 @@ function londonDayKey(date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(date);
 }
 
+// The London date n days after today, as noon UTC on that date. Stepping
+// whole calendar days (not 24-hour blocks) stays right when the clocks
+// change: no doubled or skipped Sunday.
+function londonDaysFromToday(n) {
+  const [y, m, d] = londonDayKey(new Date()).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n, 12));
+}
+
 function AgentAgenda({ listings, slots, bookingsBySlot, positions }) {
   const now = Date.now();
   const weekAhead = now + 7 * 864e5;
@@ -1988,7 +1996,7 @@ function AgentAgenda({ listings, slots, bookingsBySlot, positions }) {
     .sort((a, b) => new Date(a.slot.starts_at) - new Date(b.slot.starts_at));
 
   const todayKey = londonDayKey(new Date());
-  const tomorrowKey = londonDayKey(new Date(now + 864e5));
+  const tomorrowKey = londonDayKey(londonDaysFromToday(1));
   const days = [];
   for (const item of items) {
     const key = londonDayKey(new Date(item.slot.starts_at));
@@ -2074,10 +2082,10 @@ function AgentCalendar({ listings, slots, bookingsBySlot, positions, timeOff }) 
   }
   const bookedDays = new Set(upcoming.filter((s) => booked(s).length).map((s) => londonDayKey(new Date(s.starts_at))));
   const todayKey = londonDayKey(new Date(now));
-  const tomorrowKey = londonDayKey(new Date(now + 864e5));
+  const tomorrowKey = londonDayKey(londonDaysFromToday(1));
   const dayLabel = (key, at) => (key === todayKey ? "Today" : key === tomorrowKey ? "Tomorrow" : agendaDay.format(at));
   const offOn = (key) => timeOff.some((t) => key >= t.starts_on && key <= t.ends_on);
-  const strip = Array.from({ length: 14 }, (_, n) => new Date(now + n * 864e5));
+  const strip = Array.from({ length: 14 }, (_, n) => londonDaysFromToday(n));
 
   const next = upcoming.find((s) => booked(s).length);
   const nextListing = next && listingById[next.listing_id];
@@ -2477,120 +2485,134 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut }) {
     );
   }
 
-  if (view === "calendar") {
-    return (
-      <div className="agent-dashboard">
-        {heading("Calendar", "Every viewing across your listings.")}
-        <AgentCalendar
-          listings={listings}
-          slots={slots}
-          bookingsBySlot={bookingsBySlot}
-          positions={positions}
-          timeOff={timeOff}
-        />
-      </div>
-    );
-  }
-
-  if (view === "settings") {
-    return (
-      <div className="agent-dashboard">
-        {heading("Settings")}
-        <AgentSettings agent={agent} email={email} hoursCard={hoursCard} isBuyer={isBuyer} onLogOut={onLogOut} />
-      </div>
-    );
-  }
-
-  if (view === "today") {
-    return (
-      <div className="agent-dashboard">
-        {heading(
-          "Today",
-          bookedCount
-            ? `${bookedCount} buyer${bookedCount === 1 ? "" : "s"} booked across ${upcomingBooked} upcoming time${upcomingBooked === 1 ? "" : "s"}.`
-            : "No bookings yet. Buyers who've saved one of your listings will see the times you add."
-        )}
-
-        <TimeSaved refreshKey={listings.length + bookedCount + offers.length} />
-
-        <AgentGettingStarted
-          agentId={agent.user_id}
-          listings={listings}
-          slots={slots}
-          reach={reach}
-          hoursSet={!!availability}
-          onGo={goTo}
-        />
-
-        {/* What needs doing: offers to answer, then who you're seeing. */}
-        <OfferRequests offers={offers} positions={positions} onChanged={load} />
-
-        {listings.length > 0 && (
-          <AgentAgenda listings={listings} slots={slots} bookingsBySlot={bookingsBySlot} positions={positions} />
-        )}
-
-        {listings.length > 0 && (
-          <button type="button" className="secondary-button agent-today-more" onClick={() => setView("calendar")}>
-            See the full calendar
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  // Listings tab.
-  return (
-    <div className="agent-dashboard">
-      {heading(
-        "Listings",
-        listings.length
-          ? `${listings.length} listing${listings.length === 1 ? "" : "s"}. Tap one to change its status, times or price.`
-          : "Paste a Rightmove, Zoopla or OnTheMarket link and we fill in the rest."
-      )}
-
-      <section className="card agent-add-section" id="agent-add-listing">
-        {addingListing || listings.length === 0 ? (
-          <>
-            <div className="section-header">
-              <h3>Add a listing</h3>
-              {listings.length > 0 && (
-                <button type="button" className="link-button" onClick={() => setAddingListing(false)}>
-                  Close
-                </button>
-              )}
-            </div>
-            <ListingForm agentId={agent.user_id} onSaved={load} />
-          </>
-        ) : (
-          <button type="button" className="primary-button agent-add-button" onClick={() => setAddingListing(true)}>
-            + Add a listing
-          </button>
-        )}
-      </section>
-
-      <div id="agent-listings" />
-      {listings.length > 0 && (
-        <h3 className="agent-listings-head">
-          Your listings <span className="muted">({listings.length})</span>
-        </h3>
-      )}
-      {listings.map((listing) => (
-        <ListingCard
-          key={listing.id}
-          listing={listing}
-          slots={slotsByListing[listing.id] || []}
-          bookingsBySlot={bookingsBySlot}
-          positions={positions}
-          agentId={agent.user_id}
-          reach={reach[listing.id]}
-          hoursOn={!!availability?.enabled}
-          blocked={blocked}
-          // A few listings: show them in full. Lots: compact, tap to open.
-          startOpen={listings.length <= 2}
-          onChanged={load}
-        />
-      ))}
+  // Every tab stays in the page, hidden when not chosen, so switching tab
+  // keeps a half-typed listing, open cards and scroll-to targets.
+  const tab = (id, content) => (
+    <div key={id} hidden={view !== id}>
+      {content}
     </div>
+  );
+
+  return (
+    <>
+      {tab(
+        "today",
+        <div className="agent-dashboard">
+          {heading(
+            "Today",
+            bookedCount
+              ? `${bookedCount} buyer${bookedCount === 1 ? "" : "s"} booked across ${upcomingBooked} upcoming time${upcomingBooked === 1 ? "" : "s"}.`
+              : "No bookings yet. Buyers who've saved one of your listings will see the times you add."
+          )}
+
+          <TimeSaved refreshKey={listings.length + bookedCount + offers.length} />
+
+          <AgentGettingStarted
+            agentId={agent.user_id}
+            listings={listings}
+            slots={slots}
+            reach={reach}
+            hoursSet={!!availability}
+            onGo={goTo}
+          />
+
+          {/* What needs doing: offers to answer, then who you're seeing. */}
+          <OfferRequests offers={offers} positions={positions} onChanged={load} />
+
+          {listings.length > 0 && (
+            <AgentAgenda listings={listings} slots={slots} bookingsBySlot={bookingsBySlot} positions={positions} />
+          )}
+
+          {listings.length > 0 && (
+            <button type="button" className="secondary-button agent-today-more" onClick={() => setView("calendar")}>
+              See the full calendar
+            </button>
+          )}
+        </div>
+      )}
+      {tab(
+        "listings",
+        <div className="agent-dashboard">
+          {heading(
+            "Listings",
+            listings.length
+              ? `${listings.length} listing${listings.length === 1 ? "" : "s"}. Tap one to change its status, times or price.`
+              : "Paste a Rightmove, Zoopla or OnTheMarket link and we fill in the rest."
+          )}
+
+          <section className="card agent-add-section" id="agent-add-listing">
+            {addingListing || listings.length === 0 ? (
+              <>
+                <div className="section-header">
+                  <h3>Add a listing</h3>
+                  {listings.length > 0 && (
+                    <button type="button" className="link-button" onClick={() => setAddingListing(false)}>
+                      Close
+                    </button>
+                  )}
+                </div>
+                <ListingForm
+                  agentId={agent.user_id}
+                  onSaved={() => {
+                    // The first listing would otherwise close the form and hide
+                    // its "Added, sent to N buyers" confirmation.
+                    setAddingListing(true);
+                    load();
+                  }}
+                />
+              </>
+            ) : (
+              <button type="button" className="primary-button agent-add-button" onClick={() => setAddingListing(true)}>
+                + Add a listing
+              </button>
+            )}
+          </section>
+
+          <div id="agent-listings" />
+          {listings.length > 0 && (
+            <h3 className="agent-listings-head">
+              Your listings <span className="muted">({listings.length})</span>
+            </h3>
+          )}
+          {listings.map((listing) => (
+            <ListingCard
+              key={listing.id}
+              listing={listing}
+              slots={slotsByListing[listing.id] || []}
+              bookingsBySlot={bookingsBySlot}
+              positions={positions}
+              agentId={agent.user_id}
+              reach={reach[listing.id]}
+              hoursOn={!!availability?.enabled}
+              blocked={blocked}
+              // A few listings: show them in full. Lots: compact, tap to open.
+              startOpen={listings.length <= 2}
+              onChanged={load}
+            />
+          ))}
+        </div>
+      )}
+      {tab(
+        "calendar",
+        <div className="agent-dashboard">
+          {heading("Calendar", "Every viewing across your listings.")}
+          <AgentCalendar
+            listings={listings}
+            slots={slots}
+            bookingsBySlot={bookingsBySlot}
+            positions={positions}
+            timeOff={timeOff}
+          />
+        </div>
+      )}
+      {tab(
+        "settings",
+        <div className="agent-dashboard">
+          {heading("Settings")}
+          <AgentSettings agent={agent} email={email} hoursCard={hoursCard} isBuyer={isBuyer} onLogOut={onLogOut} />
+        </div>
+      )}
+    </>
   );
 }
 

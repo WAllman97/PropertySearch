@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { fromLocalInputValue, toLocalInputValue } from "../utils/datetime";
 import PropertyScoreEditor from "../components/PropertyScoreEditor";
@@ -162,6 +162,9 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesMessage, setNotesMessage] = useState("");
   const [editingViewing, setEditingViewing] = useState(false);
+  // Which notes request is current, and whether this home's notes loaded.
+  const notesRequest = useRef(0);
+  const notesLoaded = useRef(false);
   const { items: mustHaves } = useMustHaves();
   // Each home's must-have ticks, for the tiles.
   const [checklists, setChecklists] = useState({});
@@ -199,8 +202,10 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
       });
   }, [focusPropertyId, onFocused]);
 
-  async function loadWatchlist() {
-    setLoading(true);
+  // quiet: refresh in place (after a status tap, a booking, going back)
+  // instead of swapping the list for a spinner and losing the scroll.
+  async function loadWatchlist({ quiet = false } = {}) {
+    if (!quiet) setLoading(true);
 
     const { data, error } = await supabase
       .from("properties")
@@ -270,10 +275,12 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
       setSelectedProperty(data);
     }
 
-    await loadWatchlist();
+    await loadWatchlist({ quiet: true });
   }
 
   async function loadNotes(propertyId) {
+    const ticket = ++notesRequest.current;
+    notesLoaded.current = false;
     setNotesMessage("");
     setEditingViewing(false);
 
@@ -283,9 +290,13 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
       .eq("property_id", propertyId)
       .maybeSingle();
 
+    // Opened another home since: this answer is for the old one.
+    if (ticket !== notesRequest.current) return;
+
     if (error) {
       console.error("Error loading notes:", error);
       setNotes(emptyNotes);
+      setNotesMessage("Couldn't load your notes. Go back and open this home again before saving.");
       return;
     }
 
@@ -299,10 +310,16 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
       questions: data?.questions || "",
       general_notes: data?.general_notes || "",
     });
+    notesLoaded.current = true;
   }
 
   async function saveNotes() {
     if (!selectedProperty) return;
+    // Never save the blank form left by a failed load over the real notes.
+    if (!notesLoaded.current) {
+      setNotesMessage("Couldn't load your notes. Go back and open this home again before saving.");
+      return;
+    }
 
     setSavingNotes(true);
     setNotesMessage("");
@@ -366,7 +383,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
       );
     }
 
-    await loadWatchlist();
+    await loadWatchlist({ quiet: true });
   }
 
   function handleNotesChange(event) {
@@ -400,7 +417,11 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
         <button
           type="button"
           className="secondary-button"
-          onClick={() => setSelectedProperty(null)}
+          onClick={() => {
+            setSelectedProperty(null);
+            // Ticks and changes made here show on the tiles.
+            loadWatchlist({ quiet: true });
+          }}
         >
           ← Back to Watchlist
         </button>
@@ -428,7 +449,13 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
               property={selectedProperty}
               slots={viewingsByProperty[selectedProperty.id]}
               request={requestsByProperty[selectedProperty.id]}
-              onChanged={reloadViewings}
+              onChanged={() => {
+                // A booking fills in the viewing and moves the home to
+                // "Viewing booked" on the server: show both straight away.
+                reloadViewings();
+                loadNotes(selectedProperty.id);
+                refreshSelectedProperty(selectedProperty.id);
+              }}
             />
 
             <div className="property-score-strip">
@@ -682,7 +709,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
                 <div className="property-meta">
                   <span>{property.source}</span>
 
-                  {property.bedrooms && <span>{property.bedrooms} beds</span>}
+                  {property.bedrooms != null && <span>{property.bedrooms === 0 ? "Studio" : `${property.bedrooms} beds`}</span>}
 
                   {propertyAgeDays !== null && (
                     <span className={getAgeClass(propertyAgeDays)}>

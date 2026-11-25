@@ -17,7 +17,11 @@ from core.push import send_to_household
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+# The service key only: with the anon key, row-level security hides every
+# row and the job would quietly report "nothing to send" forever.
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    sys.exit("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -221,15 +225,24 @@ def mark_past_viewings_viewed():
     print(f"Marked {len(ids)} home(s) as viewed.")
 
 
+def roll_weekly_hours_forward():
+    """Add the viewing times now due from every agent's weekly hours.
+
+    Without this, times only roll forward when an agent opens the portal, so
+    an agent away for a week leaves buyers with nothing to book.
+    """
+    supabase.rpc("sync_all_pattern_slots").execute()
+
+
 if __name__ == "__main__":
-    try:
-        mark_past_viewings_viewed()
-    except Exception as error:
-        # Never let this stop the reminders.
-        print(f"Marking past viewings failed: {error}")
-    try:
-        send_agent_runsheets()
-    except Exception as error:
-        # Never let this stop the buyers' reminders.
-        print(f"Agent run-sheets failed: {error}")
-    run_viewing_reminders()
+    # Each step runs even if an earlier one fails, but any failure fails the
+    # run, so GitHub emails about it instead of it going unnoticed.
+    failures = []
+    for step in (roll_weekly_hours_forward, mark_past_viewings_viewed, send_agent_runsheets, run_viewing_reminders):
+        try:
+            step()
+        except Exception as error:
+            print(f"{step.__name__} failed: {error}")
+            failures.append(step.__name__)
+    if failures:
+        sys.exit(f"Failed: {', '.join(failures)}")

@@ -32,7 +32,11 @@ export function useAvailableViewings() {
       supabase.rpc("available_viewings"),
       supabase
         .from("viewing_requests")
-        .select("*")
+        // Named columns: the agent's private link (token) isn't readable by
+        // the household (migration 032), so "*" would be refused.
+        .select(
+          "id, household_id, property_id, requested_by, buyer_name, buyer_email, buyer_phone, agent_email, agent_name, message, options, duration_minutes, status, confirmed_start, proposed_start, agent_note, created_at, responded_at, updated_at, buyer_token"
+        )
         .neq("status", "cancelled")
         .order("created_at", { ascending: false }),
     ]);

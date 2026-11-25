@@ -223,10 +223,15 @@ async function handleBook(req, res) {
   // email typed in is a buyer who saved this home, link it to them.
   const knownListing = await loadListing(body.listingId);
   const typedEmail = clean(body.email, 254);
-  const buyer = knownListing
-    ? (body.b ? await buyerFromToken(knownListing, body.b) : null) ||
-      (typedEmail && EMAIL_RE.test(typedEmail) ? await buyerFromEmail(knownListing, typedEmail) : null)
-    : null;
+  const tokenBuyer = knownListing && body.b ? await buyerFromToken(knownListing, body.b) : null;
+  const buyer =
+    tokenBuyer ||
+    (knownListing && typedEmail && EMAIL_RE.test(typedEmail) ? await buyerFromEmail(knownListing, typedEmail) : null);
+  // Matched only by a typed email, anyone could be typing it (including the
+  // agent): it goes in that buyer's calendar, but the booking isn't tied to
+  // their account, so it never opens their buying position or proof
+  // documents to the agent. The emailed link (b token) proves who it is.
+  const bookingBuyerId = tokenBuyer ? tokenBuyer.user.id : null;
 
   const name = buyer ? clean(body.name, 100) || buyer.identity.name : clean(body.name, 100);
   // A known buyer always books under their account email.
@@ -264,7 +269,7 @@ async function handleBook(req, res) {
 
   const { data: bookingId, error } = await supabaseAdmin.rpc("book_viewing", {
     p_slot: slot.id,
-    p_buyer: buyer?.user.id ?? null,
+    p_buyer: bookingBuyerId,
     p_name: name,
     p_email: email.toLowerCase(),
     p_phone: phone,

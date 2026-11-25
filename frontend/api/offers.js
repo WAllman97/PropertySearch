@@ -55,9 +55,13 @@ async function findAgentListing(listingUrl) {
     .from("agent_listings")
     .select("id, address, agent_id, agents(name, email)")
     .eq("listing_key", key)
+    .eq("is_active", true)
     .order("created_at", { ascending: false })
-    .limit(1);
-  return data?.[0] || null;
+    .limit(2);
+  // Two agents actively listing the same home: we can't tell whose sale it
+  // is, so ask neither rather than send the buyer's offer to the wrong one.
+  if (!data || data.length !== 1) return null;
+  return data[0];
 }
 
 async function handleReport(req, res) {
@@ -150,7 +154,10 @@ async function handleReport(req, res) {
   // buyer having to tell each one (migration 029). One tap undoes it.
   const foundHome = await setSearchStatus(user.householdId, "found");
 
-  return res.status(200).json({ success: true, offer, foundHome });
+  // Never hand the agent's private link back to the buyer: with it they could
+  // "confirm" their own offer as if they were the agent.
+  const { agent_token: _agentToken, ...ownOffer } = offer;
+  return res.status(200).json({ success: true, offer: ownOffer, foundHome });
 }
 
 // The household's search status (migration 029). Before that migration the
