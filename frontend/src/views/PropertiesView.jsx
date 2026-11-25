@@ -460,7 +460,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
                 <div className="property-meta">
                   <span>{property.source}</span>
 
-                  {property.bedrooms && <span>{property.bedrooms} beds</span>}
+                  {property.bedrooms != null && <span>{property.bedrooms === 0 ? "Studio" : `${property.bedrooms} beds`}</span>}
 
                   {propertyAgeDays !== null && (
                     <span className={getAgeClass(propertyAgeDays)}>
