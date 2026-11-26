@@ -1467,7 +1467,7 @@ function ShareLink({ listing }) {
     <div className="agent-share">
       <span className="agent-share-label">Send to buyers:</span>
       <a href={url} target="_blank" rel="noreferrer" className="agent-share-url">
-        {url.replace(/^https?:\/\//, "")}
+        See the booking page ↗
       </a>
       <div className="agent-share-buttons">
         <button type="button" className="secondary-button" onClick={copy}>
@@ -1587,10 +1587,33 @@ function SellerReportLink({ listing, onChanged }) {
 // Free private times shown as small chips (there can be many with weekly
 // hours). Tap × to remove one; blocked ones are times you're at another
 // viewing (plus travel) or inside your shortest notice.
+// Folded into one line by default ("6 free times, 17:00–18:40 · Edit"), so
+// a week of weekly hours doesn't turn the listing into a wall of chips.
 function FreeTimes({ slots, blocked, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [clearing, setClearing] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    const offered = slots.filter((slot) => !blocked.has(slot.id));
+    const notOffered = slots.length - offered.length;
+    const times = offered.map((slot) => timeFormatter.format(new Date(slot.starts_at)));
+    const range = times.length > 1 ? `${times[0]}–${times[times.length - 1]}` : times[0];
+    return (
+      <div className="agent-free agent-free-summary">
+        <span>
+          {offered.length
+            ? `${offered.length} free time${offered.length === 1 ? "" : "s"}, ${range}`
+            : "No free times offered"}
+          {notOffered > 0 && <span className="muted"> · {notOffered} not offered</span>}
+        </span>
+        <button type="button" className="link-button" onClick={() => setOpen(true)}>
+          Edit
+        </button>
+      </div>
+    );
+  }
 
   async function remove(ids) {
     setBusy(true);
@@ -1641,6 +1664,9 @@ function FreeTimes({ slots, blocked, onChanged }) {
             Clear free times
           </button>
         ))}
+      <button type="button" className="link-button" onClick={() => setOpen(false)}>
+        Done
+      </button>
       {error && <p className="booking-error">{error}</p>}
     </div>
   );
@@ -3367,6 +3393,9 @@ function AgentPortal() {
   const [view, setView] = useState(initialAgentView);
   const [user, setUser] = useState(undefined);
   const [agent, setAgent] = useState(undefined);
+  // Whose profile `agent` is: until it's this login's, show "Loading..."
+  // rather than flashing the set-up form at an agent who has a profile.
+  const [agentFor, setAgentFor] = useState(undefined);
   const [isBuyer, setIsBuyer] = useState(false);
   // Arrived from a password-reset email: ask for the new password first.
   const [settingPassword, setSettingPassword] = useState(arrivedFromPasswordReset);
@@ -3386,6 +3415,7 @@ function AgentPortal() {
   const loadAgent = useCallback(async () => {
     if (!user) {
       setAgent(null);
+      setAgentFor(user);
       return;
     }
     const [{ data }, { data: member }] = await Promise.all([
@@ -3393,6 +3423,7 @@ function AgentPortal() {
       supabase.rpc("is_household_member"),
     ]);
     setAgent(data || null);
+    setAgentFor(user.id);
     // Also a buyer (same login): offer a way back to the buyer app.
     setIsBuyer(member === true);
   }, [user]);
@@ -3419,7 +3450,7 @@ function AgentPortal() {
           <h1>{agent ? agent.name : "Viewing bookings"}</h1>
         </div>
         {/* With a profile, these live in the Settings tab instead. */}
-        {user && !agent && (
+        {user && agentFor === user.id && !agent && (
           <div className="agent-header-actions">
             {isBuyer && (
               <a className="secondary-button" href="/">
@@ -3481,7 +3512,7 @@ function AgentPortal() {
               setPasswordChanged(true);
             }}
           />
-        ) : user === undefined || (user && agent === undefined) ? (
+        ) : user === undefined || (user && agentFor !== user.id) ? (
           <p className="muted">Loading...</p>
         ) : !user ? (
           <AgentAuth />

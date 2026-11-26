@@ -536,6 +536,27 @@
     flex: 1;
     padding: 6px 8px;
   }
+
+  /* Four statuses in a 2×2 grid, so "Under offer" never wraps. */
+  .agent-status-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-radius: 16px;
+  }
+
+  .agent-status-switch button {
+    white-space: nowrap;
+    padding: 8px 6px;
+    border-radius: 12px;
+  }
+
+  /* Edit details / Hide from buyers side by side, one line each. */
+  .agent-listing-buttons .secondary-button {
+    flex: 1;
+    white-space: nowrap;
+    padding: 9px 12px;
+    font-size: 14px;
+  }
 }
 
 .agent-match-preview {
@@ -1721,4 +1742,15 @@ button.link-button.agent-sheet-cancel {
 .feedback-note input {
   flex: 1 1 180px;
   min-width: 0;
+}
+
+/* Free times folded into one line (FreeTimes in AgentPortal.jsx). */
+.agent-free-summary {
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 14px;
 }

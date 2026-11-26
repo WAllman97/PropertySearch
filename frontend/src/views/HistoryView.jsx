@@ -10,6 +10,7 @@ import { daysOnMarket, priceDrop } from "../utils/market";
 import LoadError from "../components/LoadError";
 import { friendlyError } from "../lib/errors";
 import { findAgentContact } from "../lib/agentContacts";
+import { cleanAddress, listingLinkLabel, portalName } from "../utils/listingText";
 import { ChecklistChip, ViewingChecklist, useMustHaves } from "../components/MustHaves";
 import StagePicker, { STAGES } from "../components/StagePicker";
 import UndoBar from "../components/UndoBar";
@@ -210,7 +211,7 @@ function WatchlistTile({ property, note, picking, picked, pickDisabled, onOpen, 
         </div>
         <div className="tile-caption">
           <strong>{pounds(property.price)}</strong>
-          <span className="tile-address">{property.address}</span>
+          <span className="tile-address">{cleanAddress(property.address)}</span>
           {facts.length > 0 && <span className="tile-facts">{facts.join(" · ")}</span>}
           {note}
         </div>
@@ -724,7 +725,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
             onChange={handleNotesChange}
             onBlur={() => saveNoteText(selectedProperty.id)}
             readOnly={!notesReady}
-            rows={4}
+            rows={3}
             placeholder="How did it feel? Light, noise, the neighbours, what the agent said..."
           />
         </label>
@@ -807,7 +808,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
             <div>
               <h2>{pounds(selectedProperty.price)}</h2>
 
-              <p>{selectedProperty.address}</p>
+              <p>{cleanAddress(selectedProperty.address)}</p>
 
               {position && (
                 <TotalCost price={selectedProperty.price} position={position} onOpenSettings={() => onOpenSettings?.("position")} />
@@ -855,7 +856,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
               />
 
               <div className="property-score-strip">
-                <span>🏠 {selectedProperty.overall_score || "--"}/100</span>
+                <span>🏠 {selectedProperty.overall_score ? `${selectedProperty.overall_score}/100` : "Not scored"}</span>
                 <span>❤️ {selectedProperty.score_gut_feel || 0}/10</span>
                 {selectedProperty.offer_interest && (
                   <span>Offer: {selectedProperty.offer_interest}</span>
@@ -868,10 +869,10 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
               />
 
               <div className="property-meta">
-                <span>{selectedProperty.source}</span>
+                <span>{portalName(selectedProperty.source)}</span>
 
                 {selectedProperty.bedrooms && (
-                  <span>{selectedProperty.bedrooms} beds</span>
+                  <span>{selectedProperty.bedrooms} bed{selectedProperty.bedrooms === 1 ? "" : "s"}</span>
                 )}
 
                 {selectedAgeDays !== null && (
@@ -881,13 +882,16 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
                 )}
               </div>
 
-              <a
-                href={selectedProperty.listing_url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                View original listing
-              </a>
+              {selectedProperty.listing_url && (
+                <a
+                  className="listing-link"
+                  href={selectedProperty.listing_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {listingLinkLabel(selectedProperty.source, selectedProperty.listing_url)}
+                </a>
+              )}
             </div>
           </div>
 
@@ -1046,8 +1050,8 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
               {picking
                 ? `Pick 2 or ${MAX_COMPARE} homes to compare`
                 : stageFilter === "all"
-                  ? `${properties.length} tracked properties`
-                  : `${shownProperties.length} of ${properties.length} tracked properties`}
+                  ? `${properties.length} ${properties.length === 1 ? "home" : "homes"}`
+                  : `${shownProperties.length} of ${properties.length} homes`}
             </p>
           </div>
           <div className="watchlist-tools">

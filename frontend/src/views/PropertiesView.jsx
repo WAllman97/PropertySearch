@@ -13,6 +13,7 @@ import PropertyTile from "../components/PropertyTile";
 import LoadError from "../components/LoadError";
 import { friendlyError } from "../lib/errors";
 import { applyMarketView } from "../utils/market";
+import { listingLinkLabel, portalName } from "../utils/listingText";
 
 function getPropertyAgeDays(property) {
   const dateValue =
@@ -262,8 +263,8 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
     <section className="card">
       <div className="section-header properties-head">
         <div>
-          <h2>Latest Property Matches</h2>
-          <p>{properties.length} active properties found</p>
+          <h2>Latest matches</h2>
+          <p>{properties.length} {properties.length === 1 ? "home" : "homes"} for sale</p>
         </div>
 
         <button
@@ -476,7 +477,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
                 />
 
                 <div className="property-meta">
-                  <span>{property.source}</span>
+                  <span>{portalName(property.source)}</span>
 
                   {property.bedrooms != null && <span>{property.bedrooms === 0 ? "Studio" : `${property.bedrooms} bed${property.bedrooms === 1 ? "" : "s"}`}</span>}
 
@@ -489,12 +490,13 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
                     </span>
                   )}
 
-                  {property.status && <span>{property.status}</span>}
                 </div>
 
-                <a href={property.listing_url} target="_blank" rel="noreferrer">
-                  View Listing
-                </a>
+                {property.listing_url && (
+                  <a className="listing-link" href={property.listing_url} target="_blank" rel="noreferrer">
+                    {listingLinkLabel(property.source, property.listing_url)}
+                  </a>
+                )}
 
                 <div className="property-actions">
                   <button
