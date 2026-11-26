@@ -143,7 +143,10 @@ async function agent(page) {
   await clickText(page, "button", "saved in");
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot(page, "08_agent_day");
-  await scrollToText(page, "Your listings", 24);
+  // Listings have their own tab now (bottom bar).
+  await clickText(page, "nav button, .tab-bar button, button", "Listings");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await sleep(800);
   await shot(page, "09_agent_listing");
 }
 
