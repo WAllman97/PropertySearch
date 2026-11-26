@@ -1,9 +1,14 @@
 """Daily emails for agents on a free trial (migration 034).
 
 Agents a buyer invited get 14 days without a branch code. After that,
-buyers can't book them until they add one, so we remind them twice:
+buyers can't book them until they add one, so we email them three times:
 
-  day 10 ("4 days left") and day 13 ("last day tomorrow").
+  day 10 ("4 days left"), day 13 ("last day tomorrow") and once the trial
+  has ended ("your trial has ended"), each inviting them to book a short
+  call so we can set their branch up. Replies go to CONTACT_EMAIL.
+
+CALL_BOOKING_URL (optional): a booking page link (e.g. Google Calendar
+appointment schedule). When set, the emails get a "Book a call" button.
 
 Each email is claimed in agents.trial_emails_sent before it is sent and
 given back if the send fails, the same as send_viewing_reminders.py, so a
@@ -37,7 +42,10 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 SITE = (os.getenv("APP_URL") or APP_URL).rstrip("/")
 CONTACT_EMAIL = "hello@viewpal.app"
+CALL_URL = (os.getenv("CALL_BOOKING_URL") or "").strip()
 LONDON = ZoneInfo("Europe/London")
+# The "ended" email still goes if the job missed a day or two.
+ENDED_GRACE_DAYS = 3
 
 
 def parse_time(value):
@@ -48,9 +56,12 @@ def which_email(ends_at, now):
     """The email due today, or None.
 
     By London calendar date, so "4 days left" and "ends tomorrow" are true
-    whatever time of day the trial started or the job runs.
+    whatever time of day the trial started or the job runs. "ended" goes on
+    the first run after the trial has actually run out.
     """
     days_left = (ends_at.astimezone(LONDON).date() - now.astimezone(LONDON).date()).days
+    if ends_at <= now:
+        return "ended" if days_left >= -ENDED_GRACE_DAYS else None
     if days_left == 1:
         return "day13"
     if days_left == 4:
@@ -60,37 +71,74 @@ def which_email(ends_at, now):
 
 def build_email(agent, key, bookings):
     first = (agent.get("name") or "").split(" ")[0]
+    ended = key == "ended"
     if key == "day10":
         subject = "4 days left on your ViewPal trial"
         title = "4 days left on your free trial"
         lead = "Your free trial ends in 4 days."
-    else:
+    elif key == "day13":
         subject = "Your ViewPal trial ends tomorrow"
         title = "Last day tomorrow"
         lead = "Your free trial ends tomorrow."
+    else:
+        subject = "Your ViewPal trial has ended"
+        title = "Your free trial has ended"
+        lead = "Your free trial has ended, so buyers can't book new viewings with you at the moment."
 
     if bookings:
         booked = (
-            f"Buyers have booked <strong>{bookings} viewing{'s' if bookings != 1 else ''}</strong> "
-            "with you through ViewPal so far."
+            f"Buyers {'booked' if ended else 'have booked'} "
+            f"<strong>{bookings} viewing{'s' if bookings != 1 else ''}</strong> "
+            f"with you through ViewPal {'during your trial' if ended else 'so far'}."
         )
+    elif ended:
+        booked = ""
     else:
         booked = "Add your viewing hours and buyers who've saved your listings can book themselves in."
 
+    if ended:
+        after = "Your listings and booked viewings are all still there. Add your branch's code and booking switches straight back on."
+    else:
+        after = (
+            "After the trial, buyers can't book new viewings with you until you add your branch's code. "
+            "Your listings and booked viewings stay either way."
+        )
+
+    mail = f'<a href="mailto:{CONTACT_EMAIL}" style="color:#223a33;">{CONTACT_EMAIL}</a>'
+    if CALL_URL:
+        call = (
+            f'<a href="{esc(CALL_URL)}" style="color:#223a33;">Book a 10-minute call</a>, '
+            f"or reply to this email, and we'll set your branch up while we talk."
+        )
+    else:
+        call = (
+            f"Reply to this email, or email {mail}, to book a 10-minute call. "
+            "We'll set your branch up while we talk."
+        )
+
     settings_url = f"{SITE}/agent?view=settings"
+    button = lambda url, label, dark: (  # noqa: E731
+        f'<a href="{esc(url)}" style="display:inline-block;margin:0 8px 8px 0;'
+        f"background:{'#223a33' if dark else '#ffffff'};color:{'#ffffff' if dark else '#223a33'};"
+        "border:1px solid #223a33;text-decoration:none;font-weight:bold;font-size:15px;"
+        f'padding:12px 22px;border-radius:10px;">{esc(label)}</a>'
+    )
+    buttons = (button(CALL_URL, "Book a call", True) if CALL_URL else "") + button(
+        settings_url, "Add my branch code", not CALL_URL
+    )
+
     body = f"""<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f8f6f2;font-family:Arial,sans-serif;color:#1f2937;">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4ddd2;border-radius:14px;padding:24px;">
 <div style="font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#b08d57;margin-bottom:8px;">ViewPal</div>
 <h1 style="font-family:Georgia,serif;font-size:21px;color:#223a33;margin:0 0 16px;">{esc(title)}</h1>
 <p style="font-size:15px;line-height:1.5;margin:0 0 12px;">{('Hi ' + esc(first) + ',') if first else 'Hello,'}</p>
 <p style="font-size:15px;line-height:1.5;margin:0 0 12px;">{esc(lead)} {booked}</p>
-<p style="font-size:15px;line-height:1.5;margin:0 0 12px;">After the trial, buyers can't book new viewings with you until you add your branch's code.
-Your listings and booked viewings stay either way. Two ways to keep going:</p>
+<p style="font-size:15px;line-height:1.5;margin:0 0 12px;">{esc(after)} Two ways to {'switch it back on' if ended else 'keep going'}:</p>
 <ol style="font-size:15px;line-height:1.6;margin:0 0 20px;padding-left:20px;">
+<li><strong>No code yet?</strong> {call}</li>
 <li><strong>Have a branch code?</strong> Enter it in <a href="{esc(settings_url)}" style="color:#223a33;">Settings</a>.</li>
-<li><strong>No code yet?</strong> Email <a href="mailto:{CONTACT_EMAIL}" style="color:#223a33;">{CONTACT_EMAIL}</a> and we'll set one up for your branch.</li>
 </ol>
-<p style="margin:0 0 8px;"><a href="{esc(settings_url)}" style="display:inline-block;background:#223a33;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 22px;border-radius:10px;">Add my branch code</a></p>
+<p style="margin:0;">{buttons}</p>
 </div></body></html>"""
     return subject, body
 
@@ -143,7 +191,7 @@ def send_trial_emails():
 
         try:
             subject, body = build_email(agent, key, booking_count(agent_id))
-            send_resend_email(subject, body, [agent["email"]])
+            send_resend_email(subject, body, [agent["email"]], reply_to=CONTACT_EMAIL)
             sent += 1
             print(f"Sent {key} to agent {agent_id[:8]}.")
         except Exception as error:

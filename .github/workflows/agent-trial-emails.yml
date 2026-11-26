@@ -2,7 +2,7 @@ name: Agent Trial Emails
 
 on:
   schedule:
-    - cron: "0 9 * * *" # daily, 9am UTC; "4 days left" and "last day tomorrow"
+    - cron: "0 9 * * *" # daily, 9am UTC; "4 days left", "last day tomorrow", "trial has ended"
   workflow_dispatch:
 
 jobs:
@@ -33,4 +33,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          # Optional booking page for "Book a call" (repo → Settings → Variables).
+          CALL_BOOKING_URL: ${{ vars.CALL_BOOKING_URL }}
         run: python jobs/agent_trial_emails.py

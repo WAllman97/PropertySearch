@@ -151,12 +151,15 @@ export function AgentTrialBanner({ agent, onChanged }) {
         <div className="agent-trial-contact">
           {requested ? (
             <p>
-              <strong>Request sent.</strong> We'll email {agent.email} with your code. It's usually the same day.
+              <strong>Request sent.</strong> We'll be in touch at {agent.email}
+              {details.phone ? ` or on ${details.phone}` : ""} to arrange a quick call and set up your branch. It's
+              usually the same day.
             </p>
           ) : (
             <form onSubmit={requestCode}>
               <p>
-                Email us at <a href={mailto}>{CONTACT_EMAIL}</a>, or check your details and tap Request a code.
+                We set up each branch on a 10-minute call. Email us at <a href={mailto}>{CONTACT_EMAIL}</a> to book
+                one, or check your details and tap Request a call and we'll get in touch.
                 {agent.code_requested_at && ` You asked on ${shortDate(agent.code_requested_at)}.`}
               </p>
               <div className="agent-trial-fields">
@@ -169,12 +172,12 @@ export function AgentTrialBanner({ agent, onChanged }) {
                   <input maxLength={100} value={details.branch} onChange={set("branch")} />
                 </label>
                 <label>
-                  Phone
+                  Phone (for the call)
                   <input type="tel" maxLength={40} value={details.phone} onChange={set("phone")} />
                 </label>
               </div>
               <button type="submit" className="secondary-button" disabled={busy}>
-                {busy ? "Sending..." : "Request a code"}
+                {busy ? "Sending..." : "Request a call"}
               </button>
             </form>
           )}
