@@ -144,16 +144,25 @@ Functionality** only.
 
 | Category | Data type | What it is |
 |---|---|---|
-| Contact Info | Name | Buyer and agent names |
+| Contact Info | Name | Buyer and agent names (agents also give their agency and branch) |
 | Contact Info | Email Address | Logins, booking and alert emails |
-| Contact Info | Phone Number | Agents' phone; buyer phone on viewing bookings |
-| Financial Info | Other Financial Info | Buying position: budget, deposit, mortgage details; optional proof document (mortgage agreement or proof of funds); accepted offer amounts |
-| User Content | Other User Content | Saved properties, notes, ratings, searches (incl. drawn areas), commute addresses |
+| Contact Info | Phone Number | Agents' phone; buyer phone on viewing bookings; the number an agent gives for their setup call |
+| Financial Info | Other Financial Info | Buying position: budget, deposit, mortgage details; optional proof document (mortgage agreement or proof of funds); accepted offer amounts; the buyer's cost estimates (stamp duty, fees) |
+| User Content | Photos or Videos | Photos a buyer adds to a viewing (from the camera or photo library), and a photo of a proof document if they upload one as an image |
+| User Content | Other User Content | Saved properties, notes, ratings, must-haves, viewing feedback, searches (incl. drawn areas), commute addresses; agents' listings and the note on a setup call |
 | Identifiers | User ID | Account ID |
 
 Not collected: precise or coarse location (we never read the phone's
-location; addresses are typed in), contacts, photos, browsing history,
-purchases, health, usage data, diagnostics, advertising data.
+location; addresses are typed in and areas drawn on a map), contacts,
+browsing history, purchases, health, search history, usage data,
+diagnostics, advertising data. There are no analytics or crash-reporting
+tools in the app (checked 26 Nov 2026). Push notification tokens are
+stored to send notifications; Apple doesn't treat these as a "Device ID",
+so they aren't declared.
+
+Check this list again whenever a feature adds a new kind of data (for
+example, payment details once agent billing goes live: Stripe takes card
+details on its own page, but billing names and addresses would count).
 
 ## Export compliance
 
@@ -164,7 +173,7 @@ on each build.
 ## Screenshots (App Store only, not TestFlight)
 
 Ready to upload: `docs/app-store/screenshots/` (ten iPhone 6.9" images,
-1320 × 2868, in upload order; retaken 23 Nov 2026). Drag them into App Store Connect → your app
+1320 × 2868, in upload order; retaken 26 Nov 2026 with the ViewPal name). Drag them into App Store Connect → your app
 → the version → iPhone 6.9" Display. Apple scales them for smaller iPhones.
 
 They show the demo accounts. Photos are from Unsplash (free for commercial
@@ -182,3 +191,10 @@ python scripts/app-store/compose.py ../docs/app-store/raw ../docs/app-store/scre
 ```
 
 Captions are in `compose.py`.
+
+If `shoot.mjs` fails with `Error: UNKNOWN: unknown error, read`, OneDrive is
+getting in the way of Node reading files in the synced folder. Copy
+`shoot.mjs` to a folder outside OneDrive, run `npm install
+puppeteer-core@23.11.1` there, and run it from `frontend` as
+`node <that folder>\shoot.mjs ../docs/app-store/raw`. Set `SHOOT_BASE` if
+the dev server isn't on port 5173.
