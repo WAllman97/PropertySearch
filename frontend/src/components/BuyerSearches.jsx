@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 import { formatShortGBP } from "../utils/market";
 import { dismissPushOffer, enablePush, shouldOfferPush } from "../lib/push";
+import MoneyInput from "./MoneyInput";
 
 const SearchAreaMap = lazy(() => import("./SearchAreaMap"));
 
@@ -416,8 +417,7 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
       <div className="buyer-search-grid">
         <label>
           Min price (£)
-          <input
-            inputMode="numeric"
+          <MoneyInput
             value={form.min_price}
             onChange={update("min_price")}
             placeholder="No minimum"
@@ -425,8 +425,7 @@ function SearchForm({ initial, onSave, onCancel, isFirst }) {
         </label>
         <label>
           Max price (£)
-          <input
-            inputMode="numeric"
+          <MoneyInput
             value={form.max_price}
             onChange={update("max_price")}
             placeholder="No maximum"
