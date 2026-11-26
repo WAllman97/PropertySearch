@@ -2,6 +2,7 @@ import { useState } from "react";
 import { postAuthed } from "../lib/api";
 import { friendlyError } from "../lib/errors";
 import { resumeSearches } from "./SearchStatus";
+import MoneyInput from "./MoneyInput";
 
 // "Offer accepted" on a saved home (migration 015, /api/offers). It only
 // counts as verified once the selling agent confirms it.
@@ -158,9 +159,7 @@ export function OfferAcceptedButton({ property, onChanged, startOpen = false, on
         Accepted offer
         <span className="pounds-input">
           <span aria-hidden="true">£</span>
-          <input
-            inputMode="numeric"
-            autoComplete="off"
+          <MoneyInput
             value={amount}
             onChange={(event) => {
               setAmount(event.target.value);

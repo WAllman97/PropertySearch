@@ -14,6 +14,7 @@ import { CheckYourEmail } from "../components/ConfirmEmail";
 import { AgentTrialBanner } from "../components/AgentTrial";
 import AgentInviteSignup, { inviteFromLink } from "../components/AgentInviteSignup";
 import "./AgentPortal.css";
+import MoneyInput from "../components/MoneyInput";
 
 // Estate agent area at /agent: sign up or log in, add listings, publish
 // viewing times, and see who has booked. Agents are separate accounts from
@@ -863,7 +864,7 @@ function ListingForm({ agentId, listing, onSaved, onCancel }) {
         </label>
         <label>
           Asking price
-          <input inputMode="numeric" placeholder="£" value={form.price} onChange={update("price")} />
+          <MoneyInput placeholder="£" value={form.price} onChange={update("price")} />
         </label>
         <label>
           Bedrooms
@@ -1900,9 +1901,8 @@ function ListingStatus({ listing, agentId, upcomingBookings = [], onChanged }) {
         <form className="agent-reduce" onSubmit={reducePrice}>
           <label>
             New asking price
-            <input
+            <MoneyInput
               autoFocus
-              inputMode="numeric"
               placeholder={`Now ${pounds(listing.price)}`}
               value={newPrice}
               onChange={(event) => setNewPrice(event.target.value)}

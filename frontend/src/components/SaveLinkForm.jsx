@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 import { findAgentContact } from "../lib/agentContacts";
+import MoneyInput from "./MoneyInput";
 
 // Save-a-link: paste a Rightmove / OnTheMarket / Zoopla link, we fill in the
 // details (/api/lookup), the buyer checks them and saves. Replaces
@@ -256,7 +257,7 @@ function SaveLinkForm({ onSaved, initialUrl = null, autoSave = false }) {
             </label>
             <label>
               Price (£)
-              <input inputMode="numeric" value={form.price} onChange={update("price")} />
+              <MoneyInput value={form.price} onChange={update("price")} />
             </label>
             <label>
               Bedrooms

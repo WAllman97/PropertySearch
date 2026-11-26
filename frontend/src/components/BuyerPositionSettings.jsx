@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import PositionProof from "./PositionProof";
 import { DEFAULT_MORTGAGE_RATE, DEFAULT_MORTGAGE_TERM } from "./TotalCost";
+import MoneyInput from "./MoneyInput";
 
 // The household's "ready to proceed" position (migration 015). Agents you
 // book viewings with see it, marked as your own declaration, so they know
@@ -191,11 +192,11 @@ function BuyerPositionSettings() {
       <div className="position-grid">
         <label>
           Maximum budget (£)
-          <input inputMode="numeric" value={form.max_budget} onChange={set("max_budget")} placeholder="650000" />
+          <MoneyInput value={form.max_budget} onChange={set("max_budget")} placeholder="650000" />
         </label>
         <label>
           Deposit (£)
-          <input inputMode="numeric" value={form.deposit} onChange={set("deposit")} placeholder="130000" />
+          <MoneyInput value={form.deposit} onChange={set("deposit")} placeholder="130000" />
         </label>
 
         <label>
@@ -222,7 +223,7 @@ function BuyerPositionSettings() {
           <>
             <label>
               Amount agreed (£)
-              <input inputMode="numeric" value={form.aip_amount} onChange={set("aip_amount")} />
+              <MoneyInput value={form.aip_amount} onChange={set("aip_amount")} />
             </label>
             <label>
               Lender
