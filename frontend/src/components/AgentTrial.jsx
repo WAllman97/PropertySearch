@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { postAuthed } from "../lib/api";
 import { friendlyError } from "../lib/errors";
+import { SetupCallBooked, SetupCallPicker, useSetupCall } from "./SetupCall";
 import "./AgentTrial.css";
 
 // The free-trial banner for agents a buyer invited (migration 034). Shown on
@@ -22,10 +23,25 @@ async function post(body) {
 const shortDate = (iso) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
 
-export function AgentTrialBanner({ agent, onChanged }) {
+// /agent?call=1 (the "Book a call" button in our emails) opens the call
+// picker straight away.
+const callLinked = () => {
+  try {
+    return new URLSearchParams(window.location.search).get("call") === "1";
+  } catch {
+    return false;
+  }
+};
+
+export function AgentTrialBanner({ agent, onChanged, openCallFromLink = false }) {
+  const onTrial = Boolean(agent?.trial_ends_at && !agent.signup_code);
   const [entering, setEntering] = useState(false);
   const [code, setCode] = useState("");
-  const [contact, setContact] = useState(false);
+  // Which panel is open: "book" (pick a call time), "request" (ask us to
+  // ring), or null.
+  const [panel, setPanel] = useState(() => (openCallFromLink && callLinked() ? "book" : null));
+  const [callState, reloadCall] = useSetupCall(onTrial);
+  const booked = callState?.call || null;
   const [details, setDetails] = useState(() => ({
     agency: agent?.agency || "",
     branch: agent?.branch || "",
@@ -51,7 +67,7 @@ export function AgentTrialBanner({ agent, onChanged }) {
     );
   }
 
-  if (!agent?.trial_ends_at || agent.signup_code) return null;
+  if (!onTrial) return null;
 
   const left = new Date(agent.trial_ends_at).getTime() - Date.now();
   const ended = left <= 0;
@@ -130,36 +146,65 @@ export function AgentTrialBanner({ agent, onChanged }) {
           </button>
         </form>
       ) : (
-        <div className="agent-trial-actions">
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => {
-              setEntering(true);
-              setError("");
+        <>
+          {booked && panel !== "book" && (
+            <SetupCallBooked
+              call={booked}
+              onMove={() => setPanel("book")}
+              onCancelled={() => {
+                reloadCall();
+                setPanel(null);
+              }}
+            />
+          )}
+          <div className="agent-trial-actions">
+            {!booked && panel !== "book" && (
+              <button type="button" className="secondary-button" onClick={() => setPanel("book")}>
+                Book your setup call
+              </button>
+            )}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setEntering(true);
+                setError("");
+              }}
+            >
+              Have a branch code? Enter it
+            </button>
+          </div>
+        </>
+      )}
+
+      {panel === "book" && !entering && (
+        <div className="agent-trial-contact">
+          <SetupCallPicker
+            call={booked}
+            defaultPhone={agent.phone || ""}
+            onDone={() => {
+              reloadCall();
+              setPanel(null);
             }}
-          >
-            Have a branch code? Enter it
-          </button>
-          <button type="button" className="link-button" onClick={() => setContact(!contact)}>
-            Get a code for your branch
-          </button>
+            onClose={() => setPanel(null)}
+            onFallback={() => setPanel("request")}
+          />
         </div>
       )}
 
-      {contact && !entering && (
+      {panel === "request" && !entering && (
         <div className="agent-trial-contact">
           {requested ? (
             <p>
-              <strong>Request sent.</strong> We'll be in touch at {agent.email}
-              {details.phone ? ` or on ${details.phone}` : ""} to arrange a quick call and set up your branch. It's
+              <strong>Request sent.</strong> We'll ring you
+              {details.phone ? ` on ${details.phone}` : ` or email ${agent.email}`} to set up your branch. It's
               usually the same day.
             </p>
           ) : (
             <form onSubmit={requestCode}>
               <p>
-                We set up each branch on a 10-minute call. Email us at <a href={mailto}>{CONTACT_EMAIL}</a> to book
-                one, or check your details and tap Request a call and we'll get in touch.
+                Check your details and we'll ring you to set up your branch, or email us at{" "}
+                <a href={mailto}>{CONTACT_EMAIL}</a>.
                 {agent.code_requested_at && ` You asked on ${shortDate(agent.code_requested_at)}.`}
               </p>
               <div className="agent-trial-fields">

@@ -75,6 +75,13 @@ AI triage scoring; the agent call/viewing booking page (`/book/<slug>`); the sec
   - Google Workspace for the inboxes.
   - Rename the GitHub repo and the Vercel project if you want.
 
+### 26 Nov: agents book their own setup call
+- **Setup calls (migration 038):** trial agents tap "Book your setup call" on the trial banner (or "Book a call" in the trial emails, which opens `/agent?call=1`), pick a day and time, choose phone or video, and it's booked. They can move or cancel it from the banner. "Ask us to ring you" (the old request-a-call form) stays as a fallback.
+- **Free times** = the hours on `/admin` → Setup calls (weekdays 9:00–17:30 to start, 15-minute calls, 2 hours' notice, 14 days ahead), minus calls already booked, minus anything busy in Will's ViewPal Google calendar. The calendar is read from its secret iCal address in the Vercel variable `CALL_CALENDAR_ICS_URL` (`frontend/api/_lib/calendar-feed.js`, using `ical.js`; repeating meetings are expanded, events marked Free are ignored). If the link is set but can't be read, agents see no times rather than risk a clash.
+- **Emails:** each booking, move and cancel emails the agent and `ADMIN_EMAIL` (or hello@) with a calendar invite. The hourly reminders job emails and notifies the agent up to 3 hours before the call.
+- **Video calls:** offered only when a Google Meet link is saved on `/admin`.
+- **To switch it on:** run migration 038; add `CALL_CALENDAR_ICS_URL` in Vercel and redeploy; check `/admin` → Setup calls says "Linked".
+
 ## Architecture
 
 | Part | Where | Notes |

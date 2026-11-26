@@ -523,6 +523,82 @@ def roll_weekly_hours_forward():
     supabase.rpc("sync_all_pattern_slots").execute()
 
 
+# Setup calls with ViewPal (migration 038): a reminder to the agent a few
+# hours before. The job runs hourly and GitHub can start it late, so the
+# window is 3 hours; reminder_sent_at (claimed before sending, given back
+# if the send fails) stops a second copy.
+CALL_REMINDER_HOURS = 3
+
+
+def send_setup_call_reminders():
+    now = datetime.now(timezone.utc)
+    try:
+        calls = (
+            supabase.table("setup_calls")
+            .select("id, agent_id, starts_at, kind, phone, agents(name, email)")
+            .eq("status", "booked")
+            .is_("reminder_sent_at", "null")
+            .gt("starts_at", now.isoformat())
+            .lte("starts_at", (now + timedelta(hours=CALL_REMINDER_HOURS)).isoformat())
+            .execute()
+            .data
+            or []
+        )
+    except Exception as error:  # migration 038 not run yet
+        if "setup_calls" in str(error):
+            print("Setup calls: migration 038 not run yet, skipping.")
+            return 0
+        raise
+
+    meet_url = None
+    if calls:
+        settings = supabase.table("setup_call_settings").select("meet_url").eq("id", 1).execute().data or []
+        meet_url = settings[0].get("meet_url") if settings else None
+
+    failures = 0
+    for call in calls:
+        agent = call.get("agents") or {}
+        if not agent.get("email"):
+            continue
+        claimed = (
+            supabase.table("setup_calls")
+            .update({"reminder_sent_at": now.isoformat()})
+            .eq("id", call["id"])
+            .is_("reminder_sent_at", "null")
+            .execute()
+            .data
+        )
+        if not claimed:
+            continue
+        when = _parse(call["starts_at"]).astimezone(LONDON).strftime("%H:%M")
+        if call.get("kind") == "video" and meet_url:
+            how = f'Join on Google Meet: <a href="{_esc(meet_url)}" style="color:#223a33;">{_esc(meet_url)}</a>'
+            push_how = "The Meet link is in your email."
+        else:
+            number = call.get("phone") or "the number you gave"
+            how = f"We'll ring you on {_esc(number)}."
+            push_how = f"We'll ring you on {number}."
+        first = (agent.get("name") or "").split(" ")[0]
+        manage = f"{APP_URL.rstrip('/')}/agent?call=1"
+        inner = f"""<p style="font-size:15px;line-height:1.5;margin:0 0 12px;">{('Hi ' + _esc(first) + ',') if first else 'Hello,'}</p>
+<p style="font-size:15px;line-height:1.5;margin:0 0 12px;">Just a reminder: your ViewPal setup call is <strong>today at {when}</strong>. {how}</p>
+<p style="font-size:15px;line-height:1.5;margin:0 0 12px;">Can't make it? <a href="{_esc(manage)}" style="color:#223a33;">Move or cancel it here</a>.</p>"""
+        try:
+            send_resend_email(
+                f"Reminder: your ViewPal setup call at {when}",
+                _email_page("Your setup call is today", inner),
+                [agent["email"]],
+                reply_to="hello@viewpal.app",
+            )
+            _agent_push(call["agent_id"], f"Setup call at {when}", push_how, "/agent?call=1")
+        except Exception as error:
+            print(f"Setup call reminder {call['id']} failed: {error}")
+            supabase.table("setup_calls").update({"reminder_sent_at": None}).eq("id", call["id"]).execute()
+            failures += 1
+    print(f"Setup call reminders: {len(calls) - failures} sent, {failures} failed.")
+    return failures
+
+
 if __name__ == "__main__":
     # Each step runs even if an earlier one fails, but any failure fails the
     # run, so GitHub emails about it instead of it going unnoticed. Steps that
@@ -534,6 +610,7 @@ if __name__ == "__main__":
         send_agent_runsheets,
         send_agent_evening_sheets,
         run_viewing_reminders,
+        send_setup_call_reminders,
         ask_for_viewing_feedback,
     ):
         try:

@@ -73,7 +73,9 @@ function organizerLine() {
 // ORGANIZER/ATTENDEE: Outlook and Gmail ignore a cancellation that doesn't
 // say who organised it and who it's for. attendee is optional here: when a
 // caller leaves it out, sendEmail fills in the recipient.
-export function buildIcs({ uid, start, end, summary, description, location, cancelled = false, attendee }) {
+// sequence: for an event that can be moved (setup calls), a higher number
+// each time, so the calendar replaces the earlier version.
+export function buildIcs({ uid, start, end, summary, description, location, cancelled = false, attendee, sequence }) {
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -81,7 +83,7 @@ export function buildIcs({ uid, start, end, summary, description, location, canc
     cancelled ? "METHOD:CANCEL" : "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:${uid}@viewpal.app`,
-    `SEQUENCE:${cancelled ? 1 : 0}`,
+    `SEQUENCE:${sequence ?? (cancelled ? 1 : 0)}`,
     cancelled ? "STATUS:CANCELLED" : "STATUS:CONFIRMED",
     `DTSTAMP:${icsDate(new Date())}`,
     `DTSTART:${icsDate(start)}`,
