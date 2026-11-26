@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
+import { findAgentContact } from "../lib/agentContacts";
 
 // Save-a-link: paste a Rightmove / OnTheMarket / Zoopla link, we fill in the
 // details (/api/lookup), the buyer checks them and saves. Replaces
@@ -35,10 +36,15 @@ function localDateString(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function SaveLinkForm({ onSaved, initialUrl = null }) {
+// autoSave: a link shared to the app (Share → ViewPal). When the details
+// come back complete it's saved straight away, no extra tap; anything
+// missing or already saved shows the form as usual.
+function SaveLinkForm({ onSaved, initialUrl = null, autoSave = false }) {
   const [url, setUrl] = useState(initialUrl || "");
   const [preview, setPreview] = useState(null);
   const [form, setForm] = useState(toForm());
+  const previewState = preview;
+  const formState = form;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -82,15 +88,24 @@ function SaveLinkForm({ onSaved, initialUrl = null }) {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Could not read that link");
       setPreview(body);
-      setForm(toForm(body.details));
+      const filled = toForm(body.details);
+      setForm(filled);
+      if (autoSave && link === initialUrl?.trim() && body.status === "ok" && !body.existing && filled.address.trim()) {
+        await save(null, { preview: body, form: filled });
+        return;
+      }
     } catch (err) {
       setError(err.message);
     }
     setBusy(false);
   }
 
-  async function save(event) {
-    event.preventDefault();
+  // Normally from the form; autoSave passes the looked-up details in, since
+  // state set a moment ago isn't readable yet.
+  async function save(event, given = {}) {
+    event?.preventDefault();
+    const preview = given.preview || previewState;
+    const form = given.form || formState;
     if (!form.address.trim()) {
       setError("Add the address.");
       return;
@@ -131,10 +146,16 @@ function SaveLinkForm({ onSaved, initialUrl = null }) {
     }
 
     // The listing's agent, from the link preview: ready for viewing requests.
+    // The preview only names them, so take their email and phone from any
+    // other home the household has with the same agent.
     if (d.agent_name) {
-      const { error: notesError } = await supabase
-        .from("property_notes")
-        .insert({ property_id: data.id, estate_agent: d.agent_name });
+      const known = await findAgentContact(d.agent_name).catch(() => null);
+      const { error: notesError } = await supabase.from("property_notes").insert({
+        property_id: data.id,
+        estate_agent: d.agent_name,
+        estate_agent_email: known?.email || null,
+        estate_agent_phone: known?.phone || null,
+      });
       if (notesError) console.error("Could not save the agent:", notesError);
     }
 

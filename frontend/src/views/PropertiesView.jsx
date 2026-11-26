@@ -301,6 +301,7 @@ function PropertiesView({ onOpenSettings, onOpenWatchlist }) {
             <SaveLinkForm
               key={addLink || "blank"}
               initialUrl={addLink}
+              autoSave={Boolean(addLink)}
               onSaved={async (saved) => {
                 setShowAddModal(false);
                 setAddLink(null);

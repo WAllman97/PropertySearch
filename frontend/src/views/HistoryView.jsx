@@ -9,6 +9,7 @@ import { OfferAcceptedButton, OfferStatus } from "../components/OfferStatus";
 import { daysOnMarket, priceDrop } from "../utils/market";
 import LoadError from "../components/LoadError";
 import { friendlyError } from "../lib/errors";
+import { findAgentContact } from "../lib/agentContacts";
 import { ChecklistChip, ViewingChecklist, useMustHaves } from "../components/MustHaves";
 import StagePicker from "../components/StagePicker";
 import UndoBar from "../components/UndoBar";
@@ -445,6 +446,29 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
     notesLoaded.current = true;
     setNotes(loaded);
     setNotesReady(true);
+    fillAgentContact(propertyId, { save: true });
+  }
+
+  // The agent's email and phone from another home with the same agent (the
+  // household's address book), into whichever is blank. On opening a home
+  // they're saved with it; after typing a name they're saved with "Save
+  // viewing", like the rest of that form.
+  async function fillAgentContact(propertyId, { save = false } = {}) {
+    const start = notesRef.current;
+    if (!start.estate_agent?.trim() || (start.estate_agent_email && start.estate_agent_phone)) return;
+    const known = await findAgentContact(start.estate_agent);
+    const current = notesRef.current;
+    if (!known || notesFor.current !== propertyId || current.estate_agent !== start.estate_agent) return;
+    const fill = {};
+    if (!current.estate_agent_email && known.email) fill.estate_agent_email = known.email;
+    if (!current.estate_agent_phone && known.phone) fill.estate_agent_phone = known.phone;
+    if (!Object.keys(fill).length) return;
+    notesRef.current = { ...current, ...fill };
+    setNotes(notesRef.current);
+    if (save) {
+      const { error } = await supabase.from("property_notes").update(fill).eq("property_id", propertyId);
+      if (error) console.error("Could not save the agent's details:", error);
+    }
   }
 
   // Saves the typed notes for home `id` if they've changed. Never before
@@ -868,6 +892,7 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
                     type="text"
                     value={notes.estate_agent}
                     onChange={handleNotesChange}
+                    onBlur={() => fillAgentContact(selectedProperty?.id)}
                     placeholder="Agent name / branch"
                   />
                 </label>
