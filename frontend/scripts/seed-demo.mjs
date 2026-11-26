@@ -29,7 +29,11 @@ const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVIC
   auth: { persistSession: false },
 });
 
-const BUYER_EMAIL = "appreview.buyer@viewpal.co.uk";
+// A normal-looking address: the agent screenshots show the buyer's email.
+// (Still ours: viewpal.co.uk receives mail.)
+const BUYER_EMAIL = "sam.taylor@viewpal.co.uk";
+// Earlier demo logins, removed on every run so they don't linger.
+const OLD_EMAILS = ["appreview.buyer@viewpal.co.uk"];
 const AGENT_EMAIL = "appreview.agent@viewpal.co.uk";
 const LOGINS_FILE = path.resolve(process.cwd(), "../docs/app-review-logins.local.md");
 
@@ -90,7 +94,7 @@ Re-running the script rebuilds both accounts' data with these same passwords.
 
 async function removeExisting() {
   const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  for (const email of [BUYER_EMAIL, AGENT_EMAIL]) {
+  for (const email of [BUYER_EMAIL, AGENT_EMAIL, ...OLD_EMAILS]) {
     const user = data.users.find((u) => u.email === email);
     if (!user) continue;
     const { data: member } = await admin
