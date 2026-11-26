@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 import { friendlyError } from "../lib/errors";
 import { liveSiteUrl } from "../lib/platform";
+import { findAgentContact } from "../lib/agentContacts";
 
 // Ask the agent for a viewing when they aren't on ViewPal (migration
 // 023): pick up to three times, we email the agent a link to confirm one,
@@ -57,11 +58,14 @@ function RequestForm({ property, onSent, onCancel }) {
       .select("estate_agent, estate_agent_email")
       .eq("property_id", property.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!live || !data) return;
+        // No email for this home yet: the same agent's from another home.
+        const known = !data.estate_agent_email && data.estate_agent ? await findAgentContact(data.estate_agent) : null;
+        if (!live) return;
         setForm((f) => ({
           ...f,
-          agentEmail: f.agentEmail || data.estate_agent_email || "",
+          agentEmail: f.agentEmail || data.estate_agent_email || known?.email || "",
           agentName: f.agentName || data.estate_agent || "",
         }));
       });
@@ -269,10 +273,12 @@ function InviteAgent({ property, request }) {
       .select("estate_agent, estate_agent_email")
       .eq("property_id", property.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!live || !data) return;
+        const known = !data.estate_agent_email && data.estate_agent ? await findAgentContact(data.estate_agent) : null;
+        if (!live) return;
         setForm((f) => ({
-          email: f.email || data.estate_agent_email || "",
+          email: f.email || data.estate_agent_email || known?.email || "",
           name: f.name || data.estate_agent || "",
         }));
       });
