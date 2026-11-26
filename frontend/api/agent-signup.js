@@ -21,6 +21,8 @@
 // route too, handled in _lib/agent-trials.js (see the list there):
 // send_invite, request_invite, invite_lookup (or GET ?invite=),
 // invite_signup, invite_opt_out, add_code, request_code, admin_code_email.
+// Setup calls with ViewPal (migration 038) too, in _lib/setup-calls.js:
+// call_slots, book_call, cancel_call, admin_cancel_call, admin_call_status.
 import { requireUser, supabaseAdmin } from "./_lib/household.js";
 import { withCors } from "./_lib/cors.js";
 import { sendConfirmEmail } from "./_lib/confirm-email.js";
@@ -40,6 +42,13 @@ import {
   lookUpCode,
   normaliseCode,
 } from "./_lib/agent-trials.js";
+import {
+  handleAdminCallStatus,
+  handleAdminCancelCall,
+  handleBookCall,
+  handleCallSlots,
+  handleCancelCall,
+} from "./_lib/setup-calls.js";
 
 export default withCors(handler);
 
@@ -158,6 +167,11 @@ async function handler(req, res) {
   if (body.action === "add_code") return handleAddCode(req, res, body);
   if (body.action === "request_code") return handleRequestCode(req, res, body);
   if (body.action === "admin_code_email") return handleAdminCodeEmail(req, res, body);
+  if (body.action === "call_slots") return handleCallSlots(req, res, body);
+  if (body.action === "book_call") return handleBookCall(req, res, body);
+  if (body.action === "cancel_call") return handleCancelCall(req, res);
+  if (body.action === "admin_cancel_call") return handleAdminCancelCall(req, res, body);
+  if (body.action === "admin_call_status") return handleAdminCallStatus(req, res);
 
   const code = normaliseCode(body.code);
   const legacyCode = process.env.AGENT_SIGNUP_CODE;

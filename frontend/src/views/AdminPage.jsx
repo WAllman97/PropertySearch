@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 import AuthForm from "../components/AuthForm";
+import SetupCalls from "../components/AdminSetupCalls";
 import "./AdminPage.css";
 
 // Founder's dashboard: /admin. Live numbers and targets from admin_metrics()
@@ -313,6 +314,7 @@ function Dashboard({ data, onReload }) {
         <BarChart title="Offers reported per month" points={offers.by_month} labelFor={monthLabel} unit="offers" />
       </section>
 
+      <SetupCalls />
       <AgentTrials onChanged={load} />
 
       <AgentCodes />

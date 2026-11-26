@@ -114,3 +114,110 @@
   font-size: 0.85rem;
   color: var(--muted);
 }
+
+/* Booking the setup call (SetupCall.jsx): day chips, then that day's times. */
+
+.setup-call-note {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.setup-call-days {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+  scrollbar-width: thin;
+}
+
+.setup-call-days button,
+.setup-call-times button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.setup-call-days button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.setup-call-days button small {
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.setup-call-times button {
+  min-width: 64px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.setup-call-days button.selected,
+.setup-call-times button.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.setup-call-days button.selected small {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.setup-call-confirm {
+  margin-top: 12px;
+}
+
+.setup-call-kind {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 0.92rem;
+}
+
+.setup-call-kind label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setup-call-kind input[type="radio"] {
+  width: auto;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.setup-call-booked {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.setup-call-booked p {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.setup-call-booked .agent-trial-actions {
+  margin-top: 4px;
+}

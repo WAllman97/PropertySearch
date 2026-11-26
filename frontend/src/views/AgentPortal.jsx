@@ -3157,7 +3157,7 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut, onAgen
               : "No bookings yet. Buyers who've saved one of your listings will see the times you add."
           )}
 
-          <AgentTrialBanner agent={agent} onChanged={onAgentChanged} />
+          <AgentTrialBanner agent={agent} onChanged={onAgentChanged} openCallFromLink />
 
           <TimeSaved refreshKey={listings.length + bookedCount + offers.length} />
 

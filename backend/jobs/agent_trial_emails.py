@@ -7,8 +7,9 @@ buyers can't book them until they add one, so we email them three times:
   has ended ("your trial has ended"), each inviting them to book a short
   call so we can set their branch up. Replies go to CONTACT_EMAIL.
 
-CALL_BOOKING_URL (optional): a booking page link (e.g. Google Calendar
-appointment schedule). When set, the emails get a "Book a call" button.
+The "Book a call" button opens the agent portal with the call picker open
+(/agent?call=1, migration 038): agents pick a free time themselves.
+CALL_BOOKING_URL (optional) points it at another booking page instead.
 
 Each email is claimed in agents.trial_emails_sent before it is sent and
 given back if the send fails, the same as send_viewing_reminders.py, so a
@@ -42,7 +43,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 SITE = (os.getenv("APP_URL") or APP_URL).rstrip("/")
 CONTACT_EMAIL = "hello@viewpal.app"
-CALL_URL = (os.getenv("CALL_BOOKING_URL") or "").strip()
+CALL_URL = (os.getenv("CALL_BOOKING_URL") or "").strip() or f"{SITE}/agent?call=1"
 LONDON = ZoneInfo("Europe/London")
 # The "ended" email still goes if the job missed a day or two.
 ENDED_GRACE_DAYS = 3
@@ -104,17 +105,10 @@ def build_email(agent, key, bookings):
             "Your listings and booked viewings stay either way."
         )
 
-    mail = f'<a href="mailto:{CONTACT_EMAIL}" style="color:#223a33;">{CONTACT_EMAIL}</a>'
-    if CALL_URL:
-        call = (
-            f'<a href="{esc(CALL_URL)}" style="color:#223a33;">Book a 10-minute call</a>, '
-            f"or reply to this email, and we'll set your branch up while we talk."
-        )
-    else:
-        call = (
-            f"Reply to this email, or email {mail}, to book a 10-minute call. "
-            "We'll set your branch up while we talk."
-        )
+    call = (
+        f'<a href="{esc(CALL_URL)}" style="color:#223a33;">Pick a time for a 10-minute call</a> '
+        f"and we'll set your branch up while we talk. Or just reply to this email."
+    )
 
     settings_url = f"{SITE}/agent?view=settings"
     button = lambda url, label, dark: (  # noqa: E731
@@ -123,9 +117,7 @@ def build_email(agent, key, bookings):
         "border:1px solid #223a33;text-decoration:none;font-weight:bold;font-size:15px;"
         f'padding:12px 22px;border-radius:10px;">{esc(label)}</a>'
     )
-    buttons = (button(CALL_URL, "Book a call", True) if CALL_URL else "") + button(
-        settings_url, "Add my branch code", not CALL_URL
-    )
+    buttons = button(CALL_URL, "Book a call", True) + button(settings_url, "Add my branch code", False)
 
     body = f"""<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f8f6f2;font-family:Arial,sans-serif;color:#1f2937;">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4ddd2;border-radius:14px;padding:24px;">

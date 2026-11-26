@@ -265,3 +265,101 @@
   font-size: 12px;
   max-width: 280px;
 }
+
+/* Setup calls (components/AdminSetupCalls.jsx) */
+
+.admin-setup-calls h3 {
+  margin: 18px 0 8px;
+  font-size: 1rem;
+}
+
+.admin-call-status {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted, #f4f1ec);
+  font-size: 0.9rem;
+}
+
+.admin-call-status.ok {
+  background: var(--primary-soft);
+}
+
+.admin-call-status.bad {
+  background: var(--danger-bg);
+}
+
+.admin-setup-calls tr.muted td {
+  color: var(--muted);
+}
+
+.admin-call-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.admin-call-hours {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.admin-call-hour {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-call-hour select,
+.admin-call-hour input,
+.admin-call-fields select,
+.admin-call-fields input {
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font: inherit;
+}
+
+.admin-call-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.admin-call-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.admin-call-fields .wide {
+  grid-column: 1 / -1;
+}
+
+/* The app's form defaults stack labels and stretch inputs: not here. */
+.admin-call-toggle {
+  flex-direction: row;
+  font-weight: 600;
+}
+
+.admin-call-toggle input,
+.admin-call-hour select,
+.admin-call-hour input {
+  width: auto;
+  margin: 0;
+}
+
+.admin-setup-calls .admin-table td a {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: inherit;
+}
