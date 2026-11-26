@@ -5,6 +5,7 @@ import { proofLabel } from "../components/PositionProof";
 import LoadError from "../components/LoadError";
 import { setSearchStatus, statusSummary } from "../components/SearchStatus";
 import "./DashboardView.css";
+import { cleanAddress } from "../utils/listingText";
 
 // The buyer's "what needs my attention" page: things to act on, what's coming
 // up this week, what changed on their homes, where the search stands, and
@@ -34,7 +35,7 @@ const when = (iso) =>
     hour: "2-digit",
     minute: "2-digit",
   });
-const place = (p) => p?.address || p?.title || "A saved home";
+const place = (p) => cleanAddress(p?.address || p?.title) || "A saved home";
 
 async function loadEverything() {
   const now = new Date();
@@ -367,7 +368,7 @@ function DashboardView({ onNavigate }) {
       text:
         gone.length === 1
           ? `${names} is ${GONE[gone[0].listing_status]}`
-          : `${gone.length} of your homes are no longer available: ${names}${gone.length > 2 ? ` and ${gone.length - 2} more` : ""}`,
+          : `${gone.length} of your homes are no longer available`,
       action: gone.length === 1 ? "Archive it" : "Archive them",
       onClick: () => archiveGone(gone),
     });
@@ -378,9 +379,10 @@ function DashboardView({ onNavigate }) {
     needs.push({
       key: "under-offer",
       tone: "info",
-      text: `${names}${underOffer.length > 2 ? ` and ${underOffer.length - 2} more` : ""} ${
-        underOffer.length === 1 ? "is" : "are"
-      } under offer. Sales often fall through, so it's worth keeping an eye on`,
+      text:
+        underOffer.length === 1
+          ? `${names} is under offer. Sales often fall through, so keep an eye on it`
+          : `${underOffer.length} of your homes are under offer. Sales often fall through, so keep an eye on them`,
       action: "View",
       onClick: go(underOffer.some((p) => p.status && p.status !== "new") ? "history" : "properties"),
     });

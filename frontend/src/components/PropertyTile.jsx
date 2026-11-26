@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { cleanAddress } from "../utils/listingText";
 
 // Compact tile for a list of homes: photo, price and address. Tap it and it
 // flips over (and widens to the full row) to show the details passed as
@@ -68,7 +69,7 @@ function PropertyTile({ property, open, onToggle, tag, note, onFavourite, childr
         </div>
         <div className="tile-caption">
           <strong>{pounds(property.price)}</strong>
-          <span className="tile-address">{property.address}</span>
+          <span className="tile-address">{cleanAddress(property.address)}</span>
           {facts.length > 0 && <span className="tile-facts">{facts.join(" · ")}</span>}
           {tag && <span className="tile-tag">{tag}</span>}
           {note}

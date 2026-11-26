@@ -545,8 +545,8 @@ function ViewingRequest({ property, request, onChanged }) {
               </>
             )}
           </span>
-          <button type="button" className="link-button" onClick={() => setOpen(true)}>
-            {request?.status === "declined" ? "Try other times" : "Request"}
+          <button type="button" className="primary-button viewing-request-button" onClick={() => setOpen(true)}>
+            {request?.status === "declined" ? "Try other times" : "Request times"}
           </button>
         </div>
       ) : (

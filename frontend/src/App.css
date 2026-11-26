@@ -37,8 +37,9 @@
 body {
   margin: 0;
   font-family: "Manrope", "Inter", "SF Pro Display", Arial, sans-serif;
+  /* no-repeat: on a short page the glow would tile down the screen. */
   background:
-    radial-gradient(circle at top left, rgba(176, 141, 87, 0.08), transparent 34%),
+    radial-gradient(circle at top left, rgba(176, 141, 87, 0.08), transparent 34%) no-repeat,
     var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -278,7 +279,6 @@ button:disabled,
   font-size: 13px;
   color: var(--muted);
   margin-bottom: 12px;
-  text-transform: capitalize;
 }
 
 .property-actions {
@@ -4104,4 +4104,130 @@ button.link-button:hover {
   .watch-tile-stage {
     padding: 0 9px 9px;
   }
+}
+
+/* ---- Polish pass (26 Nov) ---------------------------------------------- */
+/* The portal link on a home: a quiet button, not a bold heading-sized link. */
+a.listing-link {
+  display: inline-block;
+  margin: 4px 0 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  background: white;
+}
+
+/* "Request times" in the green viewing box: a real button. */
+.primary-button.viewing-request-button {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+/* Secondary links inside the green box: dark, not gold on green. */
+.viewing-slots button.link-button {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Notes grow with what's typed instead of starting as big empty boxes. */
+
+textarea {
+  field-sizing: content;
+  min-height: 3.2lh;
+  max-height: 60vh;
+}
+
+/* Weak / Excellent once, under the first slider, not under every one. */
+.score-row + .score-row .slider-scale {
+  display: none;
+}
+
+/* "← Back to Watchlist" shouldn't sit on top of the photo. */
+.property-detail-layout {
+  margin-top: 12px;
+}
+
+/* Watchlist header on a phone: title + Compare on one row, Show + Sort
+   side by side under it, instead of four stacked rows. */
+@media (max-width: 760px) {
+  .watchlist-head {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "title compare" "show sort";
+    align-items: center;
+    gap: 10px;
+  }
+
+  .watchlist-head > div:first-child {
+    grid-area: title;
+  }
+
+  .watchlist-tools {
+    display: contents;
+  }
+
+  .watchlist-tools > label:nth-of-type(1) {
+    grid-area: show;
+  }
+
+  .watchlist-tools > label:nth-of-type(2) {
+    grid-area: sort;
+  }
+
+  .watchlist-tools > button {
+    grid-area: compare;
+    justify-self: end;
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+
+  .watchlist-tools .watchlist-sort {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    margin: 0;
+    font-size: 12px;
+  }
+
+  .watchlist-tools .watchlist-sort select {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* A home's price and address sit as one block under the photo. */
+@media (max-width: 760px) {
+  .property-detail-layout {
+    gap: 14px;
+  }
+}
+
+.property-detail-layout > div > h2:first-child {
+  margin: 0 0 2px;
+}
+
+.property-detail-layout > div > h2:first-child + p {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+/* Sections of a home: less air between them on a phone. */
+@media (max-width: 760px) {
+  .details-section {
+    margin-top: 20px;
+  }
+
+  .details-section > h3:first-child {
+    margin-top: 0;
+  }
+}
+
+.viewing-summary button.link-button {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
