@@ -46,20 +46,24 @@ def web_url(value):
     return value if value.lower().startswith(("http://", "https://")) else ""
 
 
-def send_resend_email(subject, html_body, recipients):
+def send_resend_email(subject, html_body, recipients, reply_to=None):
     """
-    Send email through Resend.
+    Send email through Resend. reply_to: where replies go, if not FROM_EMAIL.
     """
     if not recipients:
         print("No recipients found. Email not sent.")
         return None
 
-    response = resend.Emails.send({
+    params = {
         "from": FROM_EMAIL,
         "to": recipients,
         "subject": subject,
         "html": html_body,
-    })
+    }
+    if reply_to:
+        params["reply_to"] = reply_to
+
+    response = resend.Emails.send(params)
 
     return response
 
