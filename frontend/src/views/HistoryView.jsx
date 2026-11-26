@@ -11,7 +11,7 @@ import LoadError from "../components/LoadError";
 import { friendlyError } from "../lib/errors";
 import { findAgentContact } from "../lib/agentContacts";
 import { ChecklistChip, ViewingChecklist, useMustHaves } from "../components/MustHaves";
-import StagePicker from "../components/StagePicker";
+import StagePicker, { STAGES } from "../components/StagePicker";
 import UndoBar from "../components/UndoBar";
 import TotalCost, { useBuyerPosition } from "../components/TotalCost";
 import CompareHomes from "../components/CompareHomes";
@@ -62,6 +62,7 @@ const WATCHLIST_SORTS = [
   { key: "longest_listed", label: "Longest on market", compare: (a, b) => (daysOnMarket(b) ?? -1) - (daysOnMarket(a) ?? -1) },
 ];
 const SORT_KEY = "watchlistSort";
+const FILTER_KEY = "watchlist-filter";
 const MAX_COMPARE = 3;
 
 const viewingWhen = new Intl.DateTimeFormat("en-GB", {
@@ -232,6 +233,23 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
       return "newest";
     }
   });
+  // Show only one stage (e.g. "Viewing booked"), remembered like the sort.
+  const [stageFilter, setStageFilter] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FILTER_KEY);
+      return STAGES.some((s) => s.key === saved) ? saved : "all";
+    } catch {
+      return "all";
+    }
+  });
+  function chooseFilter(key) {
+    setStageFilter(key);
+    try {
+      localStorage.setItem(FILTER_KEY, key);
+    } catch {
+      // Private mode: just don't remember it.
+    }
+  }
   function chooseSort(key) {
     setSortKey(key);
     try {
@@ -665,6 +683,14 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
     return [...properties].sort(sort.compare);
   }, [properties, sortKey]);
 
+  const stageCounts = useMemo(() => {
+    const counts = {};
+    for (const p of properties) counts[p.status] = (counts[p.status] || 0) + 1;
+    return counts;
+  }, [properties]);
+  const shownProperties =
+    stageFilter === "all" ? sortedProperties : sortedProperties.filter((p) => p.status === stageFilter);
+
   // Hidden while picking homes to compare: both bars sit at the bottom.
   const undoBar = undo && !picking && (
     <UndoBar key={undo.key} message="Archived" onUndo={undoArchive} onDone={() => setUndo(null)} />
@@ -1019,10 +1045,25 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
             <p>
               {picking
                 ? `Pick 2 or ${MAX_COMPARE} homes to compare`
-                : `${properties.length} tracked properties`}
+                : stageFilter === "all"
+                  ? `${properties.length} tracked properties`
+                  : `${shownProperties.length} of ${properties.length} tracked properties`}
             </p>
           </div>
           <div className="watchlist-tools">
+            {properties.length > 1 && !picking && (
+              <label className="market-sort watchlist-sort">
+                Show
+                <select value={stageFilter} onChange={(event) => chooseFilter(event.target.value)}>
+                  <option value="all">All ({properties.length})</option>
+                  {STAGES.filter((s) => stageCounts[s.key] || s.key === stageFilter).map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label} ({stageCounts[s.key] || 0})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {properties.length > 1 && !picking && (
               <label className="market-sort watchlist-sort">
                 Sort
@@ -1054,8 +1095,17 @@ function HistoryView({ focusPropertyId, onFocused, onOpenSettings }) {
           </p>
         )}
 
+        {stageFilter !== "all" && !shownProperties.length && (
+          <p className="empty-state">
+            No homes at "{STAGES.find((s) => s.key === stageFilter)?.label}" right now.{" "}
+            <button type="button" className="link-button" onClick={() => chooseFilter("all")}>
+              Show all
+            </button>
+          </p>
+        )}
+
         <div className="tile-grid">
-          {sortedProperties.map((property) => (
+          {shownProperties.map((property) => (
             <WatchlistTile
               key={property.id}
               property={property}
