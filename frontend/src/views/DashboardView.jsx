@@ -29,6 +29,7 @@ const HOUR = 36e5;
 const pounds = (n) => `£${Number(n).toLocaleString("en-GB")}`;
 const when = (iso) =>
   new Date(iso).toLocaleString("en-GB", {
+    timeZone: "Europe/London",
     weekday: "short",
     day: "numeric",
     month: "short",

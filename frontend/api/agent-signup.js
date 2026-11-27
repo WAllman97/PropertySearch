@@ -23,8 +23,12 @@
 // invite_signup, invite_opt_out, add_code, request_code, admin_code_email.
 // Setup calls with ViewPal (migration 038) too, in _lib/setup-calls.js:
 // call_slots, book_call, cancel_call, admin_cancel_call, admin_call_status.
+// The monthly branch report (migration 040) too, in _lib/monthly-report.js:
+// monthly_report_run (GitHub workflow, CRON_SECRET), monthly_report_preview
+// and monthly_report_test (admin).
 import { requireUser, supabaseAdmin } from "./_lib/household.js";
 import { withCors } from "./_lib/cors.js";
+import { handleMonthlyReportPreview, handleMonthlyReportRun, handleMonthlyReportTest } from "./_lib/monthly-report.js";
 import { sendConfirmEmail } from "./_lib/confirm-email.js";
 import {
   CODE_ERROR,
@@ -172,6 +176,9 @@ async function handler(req, res) {
   if (body.action === "cancel_call") return handleCancelCall(req, res);
   if (body.action === "admin_cancel_call") return handleAdminCancelCall(req, res, body);
   if (body.action === "admin_call_status") return handleAdminCallStatus(req, res);
+  if (body.action === "monthly_report_run") return handleMonthlyReportRun(req, res, body);
+  if (body.action === "monthly_report_preview") return handleMonthlyReportPreview(req, res, body);
+  if (body.action === "monthly_report_test") return handleMonthlyReportTest(req, res, body);
 
   const code = normaliseCode(body.code);
   const legacyCode = process.env.AGENT_SIGNUP_CODE;

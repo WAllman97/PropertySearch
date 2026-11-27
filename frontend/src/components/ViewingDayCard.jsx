@@ -38,7 +38,7 @@ export function useMinuteClock() {
 }
 
 function timeText(when) {
-  return new Date(when).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return new Date(when).toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" });
 }
 
 // Shrink to a JPEG before uploading: smaller, quicker on mobile data, and the

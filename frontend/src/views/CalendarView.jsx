@@ -6,6 +6,7 @@ import LoadError from "../components/LoadError";
 import { ViewingChecklist } from "../components/MustHaves";
 import ViewingDayCard, { directionsUrl, isViewingDay, useMinuteClock } from "../components/ViewingDayCard";
 import { friendlyError } from "../lib/errors";
+import { LONDON, londonDay } from "../lib/londonTime";
 
 function getMonthStart(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -32,6 +33,7 @@ function formatMonthTitle(date) {
 
 function formatTime(value) {
   return new Date(value).toLocaleTimeString("en-GB", {
+    timeZone: LONDON,
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -39,6 +41,7 @@ function formatTime(value) {
 
 function formatDateTime(value) {
   return new Date(value).toLocaleString("en-GB", {
+    timeZone: LONDON,
     weekday: "short",
     day: "2-digit",
     month: "short",
@@ -64,7 +67,7 @@ function buildCalendarDays(currentMonth) {
     days.push({
       date,
       isCurrentMonth: date.getMonth() === currentMonth.getMonth(),
-      isToday: isSameDay(date, new Date()),
+      isToday: isSameDay(date, londonDay(new Date())),
     });
   }
 
@@ -113,8 +116,9 @@ function startOfDay(date) {
   return d;
 }
 
+// date: a calendar day (local midnight, from londonDay).
 function dayLabel(date) {
-  const today = startOfDay(new Date());
+  const today = londonDay(new Date());
   const diff = Math.round((startOfDay(date) - today) / DAY_MS);
   if (diff === 0) return "Today";
   if (diff === 1) return "Tomorrow";
@@ -159,7 +163,7 @@ function daySummary(items) {
 
 function AgendaRow({ item, onOpen, showDate = false }) {
   // Past list: the date matters more than "Viewing".
-  const sub = (kind) => (showDate ? item.at.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : kind);
+  const sub = (kind) => (showDate ? item.at.toLocaleDateString("en-GB", { timeZone: LONDON, day: "numeric", month: "short" }) : kind);
   if (item.kind === "call") {
     const c = item.call;
     return (
@@ -213,7 +217,7 @@ function AgendaRow({ item, onOpen, showDate = false }) {
 
 function CalendarAgenda({ viewings, calls, onOpen, onOpenSettings, now }) {
   const [showPast, setShowPast] = useState(false);
-  const todayStart = startOfDay(now);
+  const todayStart = londonDay(now);
   const items = agendaItems(viewings, calls);
   // Still "upcoming" until it's an hour past its start.
   const upcoming = items.filter((i) => i.at.getTime() > now.getTime() - 3600000);
@@ -223,15 +227,21 @@ function CalendarAgenda({ viewings, calls, onOpen, onOpenSettings, now }) {
   // Group upcoming by day.
   const days = [];
   for (const item of upcoming) {
-    const key = startOfDay(item.at).getTime();
+    const date = londonDay(item.at);
+    const key = date.getTime();
     const last = days[days.length - 1];
     if (last && last.key === key) last.items.push(item);
-    else days.push({ key, date: startOfDay(item.at), items: [item] });
+    else days.push({ key, date, items: [item] });
   }
   const busyDays = new Set(days.map((d) => d.key));
 
   // Two-week strip from today.
-  const strip = Array.from({ length: 14 }, (_, n) => new Date(todayStart.getTime() + n * DAY_MS));
+  // Stepped by calendar date, not 24 hours, so clock changes don't repeat
+  // or skip a day.
+  const strip = Array.from(
+    { length: 14 },
+    (_, n) => new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate() + n)
+  );
 
   function jumpTo(date) {
     const key = startOfDay(date).getTime();
@@ -550,13 +560,13 @@ function CalendarView({ onOpenNotes, onOpenSettings }) {
       (r) =>
         r.status === "accepted" &&
         r.kind === "call" &&
-        isSameDay(new Date(r.starts_at), date)
+        isSameDay(londonDay(r.starts_at), date)
     );
   }
 
   function getViewingsForDate(date) {
     return viewings.filter((viewing) =>
-      isSameDay(new Date(viewing.viewing_datetime), date)
+      isSameDay(londonDay(viewing.viewing_datetime), date)
     );
   }
 

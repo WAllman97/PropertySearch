@@ -13,9 +13,17 @@ on:
   schedule:
     - cron: "0 6 * * *" # 06:00 UTC daily
 
+# One run at a time: a slow run finishes before the next starts, instead of
+# two runs sending the same emails side by side.
+concurrency:
+  group: sold-price-comps
+  cancel-in-progress: false
+
 jobs:
   comps:
     runs-on: ubuntu-latest
+    # A hung email or API call can't hold the job for GitHub's 6-hour default.
+    timeout-minutes: 30
 
     defaults:
       run:

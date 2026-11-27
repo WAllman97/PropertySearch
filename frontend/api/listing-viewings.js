@@ -253,15 +253,17 @@ async function handleBook(req, res) {
   }
 
   const since = new Date(Date.now() - 3600000).toISOString();
-  const { data: listingSlots } = await supabaseAdmin
-    .from("viewing_slots")
-    .select("id")
-    .eq("listing_id", listing.id);
-  const { count: recent } = await supabaseAdmin
+  // Counted through a join: listing every slot id first broke once a
+  // listing had hundreds of slots (URL too long, error ignored, limit off).
+  const { count: recent, error: countError } = await supabaseAdmin
     .from("viewing_bookings")
-    .select("id", { count: "exact", head: true })
-    .in("slot_id", (listingSlots || []).map((s) => s.id))
+    .select("id, viewing_slots!inner(listing_id)", { count: "exact", head: true })
+    .eq("viewing_slots.listing_id", listing.id)
     .gte("created_at", since);
+  if (countError) {
+    console.error("listing booking count failed:", countError);
+    return res.status(503).json({ error: "Please try again in a minute." });
+  }
 
   if ((recent ?? 0) >= MAX_BOOKINGS_PER_LISTING_PER_HOUR) {
     return res.status(429).json({ error: "Too many bookings right now. Please try again later." });

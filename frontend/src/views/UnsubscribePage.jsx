@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { apiUrl } from "../lib/platform";
 
-// /unsubscribe?t=<token>&kind=matches|price_drops: from the footer of a "new
+// /unsubscribe?t=<token>&kind=matches|price_drops|monthly_report: from the footer of a "new
 // match" or price-cut email. A button, not an automatic unsubscribe, because
 // mail scanners open links on their own (api/buyer-signup.js, migration 028).
 
 const KINDS = {
   matches: "new homes agents send you",
   price_drops: "price cuts on homes you've saved",
+  monthly_report: "your monthly ViewPal report",
 };
 
 function UnsubscribePage() {
