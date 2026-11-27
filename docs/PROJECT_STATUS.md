@@ -82,6 +82,15 @@ AI triage scoring; the agent call/viewing booking page (`/book/<slug>`); the sec
 - **Video calls:** offered only when a Google Meet link is saved on `/admin`.
 - **To switch it on:** run migration 038; add `CALL_CALENDAR_ICS_URL` in Vercel and redeploy; check `/admin` → Setup calls says "Linked".
 
+### 26-27 Nov: scaling fixes and the monthly branch report
+- **Scaling review (`docs/SCALING_REVIEW.md`):** 12 fix-now items done. Migration 039 adds a daily clean-up of past unbooked slots, a faster clash check and the missing indexes. Six items are waiting on decisions.
+- **Monthly "what ViewPal did for you" email (migration 040):**
+  - Each branch is emailed on the 1st for the month before.
+  - The agent portal has a matching card on Today.
+  - `/admin` → Monthly reports shows who was emailed, marks branches with no activity as a churn risk, previews any branch's email and has "Send test to me".
+  - To switch it on: run 040, and set `CRON_SECRET` in Vercel and in GitHub. The setup is in `docs/AGENT_VALUE_FEATURES.md`.
+- **Valuation leads and vendor feedback:** designed in `docs/AGENT_VALUE_FEATURES.md`. The build waits for the agent meeting on 4 Dec.
+
 ## Architecture
 
 | Part | Where | Notes |

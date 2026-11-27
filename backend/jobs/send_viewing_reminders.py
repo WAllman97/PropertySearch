@@ -167,28 +167,60 @@ def _london_day_bounds(day):
     return start, start + timedelta(days=1)
 
 
+PAGE = 1000  # Supabase returns at most 1,000 rows per request
+
+
 def _booked_by_agent(day):
-    """{agent_id: [(slot, [confirmed bookings])]} for one London day."""
+    """{agent_id: [(slot, [confirmed bookings])]} for one London day.
+
+    Reads confirmed bookings (not every slot: most slots are free times),
+    page by page, so a busy day can't be cut off at Supabase's 1,000 rows.
+    """
     day_start, day_end = _london_day_bounds(day)
-    slots = (
-        supabase.table("viewing_slots")
-        .select(
-            "id, agent_id, starts_at, ends_at, agent_listings(address), "
-            "viewing_bookings(id, buyer_name, buyer_phone, buyer_email, status, created_at)"
-        )
-        .is_("cancelled_at", "null")
-        .gte("starts_at", day_start.isoformat())
-        .lt("starts_at", day_end.isoformat())
-        .order("starts_at")
-        .execute()
-    ).data or []
+    rows = []
+    offset = 0
+    while True:
+        page = (
+            supabase.table("viewing_bookings")
+            .select(
+                "id, buyer_name, buyer_phone, buyer_email, status, created_at, "
+                "viewing_slots!inner(id, agent_id, starts_at, ends_at, cancelled_at, agent_listings(address))"
+            )
+            .eq("status", "confirmed")
+            .is_("viewing_slots.cancelled_at", "null")
+            .gte("viewing_slots.starts_at", day_start.isoformat())
+            .lt("viewing_slots.starts_at", day_end.isoformat())
+            .order("id")
+            .range(offset, offset + PAGE - 1)
+            .execute()
+        ).data or []
+        rows.extend(page)
+        if len(page) < PAGE:
+            break
+        offset += PAGE
+
+    slots = {}
+    for booking in rows:
+        slot = booking.pop("viewing_slots")
+        entry = slots.setdefault(slot["id"], (slot, []))
+        entry[1].append(booking)
 
     by_agent = {}
-    for slot in slots:
-        booked = [b for b in (slot.get("viewing_bookings") or []) if b.get("status") == "confirmed"]
-        if booked:
-            by_agent.setdefault(slot["agent_id"], []).append((slot, booked))
+    for slot, booked in sorted(slots.values(), key=lambda item: item[0]["starts_at"]):
+        booked.sort(key=lambda b: b.get("created_at") or "")
+        by_agent.setdefault(slot["agent_id"], []).append((slot, booked))
     return by_agent
+
+
+def _agents(ids, columns):
+    """Agent rows for these ids, in chunks (a long id list makes the URL too long)."""
+    ids = list(ids)
+    out = []
+    for i in range(0, len(ids), 100):
+        out.extend(
+            supabase.table("agents").select(columns).in_("user_id", ids[i : i + 100]).execute().data or []
+        )
+    return out
 
 
 def _runsheet_rows(items):
@@ -236,12 +268,7 @@ def send_agent_runsheets():
     if not by_agent:
         return 0
 
-    agents = (
-        supabase.table("agents")
-        .select("user_id, name, email, runsheet_sent_on, runsheet_sent_at")
-        .in_("user_id", list(by_agent))
-        .execute()
-    ).data or []
+    agents = _agents(by_agent, "user_id, name, email, runsheet_sent_on, runsheet_sent_at")
 
     failed = 0
     for agent in agents:
@@ -303,12 +330,7 @@ def send_agent_evening_sheets():
     if not by_agent:
         return 0
 
-    agents = (
-        supabase.table("agents")
-        .select("user_id, name, email, evening_sheet_sent_on")
-        .in_("user_id", list(by_agent))
-        .execute()
-    ).data or []
+    agents = _agents(by_agent, "user_id, name, email, evening_sheet_sent_on")
 
     failed = 0
     for agent in agents:
@@ -590,13 +612,34 @@ def send_setup_call_reminders():
                 [agent["email"]],
                 reply_to="hello@viewpal.app",
             )
-            _agent_push(call["agent_id"], f"Setup call at {when}", push_how, "/agent?call=1")
         except Exception as error:
             print(f"Setup call reminder {call['id']} failed: {error}")
             supabase.table("setup_calls").update({"reminder_sent_at": None}).eq("id", call["id"]).execute()
             failures += 1
+            continue
+        # Best effort, after the email has gone: a push failure mustn't
+        # release the claim, or the email would be sent again next hour.
+        try:
+            _agent_push(call["agent_id"], f"Setup call at {when}", push_how, "/agent?call=1")
+        except Exception as error:
+            print(f"Setup call push {call['id']} failed (email sent): {error}")
     print(f"Setup call reminders: {len(calls) - failures} sent, {failures} failed.")
     return failures
+
+
+def clean_up_old_rows():
+    """Delete past viewing times nobody booked, and old rate-limit rows
+    (migration 039), so the free database doesn't fill up. Hourly is fine:
+    after the first run there's only an hour's worth each time."""
+    try:
+        result = supabase.rpc("cleanup_old_rows", {}).execute()
+    except Exception as error:
+        if "cleanup_old_rows" in str(error):
+            print("Clean-up: migration 039 not run yet, skipping.")
+            return 0
+        raise
+    print(f"Clean-up: {result.data}")
+    return 0
 
 
 if __name__ == "__main__":
@@ -612,6 +655,7 @@ if __name__ == "__main__":
         run_viewing_reminders,
         send_setup_call_reminders,
         ask_for_viewing_feedback,
+        clean_up_old_rows,
     ):
         try:
             item_failures = step()

@@ -6,6 +6,8 @@ import { supabaseAdmin } from "./household.js";
 export const EMAIL_KINDS = {
   matches: "new homes agents send you",
   price_drops: "price cuts on homes you've saved",
+  // Agents' monthly branch report (migration 040, _lib/monthly-report.js).
+  monthly_report: "your monthly ViewPal report",
 };
 
 // userIds -> Map(userId -> { token, matches, price_drops }). Creates the row

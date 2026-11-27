@@ -5,9 +5,17 @@ on:
     - cron: "0 9 * * *" # daily, 9am UTC; "4 days left", "last day tomorrow", "trial has ended"
   workflow_dispatch:
 
+# One run at a time: a slow run finishes before the next starts, instead of
+# two runs sending the same emails side by side.
+concurrency:
+  group: agent-trial-emails
+  cancel-in-progress: false
+
 jobs:
   send-trial-emails:
     runs-on: ubuntu-latest
+    # A hung email or API call can't hold the job for GitHub's 6-hour default.
+    timeout-minutes: 15
 
     defaults:
       run:

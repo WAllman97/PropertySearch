@@ -19,7 +19,7 @@ GitHub emails about it.
 
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
@@ -58,14 +58,18 @@ def which_email(ends_at, now):
 
     By London calendar date, so "4 days left" and "ends tomorrow" are true
     whatever time of day the trial started or the job runs. "ended" goes on
-    the first run after the trial has actually run out.
+    the first run after the trial has actually run out. If a run is missed,
+    the next one sends what's due (the "days left" wording uses the real
+    number).
     """
     days_left = (ends_at.astimezone(LONDON).date() - now.astimezone(LONDON).date()).days
     if ends_at <= now:
         return "ended" if days_left >= -ENDED_GRACE_DAYS else None
-    if days_left == 1:
+    # Ranges, not exact days, so a missed or failed daily run catches up
+    # the next day (each email still goes once: trial_emails_sent).
+    if days_left <= 1:
         return "day13"
-    if days_left == 4:
+    if days_left <= 4:
         return "day10"
     return None
 
@@ -74,9 +78,10 @@ def build_email(agent, key, bookings):
     first = (agent.get("name") or "").split(" ")[0]
     ended = key == "ended"
     if key == "day10":
-        subject = "4 days left on your ViewPal trial"
-        title = "4 days left on your free trial"
-        lead = "Your free trial ends in 4 days."
+        days = max(2, (parse_time(agent["trial_ends_at"]).astimezone(LONDON).date() - datetime.now(LONDON).date()).days)
+        subject = f"{days} days left on your ViewPal trial"
+        title = f"{days} days left on your free trial"
+        lead = f"Your free trial ends in {days} days."
     elif key == "day13":
         subject = "Your ViewPal trial ends tomorrow"
         title = "Last day tomorrow"
@@ -154,8 +159,11 @@ def send_trial_emails():
     agents = (
         supabase.table("agents")
         .select("user_id, name, email, trial_ends_at, trial_emails_sent, signup_code")
-        .not_.is_("trial_ends_at", "null")
         .is_("signup_code", "null")
+        # Only trials with an email due soon, so the list stays small however
+        # many agents have had a trial (and can't pass Supabase's 1,000 rows).
+        .gte("trial_ends_at", (now - timedelta(days=ENDED_GRACE_DAYS + 1)).isoformat())
+        .lte("trial_ends_at", (now + timedelta(days=6)).isoformat())
         .execute()
     ).data or []
 

@@ -121,19 +121,39 @@ async function deleteHousehold(householdId) {
     if (error) return error;
   }
 
-  // Proof documents (migration 017) live in storage, outside the database
-  // cascade: delete the household's folder.
-  const { data: files, error: filesError } = await supabaseAdmin.storage
-    .from("position-proofs")
-    .list(householdId, { limit: 1000 });
-  if (filesError) return filesError;
-  if (files?.length) {
-    const { error: removeError } = await supabaseAdmin.storage
-      .from("position-proofs")
-      .remove(files.map((f) => `${householdId}/${f.name}`));
-    if (removeError) return removeError;
+  // Files live in storage, outside the database cascade: delete the
+  // household's folders. Proof documents (migration 017) are
+  // <household>/<file>; viewing photos (036) are <household>/<home>/<file>.
+  for (const bucket of ["position-proofs", "viewing-photos"]) {
+    const storageError = await removeFolder(bucket, householdId);
+    if (storageError) return storageError;
   }
 
   const { error } = await supabaseAdmin.from("households").delete().eq("id", householdId);
   return error || null;
+}
+
+// Every file under prefix (two folder levels down), in batches. A bucket
+// that doesn't exist yet (migration not run) counts as empty.
+async function removeFolder(bucket, prefix, depth = 0) {
+  const paths = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data: items, error } = await supabaseAdmin.storage.from(bucket).list(prefix, { limit: 1000, offset });
+    if (error) return /not found/i.test(error.message || "") ? null : error;
+    for (const item of items || []) {
+      const path = `${prefix}/${item.name}`;
+      // Folders come back without an id.
+      if (item.id) paths.push(path);
+      else if (depth < 2) {
+        const nestedError = await removeFolder(bucket, path, depth + 1);
+        if (nestedError) return nestedError;
+      }
+    }
+    if (!items || items.length < 1000) break;
+  }
+  for (let i = 0; i < paths.length; i += 500) {
+    const { error } = await supabaseAdmin.storage.from(bucket).remove(paths.slice(i, i + 500));
+    if (error) return error;
+  }
+  return null;
 }

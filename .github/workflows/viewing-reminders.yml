@@ -5,9 +5,17 @@ on:
     - cron: "0 * * * *" # hourly; sends ~24h before each viewing
   workflow_dispatch:
 
+# One run at a time: a slow run finishes before the next starts, instead of
+# two runs sending the same emails side by side.
+concurrency:
+  group: viewing-reminders
+  cancel-in-progress: false
+
 jobs:
   send-reminders:
     runs-on: ubuntu-latest
+    # A hung email or API call can't hold the job for GitHub's 6-hour default.
+    timeout-minutes: 20
 
     defaults:
       run:

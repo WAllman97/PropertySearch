@@ -363,3 +363,44 @@
   font-weight: 600;
   font-size: inherit;
 }
+
+/* Monthly reports (migration 040) */
+.admin-reports-month {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.admin-reports-month input {
+  width: auto;
+}
+
+.admin-row-risk td {
+  background: #fffbeb;
+}
+
+.admin-reports-preview-title {
+  margin: 20px 0 8px;
+}
+
+.admin-reports-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.admin-reports-controls select {
+  width: auto;
+  max-width: 100%;
+}
+
+.admin-reports-frame {
+  width: 100%;
+  height: 640px;
+  border: 1px solid #e4ddd2;
+  border-radius: 12px;
+  background: #f8f6f2;
+}

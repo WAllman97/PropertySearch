@@ -1,0 +1,61 @@
+name: Monthly Value Report
+
+# The monthly "what ViewPal did for you" email to each agent branch
+# (migration 040, frontend/api/_lib/monthly-report.js). The site does the
+# work; this only starts it and keeps calling while branches remain (each
+# call works for a few seconds). The 2nd and 3rd are catch-up runs: a branch
+# already done is never emailed twice.
+#
+# Needs CRON_SECRET (the same long random value) in GitHub (repo → Settings →
+# Secrets → Actions) and in Vercel (project → Settings → Environment
+# Variables), and APP_URL as a repo variable (defaults to https://viewpal.app).
+
+on:
+  schedule:
+    - cron: "0 8 1-3 * *" # 8am UTC on the 1st, 2nd and 3rd
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "Month to report on, YYYY-MM (blank = last month)"
+        required: false
+
+concurrency:
+  group: monthly-value-report
+  cancel-in-progress: false
+
+jobs:
+  send-reports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Send monthly reports
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+          MONTH: ${{ github.event.inputs.month }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "CRON_SECRET is not set"; exit 1
+          fi
+          url="${APP_URL:-https://viewpal.app}"
+          url="${url%/}/api/agent-signup"
+          body=$(jq -nc --arg month "${MONTH:-}" '{action: "monthly_report_run"} + (if $month == "" then {} else {month: $month} end)')
+          for attempt in $(seq 1 60); do
+            result=$(curl -sS --fail-with-body --max-time 60 -X POST "$url" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -d "$body")
+            echo "$result"
+            remaining=$(echo "$result" | jq -r '.remaining')
+            done_now=$(echo "$result" | jq -r '.done')
+            if [ "$remaining" = "0" ]; then exit 0; fi
+            # Nothing done but some left: another run (or a dead one) holds
+            # them. Tomorrow's catch-up run takes over claims older than 30 min.
+            if [ "$done_now" = "0" ]; then
+              echo "Some branches are claimed elsewhere; tomorrow's run picks them up."
+              exit 0
+            fi
+          done
+          echo "Still branches left after 60 calls"; exit 1

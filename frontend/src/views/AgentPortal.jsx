@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrivedFromPasswordReset, supabase } from "../lib/supabaseClient";
 import { postAuthed } from "../lib/api";
 import { friendlyError } from "../lib/errors";
@@ -6,7 +6,8 @@ import SetNewPasswordForm from "../components/SetNewPasswordForm";
 import { dismissPushOffer, enablePush, forgetThisPhone, refreshPushRegistration, shouldOfferPush } from "../lib/push";
 import { apiUrl, siteUrl } from "../lib/platform";
 import { listingKey } from "../../api/_lib/listing.js";
-import { londonToUtc } from "../../api/_lib/time.js";
+import { londonParts, londonToUtc } from "../../api/_lib/time.js";
+import { ESTIMATES, reportRows } from "../../api/_lib/report-rows.js";
 import { openProof, proofLabel } from "../components/PositionProof";
 import AgentHours from "./AgentHours";
 import NavigationTabs from "../components/NavigationTabs";
@@ -2958,8 +2959,106 @@ function BranchStats({ agent, refreshKey }) {
   );
 }
 
+// "What ViewPal did for you" (migration 040): this month so far, or last
+// month, for the agent's whole branch (or just them, without a code). The
+// same figures as the monthly email. Before 040 it falls back to the older
+// time-saved and branch cards.
+function monthStart(back) {
+  const { year, month } = londonParts(new Date());
+  const m0 = month - 1 - back;
+  const y = year + Math.floor(m0 / 12);
+  const m = ((m0 % 12) + 12) % 12;
+  return { at: londonToUtc(y, m + 1, 1, 0, 0), name: new Date(Date.UTC(y, m, 15)).toLocaleDateString("en-GB", { month: "long", timeZone: "UTC" }) };
+}
+
+function ValueReport({ agent, refreshKey }) {
+  const [reports, setReports] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [which, setWhich] = useState(0);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const [thisMonth, lastMonth] = [monthStart(0), monthStart(1)];
+    Promise.all([
+      supabase.rpc("my_branch_report", { p_from: thisMonth.at.toISOString(), p_to: new Date(Date.now() + 864e5).toISOString() }),
+      supabase.rpc("my_branch_report", { p_from: lastMonth.at.toISOString(), p_to: thisMonth.at.toISOString() }),
+    ]).then(([now, last]) => {
+      if (now.error || last.error) return setFailed(true);
+      setReports([
+        { name: thisMonth.name, figures: now.data, soFar: true },
+        { name: lastMonth.name, figures: last.data },
+      ]);
+    });
+  }, [refreshKey]);
+
+  if (failed) {
+    return (
+      <>
+        <TimeSaved refreshKey={refreshKey} />
+        <BranchStats agent={agent} refreshKey={refreshKey} />
+      </>
+    );
+  }
+  if (!reports || !reports[0].figures) return null;
+  const { name, figures, soFar } = reports[which];
+  const saved = figures.minutes_saved || 0;
+  const team = figures.agents > 1 ? `your branch, ${figures.agents} agents` : "you";
+
+  return (
+    <section className="card agent-branch agent-value">
+      <div className="agent-value-head">
+        <h3>
+          What ViewPal did for {team}
+          <span className="muted"> · {name}{soFar ? " so far" : ""}</span>
+        </h3>
+        <div className="agent-value-switch" role="group" aria-label="Month">
+          {reports.map((r, i) => (
+            <button
+              key={r.name}
+              type="button"
+              className={i === which ? "secondary-button active" : "link-button"}
+              aria-pressed={i === which}
+              onClick={() => setWhich(i)}
+            >
+              {i === 0 ? "This month" : r.name}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ul className="agent-branch-stats">
+        <li>
+          <strong>{saved ? hoursAndMinutes(saved) : "–"}</strong>
+          <span>saved, roughly</span>
+        </li>
+        {reportRows(figures).map((r) => (
+          <li key={r.label}>
+            <strong>{r.n.toLocaleString("en-GB")}</strong>
+            <span>{r.label}</span>
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="link-button agent-value-how" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? "Hide" : "How is time saved worked out?"}
+      </button>
+      {open && <p className="muted small">{ESTIMATES} We email these figures on the 1st of each month.</p>}
+    </section>
+  );
+}
+
 // Which tab each getting-started step's target lives on.
 const TARGET_VIEW = { "agent-add-listing": "listings", "agent-listings": "listings", "agent-hours": "settings" };
+
+// Every row of a query, 1,000 at a time (Supabase's limit per request).
+// makeQuery builds a fresh query each time; it must have a stable order.
+async function allRows(makeQuery, page = 1000) {
+  const rows = [];
+  for (let from = 0; ; from += page) {
+    const { data, error } = await makeQuery().range(from, from + page - 1);
+    if (error) return { data: rows.length ? rows : null, error };
+    rows.push(...(data || []));
+    if (!data || data.length < page) return { data: rows, error: null };
+  }
+}
 
 function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut, onAgentChanged }) {
   const [listings, setListings] = useState([]);
@@ -2981,7 +3080,11 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut, onAgen
   // "Open listing" from the sheet: which card to open ({ id }, new each time).
   const [focus, setFocus] = useState(null);
 
+  // Each load gets a number; an older load that finishes after a newer one
+  // is ignored, so two quick taps can't leave stale data on screen.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     const since = new Date(Date.now() - 2 * 3600000).toISOString();
     // Weekly hours: add any times now due (new listing, a new day in range).
     await supabase.rpc("sync_pattern_slots", { p_agent: agent.user_id });
@@ -3000,17 +3103,27 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut, onAgen
       feedbackResult,
     ] = await Promise.all([
       supabase.from("agent_listings").select("*").order("created_at", { ascending: false }),
-      supabase
-        .from("viewing_slots")
-        .select("*")
-        .is("cancelled_at", null)
-        .gte("ends_at", since)
-        .order("starts_at"),
-      supabase
-        .from("viewing_bookings")
-        .select("*")
-        .eq("status", "confirmed")
-        .order("created_at"),
+      // Paged: a busy agent has more than Supabase's 1,000 rows a request.
+      allRows(() =>
+        supabase
+          .from("viewing_slots")
+          .select("*")
+          .is("cancelled_at", null)
+          .gte("ends_at", since)
+          .order("starts_at")
+          .order("id")
+      ),
+      // Only bookings on times still to come (the screen shows nothing
+      // else), so years of past bookings never crowd out today's.
+      allRows(() =>
+        supabase
+          .from("viewing_bookings")
+          .select("*, viewing_slots!inner(ends_at)")
+          .eq("status", "confirmed")
+          .gte("viewing_slots.ends_at", since)
+          .order("created_at")
+          .order("id")
+      ),
       supabase.rpc("agent_listing_reach"),
       supabase.rpc("agent_offers"),
       supabase.rpc("agent_buyer_positions"),
@@ -3023,6 +3136,7 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut, onAgen
       // Feedback after viewings (migration 035); fails quietly before it.
       supabase.rpc("agent_viewing_feedback"),
     ]);
+    if (seq !== loadSeq.current) return;
     setAvailability(availabilityResult.data || null);
     setHours(hoursResult.data || []);
     setTimeOff(timeOffResult.data || []);
@@ -3159,9 +3273,7 @@ function AgentDashboard({ agent, email, view, setView, isBuyer, onLogOut, onAgen
 
           <AgentTrialBanner agent={agent} onChanged={onAgentChanged} openCallFromLink />
 
-          <TimeSaved refreshKey={listings.length + bookedCount + offers.length} />
-
-          <BranchStats agent={agent} refreshKey={listings.length + bookedCount + offers.length} />
+          <ValueReport agent={agent} refreshKey={listings.length + bookedCount + offers.length} />
 
           <AgentGettingStarted
             agentId={agent.user_id}
