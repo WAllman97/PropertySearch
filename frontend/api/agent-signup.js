@@ -24,7 +24,7 @@
 // Setup calls with ViewPal (migration 038) too, in _lib/setup-calls.js:
 // call_slots, book_call, cancel_call, admin_cancel_call, admin_call_status.
 // The monthly branch report (migration 040) too, in _lib/monthly-report.js:
-// monthly_report_run (GitHub workflow, CRON_SECRET), monthly_report_preview
+// monthly_report_run (GitHub workflow, its signed token), monthly_report_preview
 // and monthly_report_test (admin).
 import { requireUser, supabaseAdmin } from "./_lib/household.js";
 import { withCors } from "./_lib/cors.js";
