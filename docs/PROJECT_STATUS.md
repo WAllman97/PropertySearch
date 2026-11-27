@@ -88,7 +88,7 @@ AI triage scoring; the agent call/viewing booking page (`/book/<slug>`); the sec
   - Each branch is emailed on the 1st for the month before.
   - The agent portal has a matching card on Today.
   - `/admin` → Monthly reports shows who was emailed, marks branches with no activity as a churn risk, previews any branch's email and has "Send test to me".
-  - To switch it on: run 040, and set `CRON_SECRET` in Vercel and in GitHub. The setup is in `docs/AGENT_VALUE_FEATURES.md`.
+  - Live: migration 040 is run. The workflow proves itself with GitHub's own signed token, so there is no shared secret. Details are in `docs/AGENT_VALUE_FEATURES.md`.
 - **Valuation leads and vendor feedback:** designed in `docs/AGENT_VALUE_FEATURES.md`. The build waits for the agent meeting on 4 Dec.
 
 ## Architecture

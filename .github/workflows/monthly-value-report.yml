@@ -6,9 +6,11 @@ name: Monthly Value Report
 # call works for a few seconds). The 2nd and 3rd are catch-up runs: a branch
 # already done is never emailed twice.
 #
-# Needs CRON_SECRET (the same long random value) in GitHub (repo → Settings →
-# Secrets → Actions) and in Vercel (project → Settings → Environment
-# Variables), and APP_URL as a repo variable (defaults to https://viewpal.app).
+# No secret: each call carries a short-lived token GitHub signs for this
+# workflow (OpenID Connect, "id-token: write" below). The site checks it is
+# from this repository, this file and the main branch
+# (frontend/api/_lib/github-oidc.js). APP_URL is an optional repo variable
+# (defaults to https://viewpal.app).
 
 on:
   schedule:
@@ -18,6 +20,10 @@ on:
       month:
         description: "Month to report on, YYYY-MM (blank = last month)"
         required: false
+
+# Only what's needed: ask GitHub for the signed token. No repo access.
+permissions:
+  id-token: write
 
 concurrency:
   group: monthly-value-report
@@ -31,21 +37,23 @@ jobs:
     steps:
       - name: Send monthly reports
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           APP_URL: ${{ vars.APP_URL }}
           MONTH: ${{ github.event.inputs.month }}
         run: |
           set -euo pipefail
-          if [ -z "${CRON_SECRET}" ]; then
-            echo "CRON_SECRET is not set"; exit 1
-          fi
+          # A fresh token for each call (they last a few minutes).
+          github_token() {
+            curl -sS --fail -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=viewpal-monthly-report" | jq -r '.value'
+          }
           url="${APP_URL:-https://viewpal.app}"
           url="${url%/}/api/agent-signup"
           body=$(jq -nc --arg month "${MONTH:-}" '{action: "monthly_report_run"} + (if $month == "" then {} else {month: $month} end)')
           for attempt in $(seq 1 60); do
+            token=$(github_token)
             result=$(curl -sS --fail-with-body --max-time 60 -X POST "$url" \
               -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Authorization: Bearer ${token}" \
               -d "$body")
             echo "$result"
             remaining=$(echo "$result" | jq -r '.remaining')

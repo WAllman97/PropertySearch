@@ -2,7 +2,8 @@
 // Actions on /api/agent-signup (Vercel allows 12 routes and we're at 12):
 //
 //   GitHub workflow monthly-value-report.yml, on the 1st (and the 2nd and
-//   3rd to catch up), with header  Authorization: Bearer <CRON_SECRET>:
+//   3rd to catch up), with GitHub's own signed token for that workflow
+//   (_lib/github-oidc.js; no shared secret):
 //     { action: "monthly_report_run", month? }  -> { month, done, remaining }
 //        works through last month's branches for a few seconds at a time;
 //        the workflow calls again until remaining is 0
@@ -15,13 +16,13 @@
 // Each branch is claimed in branch_monthly_reports before anything is sent,
 // so a retry never sends a second copy. Branches with nothing to report get
 // 'no_activity' instead of an email; /admin lists them as a churn risk.
-import { timingSafeEqual } from "node:crypto";
 import { requireUser, supabaseAdmin } from "./household.js";
 import { appBaseUrl } from "./booking.js";
 import { emailLayout, escapeHtml, sendEmail } from "./email.js";
 import { unsubscribeFooter, unsubscribeLinks } from "./email-prefs.js";
 import { londonParts, londonToUtc } from "./time.js";
 import { ESTIMATES, hoursAndMinutes, reportRows } from "./report-rows.js";
+import { verifyGithubWorkflow } from "./github-oidc.js";
 
 const CONTACT_EMAIL = "hello@viewpal.app";
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -149,13 +150,11 @@ export function buildReportEmail({ branch, figures, range, base, unsubscribe, re
 
 // --- Monthly run -------------------------------------------------------------------
 
-function cronAllowed(req) {
-  const secret = process.env.CRON_SECRET || "";
-  const header = String(req.headers.authorization || "");
-  const given = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (secret.length < 16 || given.length !== secret.length) return false;
-  return timingSafeEqual(Buffer.from(given), Buffer.from(secret));
-}
+// Only the monthly-value-report.yml workflow on main, proved by GitHub's
+// signed token. The audience must match the workflow's request.
+export const REPORT_AUDIENCE = "viewpal-monthly-report";
+const fromOurWorkflow = (req) =>
+  verifyGithubWorkflow(req, { workflow: "monthly-value-report.yml", audience: REPORT_AUDIENCE });
 
 // Take a branch for this month: a new row, or a failed one, or a claim a
 // dead run left behind. -> true if this call should do it.
@@ -212,7 +211,7 @@ async function sendBranch(branch, range, base) {
 }
 
 export async function handleMonthlyReportRun(req, res, body) {
-  if (!cronAllowed(req)) return res.status(404).json({ error: "Not found" });
+  if (!(await fromOurWorkflow(req))) return res.status(404).json({ error: "Not found" });
   const started = Date.now();
   const key = monthKey(body.month);
   const range = monthRange(key);

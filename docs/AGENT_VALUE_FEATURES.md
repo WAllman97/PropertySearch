@@ -5,7 +5,7 @@ justify:
 
 | # | Feature | Status |
 |---|---|---|
-| 3 | Monthly "what ViewPal did for you" email and portal card | **Built 27 Nov** (migration 040; needs `CRON_SECRET`) |
+| 3 | Monthly "what ViewPal did for you" email and portal card | **Built 27 Nov** (migration 040, run 27 Nov) |
 | 1 | Valuation leads | Design below. **Hold the build until the agent meeting on 4 Dec** |
 | 2 | Viewing feedback for the vendor | Mostly already built in migration 035. Design for the rest is below. **Hold the build until 4 Dec** |
 
@@ -34,9 +34,13 @@ annual billing are a separate Stripe task.
 - **Sending.**
   - GitHub workflow `monthly-value-report.yml` runs at 8am UTC on the 1st,
     and again on the 2nd and 3rd to catch up.
-  - It calls `/api/agent-signup` with action `monthly_report_run` and the
-    `CRON_SECRET` header. Each call works for about 7 seconds, and the
-    workflow repeats until no branches are left.
+  - It calls `/api/agent-signup` with action `monthly_report_run`. There is
+    no shared secret: each call carries a short-lived token that GitHub
+    signs for this workflow, and the site only accepts it if it names this
+    repository, this workflow file and the main branch
+    (`api/_lib/github-oidc.js`).
+  - Each call works for about 7 seconds, and the workflow repeats until no
+    branches are left.
   - Each branch is claimed in `branch_monthly_reports` before sending, so no
     branch is emailed twice.
   - Branches with nothing that month get a `no_activity` row instead of an
@@ -51,17 +55,13 @@ annual billing are a separate Stripe task.
   - Pick a month to see who was emailed.
   - Branches with no activity are marked "Churn risk".
   - Preview any branch's email and use "Send test to me".
-- **Setup (one-off).**
-  1. Run `backend/migrations/040_monthly_value_report.sql` in Supabase.
-  2. Make a long random value. For example, in PowerShell:
-     `[guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")`
-  3. Add that value as `CRON_SECRET` in two places:
-     - Vercel: project → Settings → Environment Variables. Then redeploy.
-     - GitHub: repo → Settings → Secrets → Actions.
-  4. Optional: add an `APP_URL` repo variable if the site isn't
-     https://viewpal.app.
-  5. To try it, run the workflow by hand (Actions → Monthly Value Report →
-     Run workflow) with a month.
+- **Setup.** Nothing to set: migration 040 is run, and no secret is needed.
+  - To try it, run the workflow by hand: Actions → Monthly Value Report →
+    Run workflow, with a month.
+  - Optional: add an `APP_URL` repo variable if the site isn't
+    https://viewpal.app.
+  - If the repo is ever renamed or moved, set `GITHUB_REPOSITORY_ALLOWED`
+    in Vercel to the new `owner/name`.
 
 ## 1. Valuation leads (design only)
 
