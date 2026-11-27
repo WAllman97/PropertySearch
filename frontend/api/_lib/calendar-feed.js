@@ -9,8 +9,19 @@
 // Only "busy" events count: anything marked Free (TRANSP:TRANSPARENT, which
 // is how Google exports all-day events by default) or cancelled is ignored.
 // Repeating meetings are expanded, with moved or cancelled occurrences.
-import ICAL from "ical.js";
+//
+// ical.js is loaded only when a calendar is actually read, never when this
+// file is imported. Vercel turns these route files into CommonJS, where a
+// top-level import of ical.js asks for a file Vercel doesn't ship, and the
+// whole /api/agent-signup route failed to start (26-27 Nov). A dynamic
+// import() stays a real import, which loads the file Vercel does ship.
 import { londonToUtc } from "./time.js";
+
+let icalModule = null;
+async function loadIcal() {
+  if (!icalModule) icalModule = (await import("ical.js")).default;
+  return icalModule;
+}
 
 const CACHE_MS = 2 * 60 * 1000;
 const MAX_OCCURRENCES = 20000; // per repeating event: a daily one for 50 years
@@ -63,7 +74,8 @@ function isBusy(component) {
 }
 
 // [{ start, end }] for one iCal file, overlapping from..to.
-export function busyFromIcs(text, from, to) {
+export async function busyFromIcs(text, from, to) {
+  const ICAL = await loadIcal();
   const root = new ICAL.Component(ICAL.parse(text));
   for (const zone of root.getAllSubcomponents("vtimezone")) {
     ICAL.TimezoneService.register(zone);
@@ -120,5 +132,6 @@ export async function calendarBusy(from, to, { fresh = false } = {}) {
   const urls = calendarUrls();
   if (!urls.length) return [];
   const texts = await fetchFeeds(urls, fresh);
-  return texts.flatMap((text) => busyFromIcs(text, from, to));
+  const lists = await Promise.all(texts.map((text) => busyFromIcs(text, from, to)));
+  return lists.flat();
 }
